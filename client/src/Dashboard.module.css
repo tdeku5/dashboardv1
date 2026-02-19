@@ -1,0 +1,319 @@
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top header bar ──────────────────────────────────────────────────────── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 46px;
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border-accent);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+/* Left — branding */
+
+.barLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+  border-left: 1px solid var(--border-accent);
+  padding-left: 10px;
+}
+
+.tagline {
+  font-size: 12px;
+  color: #64748B;
+  letter-spacing: 0.06em;
+  border-left: 1px solid var(--border-accent);
+  padding-left: 10px;
+}
+
+/* Center — status */
+
+.barCenter {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  justify-content: center;
+}
+
+.liveDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+  box-shadow: 0 0 6px var(--positive);
+  animation: blink 2.4s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.liveLabel {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--positive);
+}
+
+.updatedAt {
+  font-size: 11.5px;
+  color: #64748B;
+  font-family: var(--font-mono);
+  border-left: 1px solid var(--border-accent);
+  padding-left: 8px;
+}
+
+.loadingLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  color: #f59e0b;
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* Right — MA control + refresh button + clock */
+
+/* ── Regime MA control ───────────────────────────────────────────────────── */
+
+.maWrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-right: 12px;
+  border-right: 1px solid var(--border-accent);
+}
+
+.maLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #64748B;
+  white-space: nowrap;
+}
+
+.maField {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #CBD5E1;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  padding: 4px 8px;
+  width: 46px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+
+.maField::-webkit-outer-spin-button,
+.maField::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.maField:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.barRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.clock {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #94A3B8;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── Refresh button ──────────────────────────────────────────────────────── */
+
+.refreshBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  color: #94A3B8;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-accent);
+  padding: 5px 11px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+.refreshBtn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.refreshBtn:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.refreshBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.refreshIcon {
+  font-size: 16px;
+  line-height: 1;
+  display: inline-block;
+}
+
+@keyframes dashSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Config error / setup screen ────────────────────────────────────────── */
+
+.configErrorWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.configErrorCard {
+  background: var(--surface);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-top: 2px solid rgba(239, 68, 68, 0.55);
+  border-radius: 3px;
+  padding: 32px 36px 28px;
+  max-width: 540px;
+  width: 100%;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.65);
+}
+
+.configErrorIcon {
+  font-size: 22px;
+  display: block;
+  margin-bottom: 14px;
+  opacity: 0.85;
+}
+
+.configErrorTitle {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+}
+
+.configErrorBody {
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #94A3B8;
+  margin-bottom: 18px;
+}
+
+.configErrorCode {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(239, 68, 68, 0.4);
+  padding: 12px 16px;
+  border-radius: 2px;
+  color: #fde68a;
+  white-space: pre;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.configErrorSteps {
+  font-size: 13px;
+  color: #94A3B8;
+  line-height: 1.8;
+  margin-bottom: 20px;
+  padding-left: 2px;
+}
+
+.configErrorSteps li {
+  list-style: none;
+  padding-left: 0;
+}
+
+.configErrorSteps li::before {
+  content: attr(data-n) '.  ';
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.configErrorLink {
+  color: #60a5fa;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(96, 165, 250, 0.3);
+  transition: border-color 0.15s;
+  font-size: 13px;
+}
+
+.configErrorLink:hover {
+  border-bottom-color: #60a5fa;
+}
+
+.configErrorDivider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+
+.configErrorHint {
+  font-size: 12px;
+  color: #64748B;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+}
+
+/* ── 2×3 panel grid ──────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 6px;
+  padding: 6px;
+  flex: 1;
+  min-height: 0;
+}

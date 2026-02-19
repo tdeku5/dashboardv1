@@ -1,0 +1,25 @@
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import './styles/globals.css'
+import { Dashboard } from './Dashboard'
+import { ModelsPage } from './pages/ModelsPage'
+import { LaborMarketPage }  from './pages/LaborMarketPage'
+import { LaborModelsPage }  from './pages/LaborModelsPage'
+import { CPSDashboardPage }    from './pages/CPSDashboardPage'
+import { ClaimsDashboardPage } from './pages/ClaimsDashboardPage'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/"                         element={<Dashboard />} />
+        <Route path="/models"                   element={<ModelsPage />} />
+        <Route path="/models/labor"             element={<LaborMarketPage />} />
+        <Route path="/models/labor/projection"  element={<LaborModelsPage />} />
+        <Route path="/models/labor/cps"         element={<CPSDashboardPage />} />
+        <Route path="/models/labor/claims"      element={<ClaimsDashboardPage />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+export default App

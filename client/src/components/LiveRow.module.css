@@ -1,0 +1,287 @@
+/*
+  Row grid (8 columns):
+  [label 1fr] [data ×4 @ 66px] [sep 10px] [regime ×2 @ 52px]
+*/
+.rowGrid {
+  display: grid;
+  grid-template-columns: 1fr repeat(4, 66px) 10px repeat(2, 52px);
+  column-gap: 4px;
+  align-items: center;
+  padding: 0 14px;
+  min-height: 46px;
+}
+
+/* ── Ready row ─────────────────────────────────────────────────────────────── */
+
+.row {
+  composes: rowGrid;
+  border-bottom: 1px solid var(--border);
+  cursor: default;
+  transition: background 0.1s ease;
+  position: relative;
+}
+
+.row:last-child  { border-bottom: none; }
+.row:hover       { background: rgba(255, 255, 255, 0.022); }
+
+/* Subtle alternating band on every second row */
+.row:nth-child(even) { background: rgba(0, 0, 0, 0.12); }
+.row:nth-child(even):hover { background: rgba(255, 255, 255, 0.022); }
+
+/* ── Label column ────────────────────────────────────────────────────────── */
+
+.labelCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 0;
+}
+
+.labelTop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #CBD5E1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.lastDate {
+  font-size: 11px;
+  color: #94A3B8;
+  letter-spacing: 0.03em;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* ── Stale warning ───────────────────────────────────────────────────────── */
+
+.staleWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.staleIcon {
+  font-size: 12px;
+  color: #d97706;
+  cursor: help;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.staleTooltip {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  background: #0f1923;
+  border: 1px solid rgba(217, 119, 6, 0.5);
+  color: #fde68a;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border-radius: 3px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 200;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.7);
+}
+
+/* Arrow pointing up toward the icon */
+.staleTooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 6px;
+  border: 5px solid transparent;
+  border-bottom-color: rgba(217, 119, 6, 0.5);
+}
+
+.staleWrap:hover .staleTooltip { opacity: 1; }
+
+/* ── Data value cells ────────────────────────────────────────────────────── */
+
+.cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 8px 0;
+}
+
+.cellSub {
+  font-size: 10px;
+  color: #94A3B8;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  font-family: var(--font-sans);
+}
+
+.cellVal {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  /* Bloomberg-style value box */
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 2px 6px;
+  border-radius: 2px;
+  display: block;
+  width: 100%;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Separator column ────────────────────────────────────────────────────── */
+
+.sep {
+  display: flex;
+  justify-content: center;
+  align-self: stretch;
+  padding: 6px 0;
+}
+
+.sep::after {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 100%;
+  background: var(--border-accent);
+}
+
+/* ── Regime signal cells ─────────────────────────────────────────────────── */
+
+.regimeCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 0;
+}
+
+/* Live signal — solid box, centred glyph, colour applied via inline style */
+.regimeSignal {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 2px 6px;
+  border-radius: 2px;
+  display: block;
+  width: 100%;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+/* Placeholder shown while data is unavailable */
+.regimePlaceholder {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 2px;
+  display: block;
+  width: 100%;
+  text-align: right;
+}
+
+/* ── Error row ─────────────────────────────────────────────────────────────── */
+
+.errorRow {
+  composes: rowGrid;
+  border-bottom: 1px solid var(--border);
+  min-height: 46px;
+}
+
+.errorRow:last-child { border-bottom: none; }
+
+.errorLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #CBD5E1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 8px 0;
+}
+
+.errorMsg {
+  grid-column: 2 / 7;
+  font-size: 12px;
+  color: var(--negative);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.75;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+}
+
+/* ── Skeleton row ──────────────────────────────────────────────────────────── */
+
+.skeletonRow {
+  composes: rowGrid;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeletonRow:last-child { border-bottom: none; }
+
+.skeletonLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 0;
+}
+
+.skeletonBar {
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--text-muted)            25%,
+    rgba(255, 255, 255, 0.05)    50%,
+    var(--text-muted)            75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skeletonLabelMain { height: 9px;  width: 68%; }
+.skeletonLabelSub  { height: 7px;  width: 38%; opacity: 0.5; }
+
+.skeletonCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  padding: 10px 0;
+}
+
+.skeletonCellSub { height: 7px;  width: 80%; }
+.skeletonCellVal { height: 22px; width: 100%; border-radius: 2px; }
+
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
