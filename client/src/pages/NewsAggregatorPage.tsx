@@ -2,10 +2,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
 import {
-  fetchArticles, triggerNewsRefresh, fetchTopics, saveTopics,
-  SIGNAL_COLORS, ALL_SIGNAL_DEFS,
+  fetchArticles, triggerNewsRefresh,
   generateWhyItMatters, fmtDate, fmtTime,
-  type Article, type TopicConfig,
+  type Article,
 } from '../lib/news'
 import styles from './NewsAggregatorPage.module.css'
 
@@ -45,28 +44,6 @@ function ArticleCard({ article, index, expanded, onToggle }: CardProps) {
       {/* Title */}
       <h3 className={styles.cardTitle}>{article.title}</h3>
 
-      {/* Signal pills */}
-      {article.signals.length > 0 && (
-        <div className={styles.pillRow}>
-          {article.signals.map(sig => {
-            const colors = SIGNAL_COLORS[sig.theme] ?? SIGNAL_COLORS['market-mover']
-            return (
-              <span
-                key={sig.theme}
-                className={styles.pill}
-                style={{
-                  background:  colors.bg,
-                  color:       colors.color,
-                  borderColor: colors.border,
-                }}
-              >
-                {sig.label}
-              </span>
-            )
-          })}
-        </div>
-      )}
-
       {/* Description */}
       {article.description && (
         <p className={styles.cardDesc}>{article.description}</p>
@@ -97,103 +74,6 @@ function ArticleCard({ article, index, expanded, onToggle }: CardProps) {
           {generateWhyItMatters(article)}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Topics Modal ──────────────────────────────────────────────────────────────
-
-interface TopicsModalProps {
-  initial:  TopicConfig[]
-  onClose:  () => void
-  onSaved:  () => void
-}
-
-function TopicsModal({ initial, onClose, onSaved }: TopicsModalProps) {
-  const [topics,  setTopics]  = useState<TopicConfig[]>(initial)
-  const [saving,  setSaving]  = useState(false)
-  const [saveErr, setSaveErr] = useState<string | null>(null)
-
-  function updateTopic(idx: number, field: 'name' | 'keywords', val: string | string[]) {
-    setTopics(prev => prev.map((t, i) => i === idx ? { ...t, [field]: val } : t))
-  }
-
-  function addTopic() {
-    setTopics(prev => [...prev, { id: null, name: '', keywords: [] }])
-  }
-
-  function removeTopic(idx: number) {
-    setTopics(prev => prev.filter((_, i) => i !== idx))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    setSaveErr(null)
-    try {
-      await saveTopics(topics.filter(t => t.name.trim()))
-      onSaved()
-      onClose()
-    } catch (err) {
-      setSaveErr(err instanceof Error ? err.message : 'Save failed')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className={styles.modalOverlay} onClick={onClose}>
-      <div className={styles.modal} onClick={e => e.stopPropagation()}>
-        <div className={styles.modalHeader}>
-          <span className={styles.modalTitle}>Manage Topics</span>
-          <button className={styles.modalClose} onClick={onClose}>✕</button>
-        </div>
-
-        <div className={styles.modalBody}>
-          {topics.map((topic, idx) => (
-            <div key={idx} className={styles.topicRow}>
-              <input
-                className={styles.topicNameInput}
-                value={topic.name}
-                placeholder="Topic name"
-                onChange={e => updateTopic(idx, 'name', e.target.value)}
-              />
-              <textarea
-                className={styles.topicKwInput}
-                value={topic.keywords.join(', ')}
-                placeholder="comma-separated keywords"
-                rows={2}
-                onChange={e =>
-                  updateTopic(idx, 'keywords',
-                    e.target.value.split(',').map(k => k.trim()).filter(Boolean)
-                  )
-                }
-              />
-              <button
-                className={styles.topicDeleteBtn}
-                onClick={() => removeTopic(idx)}
-                title="Delete topic"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
-
-          <button className={styles.addTopicBtn} onClick={addTopic}>
-            + Add topic
-          </button>
-        </div>
-
-        {saveErr && <div className={styles.modalError}>{saveErr}</div>}
-
-        <div className={styles.modalFooter}>
-          <button className={styles.modalCancel} onClick={onClose} disabled={saving}>
-            Cancel
-          </button>
-          <button className={styles.modalSave} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save topics'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
@@ -248,15 +128,10 @@ export function NewsAggregatorPage() {
   const [refreshing,  setRefreshing]  = useState(false)
 
   // ── Filter state ───────────────────────────────────────────────────────────
-  const [sourceFilter,  setSourceFilter]  = useState<SourceFilter>('all')
-  const [topicFilter,   setTopicFilter]   = useState('all')
-  const [signalFilters, setSignalFilters] = useState<string[]>([])
-  const [search,        setSearch]        = useState('')
-  const [expanded,      setExpanded]      = useState<string | null>(null)
-
-  // ── Modal state ────────────────────────────────────────────────────────────
-  const [showTopicsModal, setShowTopicsModal] = useState(false)
-  const [topicsConfig,    setTopicsConfig]    = useState<TopicConfig[]>([])
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all')
+  const [topicFilter,  setTopicFilter]  = useState('all')
+  const [search,       setSearch]       = useState('')
+  const [expanded,     setExpanded]     = useState<string | null>(null)
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
@@ -287,16 +162,6 @@ export function NewsAggregatorPage() {
     }
   }
 
-  async function openTopicsModal() {
-    try {
-      const data = await fetchTopics()
-      setTopicsConfig(data)
-      setShowTopicsModal(true)
-    } catch {
-      setShowTopicsModal(true)
-    }
-  }
-
   // ── Derived data ───────────────────────────────────────────────────────────
 
   const allTopics = useMemo(() => {
@@ -310,16 +175,12 @@ export function NewsAggregatorPage() {
     return articles.filter(a => {
       if (sourceFilter !== 'all' && a.source !== sourceFilter) return false
       if (topicFilter  !== 'all' && !a.topics.includes(topicFilter)) return false
-      if (signalFilters.length > 0) {
-        const labels = a.signals.map(s => s.label)
-        if (!signalFilters.some(sf => labels.includes(sf))) return false
-      }
       if (q && !a.title.toLowerCase().includes(q) && !a.description.toLowerCase().includes(q)) {
         return false
       }
       return true
     })
-  }, [articles, sourceFilter, topicFilter, signalFilters, search])
+  }, [articles, sourceFilter, topicFilter, search])
 
   const bloombergFiltered = useMemo(
     () => filteredArticles.filter(a => a.source === 'bloomberg'),
@@ -332,10 +193,9 @@ export function NewsAggregatorPage() {
 
   const lastUpdated = useMemo(() => {
     if (!articles.length) return null
-    const latest = articles.reduce((best, a) =>
+    return articles.reduce((best, a) =>
       a.fetched_at > best ? a.fetched_at : best, articles[0].fetched_at
     )
-    return latest
   }, [articles])
 
   const stats = useMemo(() => ({
@@ -344,12 +204,6 @@ export function NewsAggregatorPage() {
     reuters:   articles.filter(a => a.source === 'reuters').length,
     visible:   filteredArticles.length,
   }), [articles, filteredArticles])
-
-  function toggleSignal(label: string) {
-    setSignalFilters(prev =>
-      prev.includes(label) ? prev.filter(s => s !== label) : [...prev, label]
-    )
-  }
 
   function toggleExpanded(guid: string) {
     setExpanded(prev => prev === guid ? null : guid)
@@ -454,39 +308,7 @@ export function NewsAggregatorPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
-          {/* Manage topics */}
-          <button className={styles.gearBtn} onClick={openTopicsModal} title="Manage Topics">
-            ⚙ Manage Topics
-          </button>
         </div>
-      </div>
-
-      {/* ── Signal filter row ───────────────────────────────────────────────── */}
-      <div className={styles.signalRow}>
-        <span className={styles.signalRowLabel}>Signals</span>
-        {ALL_SIGNAL_DEFS.map(sig => {
-          const colors  = SIGNAL_COLORS[sig.theme]
-          const active  = signalFilters.includes(sig.label)
-          return (
-            <button
-              key={sig.theme}
-              className={`${styles.signalPill} ${active ? styles.signalPillActive : ''}`}
-              onClick={() => toggleSignal(sig.label)}
-              style={active ? {
-                background:  colors?.bg,
-                color:       colors?.color,
-                borderColor: colors?.border,
-              } : undefined}
-            >
-              {sig.label}
-            </button>
-          )
-        })}
-        {signalFilters.length > 0 && (
-          <button className={styles.clearBtn} onClick={() => setSignalFilters([])}>
-            ✕ Clear
-          </button>
-        )}
       </div>
 
       {/* ── Stats bar ──────────────────────────────────────────────────────── */}
@@ -550,15 +372,6 @@ export function NewsAggregatorPage() {
           )
         )}
       </main>
-
-      {/* ── Topics Modal ─────────────────────────────────────────────────── */}
-      {showTopicsModal && (
-        <TopicsModal
-          initial={topicsConfig}
-          onClose={() => setShowTopicsModal(false)}
-          onSaved={loadArticles}
-        />
-      )}
     </div>
   )
 }

@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../db'
-import { fetchAndIngestNews, DEFAULT_TOPICS } from '../newsFetcher'
+import { fetchAndIngestNews } from '../newsFetcher'
 
 export const newsRouter = Router()
 
-// ── Types shared with client ───────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ArticleRow {
   id:           number
@@ -15,8 +15,8 @@ interface ArticleRow {
   url:          string
   published_at: string
   fetched_at:   string
-  topics:       string   // JSON
-  signals:      string   // JSON
+  topics:       string   // JSON array
+  signals:      string   // JSON array (legacy, always '[]')
   tag:          string
 }
 
@@ -25,7 +25,7 @@ interface ArticleRow {
 newsRouter.get('/', (req: Request, res: Response) => {
   const { source, topic, search } = req.query
 
-  let sql    = 'SELECT * FROM news_articles WHERE 1=1'
+  let sql = 'SELECT * FROM news_articles WHERE 1=1'
   const params: (string | number)[] = []
 
   if (source && typeof source === 'string' && source !== 'all') {
@@ -42,8 +42,7 @@ newsRouter.get('/', (req: Request, res: Response) => {
 
   let rows = (db.prepare(sql).all(...params) as ArticleRow[]).map(r => ({
     ...r,
-    topics:  JSON.parse(r.topics  || '[]') as string[],
-    signals: JSON.parse(r.signals || '[]') as { label: string; theme: string }[],
+    topics: JSON.parse(r.topics || '[]') as string[],
   }))
 
   // Topic filter applied after JSON parse (topics is a JSON array field)
@@ -73,44 +72,4 @@ newsRouter.post('/refresh', async (_req: Request, res: Response) => {
   } finally {
     refreshInProgress = false
   }
-})
-
-// ── GET /api/news/topics ──────────────────────────────────────────────────────
-
-newsRouter.get('/topics', (_req: Request, res: Response) => {
-  const rows = db.prepare(
-    'SELECT id, name, keywords FROM news_topics ORDER BY id ASC'
-  ).all() as { id: number; name: string; keywords: string }[]
-
-  if (rows.length === 0) {
-    res.json(DEFAULT_TOPICS.map((t, i) => ({ id: i, name: t.name, keywords: t.keywords })))
-    return
-  }
-
-  res.json(rows.map(r => ({
-    ...r,
-    keywords: JSON.parse(r.keywords || '[]') as string[],
-  })))
-})
-
-// ── POST /api/news/topics/batch — replace entire topic list ───────────────────
-
-newsRouter.post('/topics/batch', (req: Request, res: Response) => {
-  const topics = req.body as { name: string; keywords: string[] }[] | undefined
-  if (!Array.isArray(topics)) {
-    res.status(400).json({ error: 'Expected array of topics' })
-    return
-  }
-
-  db.transaction(() => {
-    db.prepare('DELETE FROM news_topics').run()
-    const insert = db.prepare('INSERT INTO news_topics (name, keywords) VALUES (?, ?)')
-    for (const t of topics) {
-      if (t.name?.trim()) {
-        insert.run(t.name.trim(), JSON.stringify(t.keywords ?? []))
-      }
-    }
-  })()
-
-  res.json({ success: true })
 })
