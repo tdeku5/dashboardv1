@@ -8,19 +8,21 @@ import { CPSDashboardPage }    from './pages/CPSDashboardPage'
 import { ClaimsDashboardPage } from './pages/ClaimsDashboardPage'
 import { CESDashboardPage }    from './pages/CESDashboardPage'
 import { JOLTSDashboardPage }  from './pages/JOLTSDashboardPage'
+import { ProductivityPage }    from './pages/ProductivityPage'
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/"                         element={<Dashboard />} />
-        <Route path="/models"                   element={<ModelsPage />} />
-        <Route path="/models/labor"             element={<LaborMarketPage />} />
-        <Route path="/models/labor/projection"  element={<LaborModelsPage />} />
-        <Route path="/models/labor/cps"         element={<CPSDashboardPage />} />
-        <Route path="/models/labor/claims"      element={<ClaimsDashboardPage />} />
-        <Route path="/models/labor/ces"         element={<CESDashboardPage />} />
-        <Route path="/models/labor/jolts"       element={<JOLTSDashboardPage />} />
+        <Route path="/"                             element={<Dashboard />} />
+        <Route path="/models"                       element={<ModelsPage />} />
+        <Route path="/models/labor"                 element={<LaborMarketPage />} />
+        <Route path="/models/labor/projection"      element={<LaborModelsPage />} />
+        <Route path="/models/labor/cps"             element={<CPSDashboardPage />} />
+        <Route path="/models/labor/claims"          element={<ClaimsDashboardPage />} />
+        <Route path="/models/labor/ces"             element={<CESDashboardPage />} />
+        <Route path="/models/labor/jolts"           element={<JOLTSDashboardPage />} />
+        <Route path="/models/labor/productivity"    element={<ProductivityPage />} />
       </Routes>
     </BrowserRouter>
   )

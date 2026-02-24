@@ -38,6 +38,13 @@ const LABOR_MODELS = [
     accent:      '#818cf8',
     tag:         'JTSJOL · JTSHIL · JTSQUL · JTSLDL · JTSOSL · JTSTSL',
   },
+  {
+    path:        '/models/labor/productivity',
+    title:       'Productivity & Unit Labor Costs',
+    description: 'Nonfarm business sector labor productivity and unit labor costs — levels, q/q annualized growth, y/y changes, and pre-Covid trend comparison.',
+    accent:      '#7FB3D3',
+    tag:         'OPHNFB · ULCNFB',
+  },
 ]
 
 export function LaborMarketPage() {

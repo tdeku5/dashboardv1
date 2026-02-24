@@ -39,6 +39,8 @@ export const ALL_SERIES: string[] = [
   'AWHAEINFO', 'AWHAEFA', 'AWHAEPBS', 'AWHAEEHS', 'AWHAELAH', 'AWHAEOS',
   // JOLTS
   'JTSJOL', 'JTSHIL', 'JTSQUL', 'JTSLDL', 'JTSOSL', 'JTSTSL',
+  // Productivity & Unit Labor Costs
+  'OPHNFB', 'ULCNFB',
 ]
 
 export const STALE_HOURS = 20
