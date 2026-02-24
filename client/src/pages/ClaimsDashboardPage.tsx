@@ -54,6 +54,12 @@ const QUICK_PERIODS = [
 
 const ALL_CLAIMS_IDS = ['ICNSA', 'ICSA', 'CCNSA', 'CCSA'] as const
 
+// Heatmap grid dimensions: most-recent year on the left
+const HEATMAP_YEARS = Array.from({ length: 27 }, (_, i) => 2026 - i)  // [2026 … 2000]
+const HEATMAP_WEEKS = Array.from({ length: 53 }, (_, i) => i + 1)     // [1 … 53]
+// Percentile anchors used for the color scale (like Excel conditional formatting)
+const HEATMAP_PCTS  = [10, 25, 50, 75, 90] as const
+
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
 function fmtAxisDate(d: string): string {
@@ -172,6 +178,79 @@ function buildByYearData(raw: WD[], active: Set<string>): ByYearRow[] {
     rows.push(row)
   }
   return rows
+}
+
+interface HeatmapBreakpoint { pct: number; value: number }
+
+// Linear interpolation of a sorted array at percentile p (0-100)
+function computePercentile(sorted: number[], p: number): number {
+  const idx = (p / 100) * (sorted.length - 1)
+  const lo  = Math.floor(idx)
+  const hi  = Math.ceil(idx)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+}
+
+// Build heatmap: year → week → raw value (thousands), plus percentile breakpoints
+function buildHeatmapData(raw: WD[]): {
+  grid:        Map<number, Map<number, number>>
+  breakpoints: HeatmapBreakpoint[]
+} {
+  const grid = new Map<number, Map<number, number>>()
+  HEATMAP_YEARS.forEach(y => grid.set(y, new Map()))
+
+  raw.forEach(d => {
+    const yr = parseInt(d.date.slice(0, 4))
+    if (yr < 2000 || yr > 2026) return
+    grid.get(yr)?.set(weekNum(d.date), d.value / 1000)
+  })
+
+  // Collect all cell values for percentile computation
+  const allValues: number[] = []
+  grid.forEach(wkMap => wkMap.forEach(v => allValues.push(v)))
+  allValues.sort((a, b) => a - b)
+
+  const breakpoints: HeatmapBreakpoint[] = HEATMAP_PCTS.map(p => ({
+    pct:   p,
+    value: computePercentile(allValues, p),
+  }))
+
+  return { grid, breakpoints }
+}
+
+// Map a raw value → t ∈ [0,1] via piecewise linear interpolation over percentile anchors.
+// Values below P10 clamp to 0; values above P90 clamp to 1.
+function valueToT(value: number, bps: HeatmapBreakpoint[]): number {
+  if (!bps.length || value <= bps[0].value) return 0
+  if (value >= bps[bps.length - 1].value)   return 1
+  const n = bps.length
+  for (let i = 0; i < n - 1; i++) {
+    if (value <= bps[i + 1].value) {
+      const frac = (value - bps[i].value) / (bps[i + 1].value - bps[i].value)
+      return (i + frac) / (n - 1)
+    }
+  }
+  return 1
+}
+
+// Map t ∈ [0,1] → blue → white → dark-red
+function tToColor(t: number): string {
+  const tc = Math.max(0, Math.min(1, t))
+  let r: number, g: number, b: number
+  if (tc <= 0.5) {
+    // blue(37,99,235) → white(255,255,255)
+    const s = tc * 2
+    r = Math.round(37  + s * (255 - 37))
+    g = Math.round(99  + s * (255 - 99))
+    b = Math.round(235 + s * (255 - 235))
+  } else {
+    // white(255,255,255) → dark-red(180,0,0)
+    const s = (tc - 0.5) * 2
+    r = Math.round(255 - s * (255 - 180))
+    g = Math.round(255 - s * 255)
+    b = Math.round(255 - s * 255)
+  }
+  return `rgb(${r},${g},${b})`
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -351,6 +430,105 @@ function YoYSection({ title, subtitle, data, brush, onBrushChange, onSelect }: {
         </ResponsiveContainer>
       </div>
       <QuickSelect active={brush.period} onSelect={onSelect} />
+    </div>
+  )
+}
+
+// ── Heatmap section ───────────────────────────────────────────────────────────
+
+function HeatmapSection({ title, subtitle, data }: {
+  title:    string
+  subtitle: string
+  data:     WD[]
+}) {
+  const [tooltip, setTooltip] = useState<{
+    year: number; week: number; value: number | null; x: number; y: number
+  } | null>(null)
+
+  const { grid, breakpoints } = useMemo(
+    () => buildHeatmapData(data),
+    [data],
+  )
+
+  return (
+    <div className={styles.section}>
+
+      {/* Header: title + percentile color-scale legend */}
+      <div className={styles.sectionHeader}>
+        <div>
+          <div className={styles.sectionTitle}>{title}</div>
+          <div className={styles.sectionSubtitle}>{subtitle}</div>
+        </div>
+        <div className={styles.hmLegendWrap}>
+          <div className={styles.hmLegendBar} />
+          <div className={styles.hmLegendTicks}>
+            {breakpoints.map(bp => (
+              <div key={bp.pct} className={styles.hmLegendTick}>
+                <span className={styles.hmLegendTickPct}>P{bp.pct}</span>
+                <span className={styles.hmLegendTickVal}>{bp.value.toFixed(0)}K</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div
+        className={styles.heatmapWrap}
+        onMouseLeave={() => setTooltip(null)}
+      >
+        <div className={styles.heatmapGrid}>
+
+          {/* Top-left corner */}
+          <div className={styles.hmCorner} />
+
+          {/* Year column headers */}
+          {HEATMAP_YEARS.map(year => (
+            <div key={`yr-${year}`} className={styles.hmColHeader}>
+              <span className={styles.hmColHeaderText}>{year}</span>
+            </div>
+          ))}
+
+          {/* Data rows: one row header + 27 cells per week */}
+          {HEATMAP_WEEKS.flatMap(week => [
+            <div key={`wk-${week}`} className={styles.hmRowHeader}>{week}</div>,
+            ...HEATMAP_YEARS.map(year => {
+              const value = grid.get(year)?.get(week) ?? null
+              const color = value !== null
+                ? tToColor(valueToT(value, breakpoints))
+                : undefined
+              return (
+                <div
+                  key={`${year}-${week}`}
+                  className={color ? styles.hmCell : styles.hmCellEmpty}
+                  style={color ? { background: color } : undefined}
+                  onMouseEnter={e => {
+                    const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                    setTooltip({ year, week, value, x: r.right + 6, y: r.top })
+                  }}
+                />
+              )
+            }),
+          ])}
+
+        </div>
+      </div>
+
+      {/* Floating tooltip */}
+      {tooltip && (
+        <div
+          className={styles.hmTooltip}
+          style={{ left: tooltip.x, top: tooltip.y - 8 }}
+        >
+          <span style={{ color: '#94A3B8' }}>{tooltip.year}</span>
+          <span style={{ color: '#4e6070' }}> · Wk {tooltip.week}</span>
+          {tooltip.value !== null
+            ? <span style={{ color: '#CBD5E1' }}> · {tooltip.value.toFixed(1)}K</span>
+            : <span style={{ color: '#475569' }}> · no data</span>
+          }
+        </div>
+      )}
+
     </div>
   )
 }
@@ -703,6 +881,21 @@ export function ClaimsDashboardPage() {
                 onSelect={selectYoY_CC}
               />
             </div>
+
+            {/* ── Row 5: Claims Heatmaps ─────────────────────────────────── */}
+            <div className={styles.chartRow}>
+              <HeatmapSection
+                title="Initial Claims Heatmap"
+                subtitle="ICNSA · Weekly · Thousands · 2000 – 2026 · rows = week of year · columns = year"
+                data={allData['ICNSA'] ?? []}
+              />
+              <HeatmapSection
+                title="Continuing Claims Heatmap"
+                subtitle="CCNSA · Weekly · Thousands · 2000 – 2026 · rows = week of year · columns = year"
+                data={allData['CCNSA'] ?? []}
+              />
+            </div>
+
           </>
         )}
       </main>

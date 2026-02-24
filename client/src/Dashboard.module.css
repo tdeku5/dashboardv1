@@ -85,6 +85,13 @@
   padding-left: 8px;
 }
 
+.dataAsOf {
+  font-size: 11px;
+  color: #4e6070;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
 .loadingLabel {
   font-size: 12px;
   font-weight: 600;

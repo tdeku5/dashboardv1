@@ -3,6 +3,16 @@ import { panels } from './data/panels'
 import { Panel } from './components/Panel'
 import { useFredData } from './hooks/useFredData'
 import type { FredConfigError } from './lib/fred'
+
+function fmtDbDate(sqliteDate: string): string {
+  // SQLite stores datetime('now') as 'YYYY-MM-DD HH:MM:SS' (UTC)
+  const d = new Date(sqliteDate.replace(' ', 'T') + 'Z')
+  return d.toLocaleString('en-US', {
+    month: 'short', day: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: 'UTC', timeZoneName: 'short', hour12: false,
+  })
+}
 import { NavDropdown } from './components/NavDropdown'
 import styles from './Dashboard.module.css'
 
@@ -98,8 +108,8 @@ function ConfigErrorScreen({ err, onRetry }: { err: FredConfigError; onRetry: ()
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 export function Dashboard() {
-  const now                                                        = useClock()
-  const { panelMap, lastUpdated, refresh, isRefreshing, configError } = useFredData()
+  const now                                                                          = useClock()
+  const { panelMap, lastUpdated, dbStatus, refresh, isRefreshing, serverRefreshing, configError } = useFredData()
   const [maWindow, setMaWindow] = useState(3)
 
   return (
@@ -114,7 +124,9 @@ export function Dashboard() {
 
         {/* Center: live / loading status */}
         <div className={styles.barCenter}>
-          {isRefreshing ? (
+          {serverRefreshing ? (
+            <span className={styles.loadingLabel}>REFRESHING FROM FRED…</span>
+          ) : isRefreshing ? (
             <span className={styles.loadingLabel}>FETCHING DATA…</span>
           ) : configError ? (
             <span className={styles.loadingLabel} style={{ color: 'var(--negative)' }}>
@@ -127,6 +139,11 @@ export function Dashboard() {
               {lastUpdated && (
                 <span className={styles.updatedAt}>
                   updated {fmtClock(lastUpdated)}
+                </span>
+              )}
+              {dbStatus.lastUpdated && (
+                <span className={styles.dataAsOf}>
+                  · data as of {fmtDbDate(dbStatus.lastUpdated)}
                 </span>
               )}
             </>
@@ -154,7 +171,7 @@ export function Dashboard() {
             className={styles.refreshBtn}
             onClick={refresh}
             disabled={isRefreshing}
-            title="Re-fetch all FRED series"
+            title="Re-fetch all series from FRED and update the local database"
           >
             <span
               className={styles.refreshIcon}

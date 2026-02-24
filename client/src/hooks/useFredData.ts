@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchFredSeries, FredConfigError } from '../lib/fred'
+import { fetchFredSeries, fetchDbStatus, triggerRefresh, FredConfigError } from '../lib/fred'
+import type { DbStatus } from '../lib/fred'
 import { SERIES_DEFS } from '../data/seriesConfig'
 import type { LiveRow, LivePanelData } from '../types'
 
@@ -33,23 +34,39 @@ function buildLoadingMap(): Map<string, LivePanelData> {
 }
 
 export interface FredDataResult {
-  panelMap:     Map<string, LivePanelData>
-  lastUpdated:  Date | null
-  refresh:      () => void
-  isRefreshing: boolean
-  configError?: FredConfigError
+  panelMap:         Map<string, LivePanelData>
+  lastUpdated:      Date | null
+  dbStatus:         DbStatus
+  refresh:          () => void
+  isRefreshing:     boolean
+  serverRefreshing: boolean
+  configError?:     FredConfigError
 }
 
 export function useFredData(): FredDataResult {
-  const [panelMap, setPanelMap]         = useState<Map<string, LivePanelData>>(buildLoadingMap)
-  const [lastUpdated, setLastUpdated]   = useState<Date | null>(null)
-  const [refreshKey, setRefreshKey]     = useState(0)
-  const [configError, setConfigError]   = useState<FredConfigError | undefined>(undefined)
+  const [panelMap,         setPanelMap]        = useState<Map<string, LivePanelData>>(buildLoadingMap)
+  const [lastUpdated,      setLastUpdated]      = useState<Date | null>(null)
+  const [refreshKey,       setRefreshKey]       = useState(0)
+  const [configError,      setConfigError]      = useState<FredConfigError | undefined>(undefined)
+  const [serverRefreshing, setServerRefreshing] = useState(false)
+  const [dbStatus,         setDbStatus]         = useState<DbStatus>({ lastUpdated: null, seriesCount: 0 })
+
+  // Keep DB status in sync after every data load
+  useEffect(() => {
+    fetchDbStatus().then(setDbStatus).catch(console.error)
+  }, [refreshKey])
 
   const refresh = useCallback(() => {
-    setPanelMap(buildLoadingMap())
-    setConfigError(undefined)
-    setRefreshKey(k => k + 1)
+    setServerRefreshing(true)
+    triggerRefresh()
+      .then(status => { if (status) setDbStatus(status) })
+      .catch(err => { console.error('[useFredData] Server refresh failed:', err) })
+      .finally(() => {
+        setServerRefreshing(false)
+        setPanelMap(buildLoadingMap())
+        setConfigError(undefined)
+        setRefreshKey(k => k + 1)
+      })
   }, [])
 
   useEffect(() => {
@@ -70,9 +87,7 @@ export function useFredData(): FredDataResult {
 
       if (cancelled) return
 
-      // If every series failed and at least one failure is a config error,
-      // surface the config error screen instead of row-level error states.
-      const allFailed = results.every(r => r.status === 'rejected')
+      const allFailed      = results.every(r => r.status === 'rejected')
       const firstConfigErr = results
         .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
         .map(r => r.reason)
@@ -80,7 +95,6 @@ export function useFredData(): FredDataResult {
 
       if (allFailed && firstConfigErr) {
         setConfigError(firstConfigErr)
-        // Still update the map so rows show error state if user dismisses/retries
       } else {
         setConfigError(undefined)
       }
@@ -96,19 +110,17 @@ export function useFredData(): FredDataResult {
         if (result.status === 'fulfilled') {
           const { computed } = result.value
           row = {
-            id:          def.fredId,
-            label:       def.label,
-            status:      'ready',
-            lastDate:    computed.lastDate,
-            lastRawDate: computed.lastRawDate,
-            seriesFreq:  def.staleFreq ?? 'monthly',
-            cells:       computed.cells,
+            id:            def.fredId,
+            label:         def.label,
+            status:        'ready',
+            lastDate:      computed.lastDate,
+            lastRawDate:   computed.lastRawDate,
+            seriesFreq:    def.staleFreq ?? 'monthly',
+            cells:         computed.cells,
             regimeHistory: computed.regimeHistory,
           }
         } else {
-          const msg = result.reason instanceof Error
-            ? result.reason.message
-            : 'Fetch failed'
+          const msg = result.reason instanceof Error ? result.reason.message : 'Fetch failed'
           row = {
             id:       def.fredId,
             label:    def.label,
@@ -139,7 +151,8 @@ export function useFredData(): FredDataResult {
     return () => { cancelled = true }
   }, [refreshKey])
 
-  const isRefreshing = [...panelMap.values()].some(p => p.loading)
+  const panelsLoading = [...panelMap.values()].some(p => p.loading)
+  const isRefreshing  = serverRefreshing || panelsLoading
 
-  return { panelMap, lastUpdated, refresh, isRefreshing, configError }
+  return { panelMap, lastUpdated, dbStatus, refresh, isRefreshing, serverRefreshing, configError }
 }

@@ -24,6 +24,20 @@ const LABOR_MODELS = [
     accent:      '#f97316',
     tag:         'ICNSA · ICSA · CCNSA · CCSA',
   },
+  {
+    path:        '/models/labor/ces',
+    title:       'CES Dashboard',
+    description: 'Monthly payroll employment decomposition by sector with adjustable lookback, sector/category grouping, and total nonfarm overlay.',
+    accent:      '#10b981',
+    tag:         'PAYEMS · MANEMP · USPBS · USEHS · USLAH · +10 more',
+  },
+  {
+    path:        '/models/labor/jolts',
+    title:       'JOLTS Dashboard',
+    description: 'Job openings, hires, quits and separations — rate charts, implied NFP decomposition, and Beveridge curve scatter.',
+    accent:      '#818cf8',
+    tag:         'JTSJOL · JTSHIL · JTSQUL · JTSLDL · JTSOSL · JTSTSL',
+  },
 ]
 
 export function LaborMarketPage() {

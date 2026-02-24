@@ -6,6 +6,8 @@ import { LaborMarketPage }  from './pages/LaborMarketPage'
 import { LaborModelsPage }  from './pages/LaborModelsPage'
 import { CPSDashboardPage }    from './pages/CPSDashboardPage'
 import { ClaimsDashboardPage } from './pages/ClaimsDashboardPage'
+import { CESDashboardPage }    from './pages/CESDashboardPage'
+import { JOLTSDashboardPage }  from './pages/JOLTSDashboardPage'
 
 function App() {
   return (
@@ -17,6 +19,8 @@ function App() {
         <Route path="/models/labor/projection"  element={<LaborModelsPage />} />
         <Route path="/models/labor/cps"         element={<CPSDashboardPage />} />
         <Route path="/models/labor/claims"      element={<ClaimsDashboardPage />} />
+        <Route path="/models/labor/ces"         element={<CESDashboardPage />} />
+        <Route path="/models/labor/jolts"       element={<JOLTSDashboardPage />} />
       </Routes>
     </BrowserRouter>
   )

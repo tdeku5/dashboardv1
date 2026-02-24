@@ -25,3 +25,8 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# SQLite database (local cache — regenerated at runtime)
+fred_data.db
+fred_data.db-shm
+fred_data.db-wal

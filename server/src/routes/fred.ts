@@ -1,109 +1,111 @@
 import { Router, Request, Response } from 'express'
+import { getObservations, getDbStatus } from '../db'
+import { fetchAllSeries, ALL_SERIES } from '../fetchAllSeries'
 
 export const fredRouter = Router()
 
-const FRED_BASE_URL = 'https://api.stlouisfed.org/fred'
-
-const VALID_FREQUENCIES = new Set(['d', 'w', 'bw', 'm', 'q', 'sa', 'a'])
+const VALID_FREQUENCIES         = new Set(['d', 'w', 'bw', 'm', 'q', 'sa', 'a'])
 const VALID_AGGREGATION_METHODS = new Set(['avg', 'sum', 'eop'])
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const DATE_RE                   = /^\d{4}-\d{2}-\d{2}$/
 
-function getApiKey(): string | null {
-  const key = process.env.FRED_API_KEY
-  return key && key !== 'your_fred_api_key_here' ? key : null
+// ── Monthly aggregation ───────────────────────────────────────────────────────
+
+function aggregateMonthly(
+  rows:   { date: string; value: number }[],
+  method: string
+): { date: string; value: number }[] {
+  const groups = new Map<string, number[]>()
+  for (const row of rows) {
+    const key = row.date.slice(0, 7) + '-01'
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(row.value)
+  }
+  const result: { date: string; value: number }[] = []
+  for (const [date, vals] of [...groups.entries()].sort()) {
+    let value: number
+    if (method === 'sum') {
+      value = vals.reduce((a, b) => a + b, 0)
+    } else if (method === 'eop') {
+      value = vals[vals.length - 1]
+    } else {
+      // avg (default)
+      value = vals.reduce((a, b) => a + b, 0) / vals.length
+    }
+    result.push({ date, value })
+  }
+  return result
 }
 
-// GET /api/fred
-// Required: series_id
-// Optional: observation_start, observation_end, frequency, aggregation_method
-fredRouter.get('/', async (req: Request, res: Response) => {
-  const apiKey = getApiKey()
-  if (!apiKey) {
-    res.status(500).json({ error: 'FRED_API_KEY is not configured on the server' })
-    return
-  }
+// ── GET /api/fred — serve from SQLite ─────────────────────────────────────────
 
-  const { series_id, observation_start, observation_end, frequency, aggregation_method } = req.query
+fredRouter.get('/', (req: Request, res: Response) => {
+  const {
+    series_id, observation_start, observation_end,
+    frequency, aggregation_method,
+  } = req.query
 
-  // --- Validation ---
-
+  // Validate
   if (!series_id || typeof series_id !== 'string' || !series_id.trim()) {
     res.status(400).json({ error: 'series_id is required' })
     return
   }
-
   if (observation_start && !DATE_RE.test(String(observation_start))) {
-    res.status(400).json({ error: 'observation_start must be in YYYY-MM-DD format' })
+    res.status(400).json({ error: 'observation_start must be YYYY-MM-DD' })
     return
   }
-
   if (observation_end && !DATE_RE.test(String(observation_end))) {
-    res.status(400).json({ error: 'observation_end must be in YYYY-MM-DD format' })
+    res.status(400).json({ error: 'observation_end must be YYYY-MM-DD' })
     return
   }
-
   if (frequency && !VALID_FREQUENCIES.has(String(frequency))) {
-    res.status(400).json({
-      error: `Invalid frequency "${frequency}". Must be one of: ${[...VALID_FREQUENCIES].join(', ')}`,
-    })
+    res.status(400).json({ error: `Invalid frequency "${frequency}"` })
     return
   }
-
   if (aggregation_method && !VALID_AGGREGATION_METHODS.has(String(aggregation_method))) {
-    res.status(400).json({
-      error: `Invalid aggregation_method "${aggregation_method}". Must be one of: ${[...VALID_AGGREGATION_METHODS].join(', ')}`,
-    })
+    res.status(400).json({ error: `Invalid aggregation_method "${aggregation_method}"` })
     return
   }
 
-  // --- Build upstream URL ---
-
-  const params = new URLSearchParams({
-    series_id: series_id.trim(),
-    api_key: apiKey,
-    file_type: 'json',
+  let rows = getObservations(series_id.trim(), {
+    observationStart: observation_start ? String(observation_start) : undefined,
+    observationEnd:   observation_end   ? String(observation_end)   : undefined,
   })
 
-  if (observation_start)  params.set('observation_start',  String(observation_start))
-  if (observation_end)    params.set('observation_end',    String(observation_end))
-  if (frequency)          params.set('frequency',          String(frequency))
-  if (aggregation_method) params.set('aggregation_method', String(aggregation_method))
+  // Downsample to monthly if requested (handles daily/weekly stored data)
+  if (frequency === 'm' && rows.length > 0) {
+    rows = aggregateMonthly(rows, aggregation_method ? String(aggregation_method) : 'avg')
+  }
 
-  // --- Proxy to FRED ---
+  // Return in the same shape as the FRED API so the client needs no changes
+  res.json({
+    observations: rows.map(r => ({ date: r.date, value: String(r.value) })),
+  })
+})
 
-  let upstream: globalThis.Response
+// ── GET /api/fred/status — database health ────────────────────────────────────
+
+fredRouter.get('/status', (_req: Request, res: Response) => {
+  res.json(getDbStatus())
+})
+
+// ── POST /api/fred/refresh — force re-fetch all series from FRED ──────────────
+
+let refreshInProgress = false
+
+fredRouter.post('/refresh', async (_req: Request, res: Response) => {
+  if (refreshInProgress) {
+    res.status(409).json({ error: 'A refresh is already in progress' })
+    return
+  }
+
+  refreshInProgress = true
   try {
-    upstream = await fetch(`${FRED_BASE_URL}/series/observations?${params}`)
+    await fetchAllSeries({ force: true, seriesList: ALL_SERIES })
+    res.json({ success: true, ...getDbStatus() })
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err)
-    res.status(502).json({ error: 'Could not reach the FRED API', detail })
-    return
+    const msg = err instanceof Error ? err.message : 'Refresh failed'
+    res.status(500).json({ error: msg })
+  } finally {
+    refreshInProgress = false
   }
-
-  let data: unknown
-  try {
-    data = await upstream.json()
-  } catch {
-    res.status(502).json({
-      error: 'FRED API returned a non-JSON response',
-      fred_status: upstream.status,
-    })
-    return
-  }
-
-  // Forward FRED's own error status (e.g. 400 unknown series, 429 rate-limit)
-  if (!upstream.ok) {
-    const msg =
-      data !== null &&
-      typeof data === 'object' &&
-      'error_message' in data &&
-      typeof (data as Record<string, unknown>).error_message === 'string'
-        ? (data as Record<string, string>).error_message
-        : 'FRED API returned an error'
-
-    res.status(upstream.status).json({ error: msg, fred_status: upstream.status })
-    return
-  }
-
-  res.json(data)
 })

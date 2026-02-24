@@ -30,6 +30,32 @@ export class FredConfigError extends Error {
   }
 }
 
+// ── Database status ───────────────────────────────────────────────────────────
+
+export interface DbStatus {
+  lastUpdated:  string | null  // SQLite datetime string (UTC)
+  seriesCount:  number
+}
+
+export async function fetchDbStatus(): Promise<DbStatus> {
+  try {
+    const res = await fetch('/api/fred/status')
+    if (!res.ok) return { lastUpdated: null, seriesCount: 0 }
+    return await res.json() as DbStatus
+  } catch {
+    return { lastUpdated: null, seriesCount: 0 }
+  }
+}
+
+export async function triggerRefresh(): Promise<DbStatus | null> {
+  const res = await fetch('/api/fred/refresh', { method: 'POST' })
+  if (!res.ok) {
+    const body = await res.json() as { error?: string }
+    throw new Error(body.error ?? `Refresh failed (HTTP ${res.status})`)
+  }
+  return await res.json() as DbStatus
+}
+
 export async function fetchFredSeries(
   seriesId: string,
   opts: FetchOptions = {}
