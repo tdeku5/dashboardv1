@@ -5,7 +5,7 @@ import { db } from './db'
 
 const FEEDS = [
   { source: 'bloomberg', url: 'https://feeds.bloomberg.com/technology/news.rss' },
-  { source: 'reuters',   url: 'https://feeds.reuters.com/reuters/technologyNews' },
+  { source: 'reuters',   url: 'https://news.google.com/rss/search?q=site:reuters.com+technology&hl=en-US&gl=US&ceid=US:EN' },
 ] as const
 
 // ── Topic Definitions ─────────────────────────────────────────────────────────
