@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Link } from 'react-router-dom'
+import { NavDropdown } from '../components/NavDropdown'
 import {
   fetchArticles, triggerNewsRefresh, fetchTopics, saveTopics,
   SIGNAL_COLORS, ALL_SIGNAL_DEFS,
@@ -358,8 +360,24 @@ export function NewsAggregatorPage() {
   return (
     <div className={styles.shell}>
 
-      {/* ── Top Bar ────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
+      {/* ── Terminal nav bar (shared across all pages) ─────────────────────── */}
+      <header className={styles.termBar}>
+        <div className={styles.termBarLeft}>
+          <NavDropdown />
+          <span className={styles.termLogo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.termBarRight} />
+      </header>
+
+      {/* ── Breadcrumb ──────────────────────────────────────────────────────── */}
+      <nav className={styles.breadcrumb}>
+        <Link to="/" className={styles.breadcrumbLink}>Home</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>News Aggregator</span>
+      </nav>
+
+      {/* ── News sub-header ─────────────────────────────────────────────────── */}
+      <div className={styles.topBar}>
         <div className={styles.topBarLeft}>
           <span className={styles.logo}>
             Signal<span className={styles.logoDot}>.</span>
@@ -384,7 +402,7 @@ export function NewsAggregatorPage() {
             {refreshing ? '↻ Refreshing…' : '↻ Refresh'}
           </button>
         </div>
-      </header>
+      </div>
 
       {/* ── Controls ───────────────────────────────────────────────────────── */}
       <div className={styles.controls}>
