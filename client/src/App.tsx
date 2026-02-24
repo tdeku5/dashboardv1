@@ -8,7 +8,8 @@ import { CPSDashboardPage }    from './pages/CPSDashboardPage'
 import { ClaimsDashboardPage } from './pages/ClaimsDashboardPage'
 import { CESDashboardPage }    from './pages/CESDashboardPage'
 import { JOLTSDashboardPage }  from './pages/JOLTSDashboardPage'
-import { ProductivityPage }    from './pages/ProductivityPage'
+import { ProductivityPage }      from './pages/ProductivityPage'
+import { NewsAggregatorPage }    from './pages/NewsAggregatorPage'
 
 function App() {
   return (
@@ -23,6 +24,7 @@ function App() {
         <Route path="/models/labor/ces"             element={<CESDashboardPage />} />
         <Route path="/models/labor/jolts"           element={<JOLTSDashboardPage />} />
         <Route path="/models/labor/productivity"    element={<ProductivityPage />} />
+        <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>
     </BrowserRouter>
   )

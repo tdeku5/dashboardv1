@@ -29,6 +29,29 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_obs_series_date
     ON series_observations (series_id, date);
+
+  CREATE TABLE IF NOT EXISTS news_articles (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    guid         TEXT UNIQUE,
+    source       TEXT,
+    title        TEXT,
+    description  TEXT,
+    url          TEXT,
+    published_at TEXT,
+    fetched_at   TEXT,
+    topics       TEXT,
+    signals      TEXT,
+    tag          TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_news_published
+    ON news_articles (published_at DESC);
+
+  CREATE TABLE IF NOT EXISTS news_topics (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    name     TEXT UNIQUE,
+    keywords TEXT
+  );
 `)
 
 // ── Types ─────────────────────────────────────────────────────────────────────

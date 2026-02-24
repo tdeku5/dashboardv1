@@ -5,6 +5,7 @@ import styles from './NavDropdown.module.css'
 const NAV_OPTIONS = [
   { path: '/',       label: 'US Macro Snapshot'     },
   { path: '/models', label: 'Economic Data Models'  },
+  { path: '/news',   label: 'News Aggregator'       },
 ]
 
 export function NavDropdown() {
@@ -12,7 +13,11 @@ export function NavDropdown() {
   const location          = useLocation()
   const wrapRef           = useRef<HTMLDivElement>(null)
 
-  const current = NAV_OPTIONS.find(o => o.path === location.pathname) ?? NAV_OPTIONS[0]
+  function isActive(optPath: string): boolean {
+    if (optPath === '/') return location.pathname === '/'
+    return location.pathname === optPath || location.pathname.startsWith(optPath + '/')
+  }
+  const current = NAV_OPTIONS.find(o => isActive(o.path)) ?? NAV_OPTIONS[0]
 
   // Close on outside click
   useEffect(() => {
@@ -43,12 +48,12 @@ export function NavDropdown() {
               key={opt.path}
               to={opt.path}
               role="option"
-              aria-selected={opt.path === location.pathname}
-              className={`${styles.option} ${opt.path === location.pathname ? styles.optionActive : ''}`}
+              aria-selected={isActive(opt.path)}
+              className={`${styles.option} ${isActive(opt.path) ? styles.optionActive : ''}`}
               onClick={() => setOpen(false)}
             >
               <span className={styles.optionCheck}>
-                {opt.path === location.pathname ? '✓' : ''}
+                {isActive(opt.path) ? '✓' : ''}
               </span>
               {opt.label}
             </Link>
