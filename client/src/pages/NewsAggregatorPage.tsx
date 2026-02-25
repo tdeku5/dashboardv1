@@ -15,6 +15,14 @@ type SourceFilter = 'all' | 'bloomberg' | 'reuters'
 const BLOOMBERG_COLOR = '#F5C542'
 const REUTERS_COLOR   = '#4ade80'
 
+// Hardcoded topic list — always shown in filter row regardless of DB contents.
+// Must stay in sync with TOPIC_LIST in server/src/newsFetcher.ts.
+const KNOWN_TOPICS = [
+  'AI', 'China', 'Emerging Markets', 'Energy',
+  'Federal Reserve', 'Geopolitics', 'Labor', 'Markets',
+  'Regulation', 'Tariffs',
+] as const
+
 function sourceColor(source: 'bloomberg' | 'reuters'): string {
   return source === 'bloomberg' ? BLOOMBERG_COLOR : REUTERS_COLOR
 }
@@ -153,10 +161,13 @@ export function NewsAggregatorPage() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
+  // KNOWN_TOPICS are always shown; dynamic entries (e.g. "General") are appended.
   const allTopics = useMemo(() => {
-    const set = new Set<string>()
-    articles.forEach(a => a.topics.forEach(t => set.add(t)))
-    return Array.from(set).sort()
+    const known = new Set<string>(KNOWN_TOPICS)
+    const extras: string[] = []
+    articles.forEach(a => a.topics.forEach(t => { if (!known.has(t)) extras.push(t) }))
+    const uniqueExtras = Array.from(new Set(extras)).sort()
+    return [...KNOWN_TOPICS, ...uniqueExtras]
   }, [articles])
 
   const filteredArticles = useMemo(() => {

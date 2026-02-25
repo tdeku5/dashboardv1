@@ -16,8 +16,9 @@ const FEEDS = [
 // ── Topic list (hardcoded; Claude classifies against this) ────────────────────
 
 const TOPIC_LIST = [
-  'AI', 'Federal Reserve', 'Geopolitics', 'Tariffs',
-  'Markets', 'Regulation', 'Energy', 'Labor',
+  'AI', 'China', 'Emerging Markets', 'Energy',
+  'Federal Reserve', 'Geopolitics', 'Labor', 'Markets',
+  'Regulation', 'Tariffs',
 ] as const
 
 type Topic = typeof TOPIC_LIST[number]
@@ -30,12 +31,14 @@ async function classifyTopics(title: string, description: string): Promise<strin
   try {
     const response = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 100,
+      max_tokens: 150,
       messages: [{
         role:    'user',
         content: `You are a strict news categorization assistant for a financial and macroeconomic terminal. Categorize the following article into one or more of these topics ONLY if the article is explicitly and primarily about that topic:
 
 - AI: artificial intelligence, machine learning, LLMs, AI models, AI companies, AI policy
+- China: Chinese economy, Chinese government policy, Chinese companies, US-China relations, Chinese technology sector, PBoC, Xi Jinping, Beijing. Do NOT tag solely because China is mentioned in passing — the article should be primarily about China or Chinese entities.
+- Emerging Markets: developing economies, EM currencies, EM debt, capital flows to/from emerging markets, Brazil, India, Indonesia, Mexico, South Africa, Turkey, Southeast Asia economies, IMF programs, World Bank lending. Do NOT tag solely because a developing country is mentioned in passing — the article should be primarily about emerging market dynamics or a specific emerging economy.
 - Federal Reserve: the US Federal Reserve, FOMC, Jerome Powell, US interest rates, US monetary policy, Fed officials, Fed governors, Fed chair. Valid signals include: "the Fed", "Fed's", "Fed said", "Fed officials", "Fed governors", "rate cut", "rate hike", "basis points". NOTE: Do NOT tag articles where "fed" is used in a non-Federal-Reserve context such as "FedEx", "fed up", "has been fed", or similar unrelated usages. When in doubt, ask: is this article about US central bank policy or officials? If yes, tag it. If no, do not.
 - Geopolitics: international relations, wars, sanctions, diplomatic relations, national security, cross-border conflict
 - Tariffs: import/export tariffs, trade wars, customs duties, trade agreements
