@@ -30,17 +30,34 @@ async function classifyTopics(title: string, description: string): Promise<strin
   try {
     const response = await anthropic.messages.create({
       model:      'claude-haiku-4-5-20251001',
-      max_tokens: 64,
+      max_tokens: 100,
       messages: [{
         role:    'user',
-        content: `You are a news categorization assistant. Given the following article, return a JSON array of topics it belongs to from this list: [AI, Federal Reserve, Geopolitics, Tariffs, Markets, Regulation, Energy, Labor]. Return only the JSON array, no other text. If the article does not clearly fit any topic, return an empty array.
+        content: `You are a strict news categorization assistant for a financial and macroeconomic terminal. Categorize the following article into one or more of these topics ONLY if the article is explicitly and primarily about that topic:
+
+- AI: artificial intelligence, machine learning, LLMs, AI models, AI companies, AI policy
+- Federal Reserve: the US Federal Reserve, FOMC, Jerome Powell, US interest rates, US monetary policy. NOTE: "Fed" must refer to the Federal Reserve specifically — do NOT tag articles mentioning "FedEx", "fed up", or other unrelated uses of the word "fed"
+- Geopolitics: international relations, wars, sanctions, diplomatic relations, national security, cross-border conflict
+- Tariffs: import/export tariffs, trade wars, customs duties, trade agreements
+- Markets: stock markets, equity markets, bond markets, commodities, market indices, trading
+- Regulation: government regulation, antitrust, legislation, regulatory agencies (SEC, FTC, FCA etc.)
+- Energy: oil, gas, renewable energy, power grids, energy policy, OPEC
+- Labor: employment, unemployment, layoffs, wages, strikes, workforce trends
+
+Rules:
+- Only assign a topic if the article is clearly and directly about it — do not infer loosely
+- An article can have multiple topics if it genuinely covers multiple areas
+- If the article does not clearly fit any topic, return an empty array — it will be tagged General automatically
+- Return ONLY a JSON array of matching topic names, no explanation or other text
 
 Title: ${title}
 Description: ${description}`,
       }],
     })
 
-    const text   = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]'
+    const raw  = response.content[0].type === 'text' ? response.content[0].text.trim() : '[]'
+    // Strip markdown code fences that Haiku sometimes wraps around the JSON
+    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim()
     const parsed = JSON.parse(text) as unknown
     if (!Array.isArray(parsed)) return []
 
