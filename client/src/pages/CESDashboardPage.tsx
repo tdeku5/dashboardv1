@@ -129,53 +129,30 @@ type RecentKey = typeof RECENT_MONTHS[number]['key']
 
 // ── Sector explorer config ────────────────────────────────────────────────────
 
-const SECTOR_GROUPS = [
-  {
-    label: 'Aggregate',
-    options: [
-      { id: 'PAYEMS',        label: 'Total Nonfarm'            },
-      { id: 'USPRIV',        label: 'Private'                  },
-      { id: 'USGOOD',        label: 'Goods Producing'          },
-      { id: 'CES0800000001', label: 'Private Service Providing' },
-      { id: 'USGOVT',        label: 'Government'               },
-    ],
-  },
-  {
-    label: 'Goods Producing',
-    options: [
-      { id: 'USMINE', label: 'Mining & Logging' },
-      { id: 'USCONS', label: 'Construction'     },
-      { id: 'MANEMP', label: 'Manufacturing'    },
-    ],
-  },
-  {
-    label: 'Trade / Transport / Utilities',
-    options: [
-      { id: 'USWTRADE',      label: 'Wholesale Trade'               },
-      { id: 'USTRADE',       label: 'Retail Trade'                  },
-      { id: 'CES4300000001', label: 'Transportation & Warehousing'  },
-      { id: 'CES4422000001', label: 'Utilities'                     },
-    ],
-  },
-  {
-    label: 'Services',
-    options: [
-      { id: 'USINFO', label: 'Information'                     },
-      { id: 'USFIRE', label: 'Financial Activities'            },
-      { id: 'USPBS',  label: 'Professional & Business Services' },
-      { id: 'USEHS',  label: 'Education & Health Services'     },
-      { id: 'USLAH',  label: 'Leisure & Hospitality'          },
-      { id: 'USSERV', label: 'Other Services'                  },
-    ],
-  },
-  {
-    label: 'Government',
-    options: [
-      { id: 'CES9091000001', label: 'Federal' },
-      { id: 'CES9092000001', label: 'State'   },
-      { id: 'CES9093000001', label: 'Local'   },
-    ],
-  },
+// Flat list reflecting the BLS nonfarm payrolls hierarchy.
+// Items are rendered as plain <option> tags; depth determines the — prefix.
+const SECTOR_ITEMS = [
+  { id: 'PAYEMS',        label: 'Total Nonfarm'                      },
+  { id: 'USGOOD',        label: 'Goods-Producing'                    },
+  { id: 'USMINE',        label: '— Mining & Logging'                 },
+  { id: 'USCONS',        label: '— Construction'                     },
+  { id: 'MANEMP',        label: '— Manufacturing'                    },
+  { id: 'SRVPRD',        label: 'Service-Providing'                  },
+  { id: 'USTPU',         label: '— Trade, Transport & Utilities'     },
+  { id: 'USWTRADE',      label: '— — Wholesale Trade'                },
+  { id: 'USTRADE',       label: '— — Retail Trade'                   },
+  { id: 'CES4300000001', label: '— — Transportation & Warehousing'   },
+  { id: 'CES4422000001', label: '— — Utilities'                      },
+  { id: 'USINFO',        label: '— Information'                      },
+  { id: 'USFIRE',        label: '— Financial Activities'             },
+  { id: 'USPBS',         label: '— Professional & Business Services' },
+  { id: 'USEHS',         label: '— Education & Health Services'      },
+  { id: 'USLAH',         label: '— Leisure & Hospitality'            },
+  { id: 'USSERV',        label: '— Other Services'                   },
+  { id: 'USGOVT',        label: '— Government'                       },
+  { id: 'CES9091000001', label: '— — Federal'                        },
+  { id: 'CES9092000001', label: '— — State'                          },
+  { id: 'CES9093000001', label: '— — Local'                          },
 ] as const
 
 // ── Wages sector explorer config ──────────────────────────────────────────────
@@ -225,7 +202,7 @@ const AHE_GROUPS = [
 const EXTRA_SECTOR_IDS = [
   'USPRIV', 'USGOOD', 'CES0800000001',
   'CES9091000001', 'CES9092000001', 'CES9093000001',
-  'USTPU',
+  'SRVPRD', 'USTPU',
 ]
 
 const AHE_IDS = [
@@ -2175,12 +2152,8 @@ export function CESDashboardPage() {
                 value={selectedSector}
                 onChange={e => setSelectedSector(e.target.value)}
               >
-                {SECTOR_GROUPS.map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </optgroup>
+                {SECTOR_ITEMS.map(item => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
                 ))}
               </select>
             </div>
