@@ -36,7 +36,7 @@ async function classifyTopics(title: string, description: string): Promise<strin
         content: `You are a strict news categorization assistant for a financial and macroeconomic terminal. Categorize the following article into one or more of these topics ONLY if the article is explicitly and primarily about that topic:
 
 - AI: artificial intelligence, machine learning, LLMs, AI models, AI companies, AI policy
-- Federal Reserve: the US Federal Reserve, FOMC, Jerome Powell, US interest rates, US monetary policy. NOTE: "Fed" must refer to the Federal Reserve specifically — do NOT tag articles mentioning "FedEx", "fed up", or other unrelated uses of the word "fed"
+- Federal Reserve: the US Federal Reserve, FOMC, Jerome Powell, US interest rates, US monetary policy, Fed officials, Fed governors, Fed chair. Valid signals include: "the Fed", "Fed's", "Fed said", "Fed officials", "Fed governors", "rate cut", "rate hike", "basis points". NOTE: Do NOT tag articles where "fed" is used in a non-Federal-Reserve context such as "FedEx", "fed up", "has been fed", or similar unrelated usages. When in doubt, ask: is this article about US central bank policy or officials? If yes, tag it. If no, do not.
 - Geopolitics: international relations, wars, sanctions, diplomatic relations, national security, cross-border conflict
 - Tariffs: import/export tariffs, trade wars, customs duties, trade agreements
 - Markets: stock markets, equity markets, bond markets, commodities, market indices, trading
