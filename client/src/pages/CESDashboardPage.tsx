@@ -156,46 +156,29 @@ const SECTOR_ITEMS = [
 ] as const
 
 // ── Wages sector explorer config ──────────────────────────────────────────────
+// BLS publishes AHE for private-sector only; Government has no AHE series.
+// "Service-Providing" entry is labeled (Private) accordingly.
 
-const AHE_GROUPS = [
-  {
-    label: 'Aggregate',
-    options: [
-      { id: 'CES0500000003', label: 'Total Private'            },
-      { id: 'CES0600000003', label: 'Goods Producing'          },
-      { id: 'CES0800000003', label: 'Private Service Providing' },
-    ],
-  },
-  {
-    label: 'Goods Producing',
-    options: [
-      { id: 'CES1000000003', label: 'Mining & Logging' },
-      { id: 'CES2000000003', label: 'Construction'     },
-      { id: 'CES3000000003', label: 'Manufacturing'    },
-    ],
-  },
-  {
-    label: 'Trade / Transport / Utilities',
-    options: [
-      { id: 'CES4000000003', label: 'Trade Transportation & Utilities' },
-      { id: 'CES4142000003', label: 'Wholesale Trade'                  },
-      { id: 'CES4200000003', label: 'Retail Trade'                     },
-      { id: 'CES4300000003', label: 'Transportation & Warehousing'     },
-      { id: 'CES4422000003', label: 'Utilities'                        },
-    ],
-  },
-  {
-    label: 'Services',
-    options: [
-      { id: 'CES5000000003', label: 'Information'                      },
-      { id: 'CES5500000003', label: 'Financial Activities'             },
-      { id: 'CES6000000003', label: 'Professional & Business Services' },
-      { id: 'CES6500000003', label: 'Education & Health Services'      },
-      { id: 'CES7000000003', label: 'Leisure & Hospitality'            },
-      { id: 'CES8000000003', label: 'Other Services'                   },
-    ],
-  },
-] as const
+const AHE_ITEMS: { id: string; label: string; disabled?: boolean }[] = [
+  { id: 'CES0500000003', label: 'Total Private'                        },
+  { id: 'CES0600000003', label: 'Goods-Producing'                      },
+  { id: 'CES1000000003', label: '— Mining & Logging'                   },
+  { id: 'CES2000000003', label: '— Construction'                       },
+  { id: 'CES3000000003', label: '— Manufacturing'                      },
+  { id: 'CES0800000003', label: 'Service-Providing (Private)'          },
+  { id: 'CES4000000003', label: '— Trade, Transport & Utilities'       },
+  { id: 'CES4142000003', label: '— — Wholesale Trade'                  },
+  { id: 'CES4200000003', label: '— — Retail Trade'                     },
+  { id: 'CES4300000003', label: '— — Transportation & Warehousing'     },
+  { id: 'CES4422000003', label: '— — Utilities'                        },
+  { id: 'CES5000000003', label: '— Information'                        },
+  { id: 'CES5500000003', label: '— Financial Activities'               },
+  { id: 'CES6000000003', label: '— Professional & Business Services'   },
+  { id: 'CES6500000003', label: '— Education & Health Services'        },
+  { id: 'CES7000000003', label: '— Leisure & Hospitality'              },
+  { id: 'CES8000000003', label: '— Other Services'                     },
+  { id: '__ahe_govt',    label: '— Government',  disabled: true        },
+]
 
 // ── Fetch IDs ─────────────────────────────────────────────────────────────────
 
@@ -213,46 +196,29 @@ const AHE_IDS = [
 ]
 
 // ── Hours sector explorer config ──────────────────────────────────────────────
+// BLS publishes AWH for private-sector only; Government has no AWH series.
+// "Service-Providing" entry is labeled (Private) accordingly.
 
-const AWH_GROUPS = [
-  {
-    label: 'Aggregate',
-    options: [
-      { id: 'AWHAETP',  label: 'Total Private'            },
-      { id: 'AWHAEGP',  label: 'Goods Producing'          },
-      { id: 'AWHAEPSP', label: 'Private Service Providing' },
-    ],
-  },
-  {
-    label: 'Goods Producing',
-    options: [
-      { id: 'AWHAEMAL', label: 'Mining & Logging' },
-      { id: 'AWHAECON', label: 'Construction'     },
-      { id: 'AWHAEMAN', label: 'Manufacturing'    },
-    ],
-  },
-  {
-    label: 'Trade / Transport / Utilities',
-    options: [
-      { id: 'AWHAETTU',  label: 'Trade Transportation & Utilities' },
-      { id: 'AWHAEWT',   label: 'Wholesale Trade'                  },
-      { id: 'AWHAERT',   label: 'Retail Trade'                     },
-      { id: 'AWHAETAW',  label: 'Transportation & Warehousing'     },
-      { id: 'AWHAEUTIL', label: 'Utilities'                        },
-    ],
-  },
-  {
-    label: 'Services',
-    options: [
-      { id: 'AWHAEINFO', label: 'Information'                      },
-      { id: 'AWHAEFA',   label: 'Financial Activities'             },
-      { id: 'AWHAEPBS',  label: 'Professional & Business Services' },
-      { id: 'AWHAEEHS',  label: 'Education & Health Services'      },
-      { id: 'AWHAELAH',  label: 'Leisure & Hospitality'            },
-      { id: 'AWHAEOS',   label: 'Other Services'                   },
-    ],
-  },
-] as const
+const AWH_ITEMS: { id: string; label: string; disabled?: boolean }[] = [
+  { id: 'AWHAETP',   label: 'Total Private'                          },
+  { id: 'AWHAEGP',   label: 'Goods-Producing'                        },
+  { id: 'AWHAEMAL',  label: '— Mining & Logging'                     },
+  { id: 'AWHAECON',  label: '— Construction'                         },
+  { id: 'AWHAEMAN',  label: '— Manufacturing'                        },
+  { id: 'AWHAEPSP',  label: 'Service-Providing (Private)'            },
+  { id: 'AWHAETTU',  label: '— Trade, Transport & Utilities'         },
+  { id: 'AWHAEWT',   label: '— — Wholesale Trade'                    },
+  { id: 'AWHAERT',   label: '— — Retail Trade'                       },
+  { id: 'AWHAETAW',  label: '— — Transportation & Warehousing'       },
+  { id: 'AWHAEUTIL', label: '— — Utilities'                          },
+  { id: 'AWHAEINFO', label: '— Information'                          },
+  { id: 'AWHAEFA',   label: '— Financial Activities'                 },
+  { id: 'AWHAEPBS',  label: '— Professional & Business Services'     },
+  { id: 'AWHAEEHS',  label: '— Education & Health Services'          },
+  { id: 'AWHAELAH',  label: '— Leisure & Hospitality'                },
+  { id: 'AWHAEOS',   label: '— Other Services'                       },
+  { id: '__awh_govt', label: '— Government', disabled: true          },
+]
 
 const AWH_IDS = [
   'AWHAETP', 'AWHAEGP', 'AWHAEPSP',
@@ -285,45 +251,28 @@ const AGG_SECTOR_CONFIG: Record<string, { emp: string; ahe: string; awh: string 
   agg_os:    { emp: 'USSERV',        ahe: 'CES8000000003', awh: 'AWHAEOS'   },
 }
 
-const AGG_PAYROLLS_GROUPS = [
-  {
-    label: 'Aggregate',
-    options: [
-      { id: 'agg_priv',  label: 'Total Private'            },
-      { id: 'agg_goods', label: 'Goods Producing'          },
-      { id: 'agg_svc',   label: 'Private Service Providing' },
-    ],
-  },
-  {
-    label: 'Goods Producing',
-    options: [
-      { id: 'agg_mine', label: 'Mining & Logging' },
-      { id: 'agg_cons', label: 'Construction'     },
-      { id: 'agg_mfg',  label: 'Manufacturing'    },
-    ],
-  },
-  {
-    label: 'Trade / Transport / Utilities',
-    options: [
-      { id: 'agg_ttu',  label: 'Trade Transportation & Utilities' },
-      { id: 'agg_wt',   label: 'Wholesale Trade'                  },
-      { id: 'agg_rt',   label: 'Retail Trade'                     },
-      { id: 'agg_taw',  label: 'Transportation & Warehousing'     },
-      { id: 'agg_util', label: 'Utilities'                        },
-    ],
-  },
-  {
-    label: 'Services',
-    options: [
-      { id: 'agg_info', label: 'Information'                      },
-      { id: 'agg_fin',  label: 'Financial Activities'             },
-      { id: 'agg_pbs',  label: 'Professional & Business Services' },
-      { id: 'agg_ehs',  label: 'Education & Health Services'      },
-      { id: 'agg_lah',  label: 'Leisure & Hospitality'            },
-      { id: 'agg_os',   label: 'Other Services'                   },
-    ],
-  },
-] as const
+// Aggregate Payrolls = emp × 1000 × ahe × awh × 4.33 — all private-sector only.
+// Government has no AHE/AWH series so it cannot be computed; omitted here.
+
+const AGG_PAYROLLS_ITEMS: { id: string; label: string; disabled?: boolean }[] = [
+  { id: 'agg_priv',  label: 'Total Private'                          },
+  { id: 'agg_goods', label: 'Goods-Producing'                        },
+  { id: 'agg_mine',  label: '— Mining & Logging'                     },
+  { id: 'agg_cons',  label: '— Construction'                         },
+  { id: 'agg_mfg',   label: '— Manufacturing'                        },
+  { id: 'agg_svc',   label: 'Service-Providing (Private)'            },
+  { id: 'agg_ttu',   label: '— Trade, Transport & Utilities'         },
+  { id: 'agg_wt',    label: '— — Wholesale Trade'                    },
+  { id: 'agg_rt',    label: '— — Retail Trade'                       },
+  { id: 'agg_taw',   label: '— — Transportation & Warehousing'       },
+  { id: 'agg_util',  label: '— — Utilities'                          },
+  { id: 'agg_info',  label: '— Information'                          },
+  { id: 'agg_fin',   label: '— Financial Activities'                 },
+  { id: 'agg_pbs',   label: '— Professional & Business Services'     },
+  { id: 'agg_ehs',   label: '— Education & Health Services'          },
+  { id: 'agg_lah',   label: '— Leisure & Hospitality'                },
+  { id: 'agg_os',    label: '— Other Services'                       },
+]
 
 const ALL_FETCH_IDS: string[] = [
   ...new Set([...CES_SECTORS.map(s => s.id), 'PAYEMS', ...EXTRA_SECTOR_IDS, ...AHE_IDS, ...AWH_IDS]),
@@ -2574,12 +2523,8 @@ export function CESDashboardPage() {
                 value={selectedAheSector}
                 onChange={e => setSelectedAheSector(e.target.value)}
               >
-                {AHE_GROUPS.map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </optgroup>
+                {AHE_ITEMS.map(item => (
+                  <option key={item.id} value={item.id} disabled={item.disabled}>{item.label}</option>
                 ))}
               </select>
             </div>
@@ -2893,12 +2838,8 @@ export function CESDashboardPage() {
                 value={selectedAwhSector}
                 onChange={e => setSelectedAwhSector(e.target.value)}
               >
-                {AWH_GROUPS.map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </optgroup>
+                {AWH_ITEMS.map(item => (
+                  <option key={item.id} value={item.id} disabled={item.disabled}>{item.label}</option>
                 ))}
               </select>
             </div>
@@ -3092,12 +3033,8 @@ export function CESDashboardPage() {
                 value={selectedAggSector}
                 onChange={e => setSelectedAggSector(e.target.value)}
               >
-                {AGG_PAYROLLS_GROUPS.map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.options.map(opt => (
-                      <option key={opt.id} value={opt.id}>{opt.label}</option>
-                    ))}
-                  </optgroup>
+                {AGG_PAYROLLS_ITEMS.map(item => (
+                  <option key={item.id} value={item.id} disabled={item.disabled}>{item.label}</option>
                 ))}
               </select>
             </div>
