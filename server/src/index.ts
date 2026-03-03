@@ -3,10 +3,18 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import cron from 'node-cron'
 import { fredRouter } from './routes/fred'
+import { beaRouter }  from './routes/bea'
 import { newsRouter } from './routes/news'
-import { isDatabaseEmpty, getStaleSeries, db } from './db'
+import { treasuryRouter } from './routes/treasury'
+import { isDatabaseEmpty, getStaleSeries, getAllKnownSeriesIds, db } from './db'
 import { fetchAllSeries, ALL_SERIES, STALE_HOURS } from './fetchAllSeries'
 import { fetchAndIngestNews } from './newsFetcher'
+import { syncTreasuryAuctions } from './treasuryAuctions'
+import { syncInvestorClassData } from './investorClassData'
+import { syncSCEData } from './sceData'
+import { sceRouter }   from './routes/sce'
+import { syncUMichExpectations } from './umichData'
+import { umichRouter }  from './routes/umich'
 
 dotenv.config({ path: '../.env' })
 
@@ -16,8 +24,12 @@ const PORT = process.env.PORT ?? 3001
 app.use(cors({ origin: /^http:\/\/localhost(:\d+)?$/ }))
 app.use(express.json())
 
-app.use('/api/fred',  fredRouter)
-app.use('/api/news',  newsRouter)
+app.use('/api/fred',     fredRouter)
+app.use('/api/bea',      beaRouter)
+app.use('/api/news',     newsRouter)
+app.use('/api/treasury', treasuryRouter)
+app.use('/api/sce',      sceRouter)
+app.use('/api/umich',    umichRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -29,14 +41,17 @@ async function startup(): Promise<void> {
     await fetchAllSeries({ force: true })
     console.log('[startup] Initial fetch complete.')
   } else {
-    const stale = getStaleSeries(STALE_HOURS, ALL_SERIES)
+    // Merge static ALL_SERIES with any on-demand series the server has learned about
+    const known = getAllKnownSeriesIds()
+    const merged = [...new Set([...ALL_SERIES, ...known])]
+    const stale = getStaleSeries(STALE_HOURS, merged)
     if (stale.length > 0) {
-      console.log(`[startup] ${stale.length} series are stale — refreshing in background…`)
+      console.log(`[startup] ${stale.length}/${merged.length} series are stale — refreshing in background…`)
       fetchAllSeries({ seriesList: stale }).catch(err =>
         console.error('[startup] Background refresh error:', err)
       )
     } else {
-      console.log('[startup] All series are current.')
+      console.log(`[startup] All ${merged.length} series are current.`)
     }
   }
 
@@ -49,10 +64,32 @@ async function startup(): Promise<void> {
     )
   }
 
-  // FRED: full refresh every day at 06:00 UTC
+  // Treasury auction data sync (non-blocking)
+  syncTreasuryAuctions().catch(err =>
+    console.error('[startup] Treasury sync error:', err)
+  )
+
+  // Treasury investor class data sync (non-blocking)
+  syncInvestorClassData().catch(err =>
+    console.error('[startup] Investor class sync error:', err)
+  )
+
+  // NY Fed SCE inflation expectations sync (non-blocking)
+  syncSCEData().catch(err =>
+    console.error('[startup] SCE sync error:', err)
+  )
+
+  // UMichigan 5-year inflation expectations sync (non-blocking)
+  syncUMichExpectations().catch(err =>
+    console.error('[startup] UMich sync error:', err)
+  )
+
+  // FRED: full refresh every day at 06:00 UTC (including on-demand series)
   cron.schedule('0 6 * * *', () => {
-    console.log('[cron] 06:00 — running scheduled FRED refresh…')
-    fetchAllSeries().catch(err => console.error('[cron] FRED error:', err))
+    const known = getAllKnownSeriesIds()
+    const merged = [...new Set([...ALL_SERIES, ...known])]
+    console.log(`[cron] 06:00 — refreshing ${merged.length} series…`)
+    fetchAllSeries({ seriesList: merged }).catch(err => console.error('[cron] FRED error:', err))
   })
 
   // News: refresh at 06:00 and 21:00 UTC

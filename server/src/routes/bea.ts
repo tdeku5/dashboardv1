@@ -1,0 +1,193 @@
+import { Router, Request, Response } from 'express'
+import { db, storeObservations, getObservations, isSeriesStale } from '../db'
+
+export const beaRouter = Router()
+
+const STALE_HOURS = 12
+const BEA_TABLE   = 'U20304'
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function getBeaApiKey(): string {
+  const key = process.env.BEA_API_KEY
+  if (!key || key === 'YOUR_BEA_API_KEY_HERE') {
+    throw new Error('BEA_API_KEY is not set — add it to your .env file')
+  }
+  return key
+}
+
+/** Convert BEA "YYYYMmm" → "YYYY-MM-01" */
+function beaDateToIso(timePeriod: string): string | null {
+  const match = timePeriod.match(/^(\d{4})M(\d{1,2})$/)
+  if (!match) return null
+  const [, year, month] = match
+  return `${year}-${month.padStart(2, '0')}-01`
+}
+
+/** Strip commas from BEA DataValue */
+function cleanValue(raw: string): string {
+  return raw.replace(/,/g, '')
+}
+
+// ── BEA series ID convention ────────────────────────────────────────────────
+// We store BEA observations under synthetic series IDs: "BEA_U20304_L{lineNumber}"
+
+function beaSeriesId(lineNumber: number): string {
+  return `BEA_${BEA_TABLE}_L${lineNumber}`
+}
+
+// ── Fetch lock (prevent concurrent fetches) ─────────────────────────────────
+
+let fetchLock: Promise<void> | null = null
+
+interface BeaDataRow {
+  TableName:       string
+  SeriesCode:      string
+  LineNumber:      string
+  LineDescription: string
+  TimePeriod:      string
+  CL_UNIT:         string
+  UNIT_MULT:       string
+  DataValue:       string
+  NoteRef:         string
+}
+
+async function fetchAndCacheBEATable(): Promise<void> {
+  // If another request is already fetching, piggyback
+  if (fetchLock) { await fetchLock; return }
+
+  const apiKey = getBeaApiKey()
+
+  const promise = (async () => {
+    const url = new URL('https://apps.bea.gov/api/data/')
+    url.searchParams.set('UserID', apiKey)
+    url.searchParams.set('method', 'GetData')
+    url.searchParams.set('DataSetName', 'NIUnderlyingDetail')
+    url.searchParams.set('TableName', BEA_TABLE)
+    url.searchParams.set('Frequency', 'M')
+    url.searchParams.set('Year', 'ALL')
+    url.searchParams.set('ResultFormat', 'JSON')
+
+    console.log(`[BEA] Fetching table ${BEA_TABLE}...`)
+    const res = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(120_000), // 2 min timeout for large response
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`BEA API returned HTTP ${res.status}: ${text.slice(0, 200)}`)
+    }
+
+    const json = await res.json() as {
+      BEAAPI?: {
+        Results?: {
+          Error?: { ErrorDetail?: { Description?: string } }
+          Data?: BeaDataRow[]
+        }
+      }
+    }
+
+    // Check for API-level errors
+    const apiError = json.BEAAPI?.Results?.Error?.ErrorDetail?.Description
+    if (apiError) {
+      throw new Error(`BEA API error: ${apiError}`)
+    }
+
+    const data = json.BEAAPI?.Results?.Data
+    if (!data || !Array.isArray(data)) {
+      throw new Error('BEA API returned no data array')
+    }
+
+    console.log(`[BEA] Received ${data.length} rows, ingesting...`)
+
+    // Group by line number
+    const byLine = new Map<number, { date: string; value: string }[]>()
+
+    for (const row of data) {
+      const lineNum = parseInt(row.LineNumber)
+      if (isNaN(lineNum)) continue
+
+      const date = beaDateToIso(row.TimePeriod)
+      if (!date) continue
+
+      const rawVal = cleanValue(row.DataValue)
+      if (!rawVal || rawVal === 'N/A' || rawVal === '...' || rawVal.trim() === '') continue
+
+      const numVal = parseFloat(rawVal)
+      if (isNaN(numVal)) continue
+
+      if (!byLine.has(lineNum)) byLine.set(lineNum, [])
+      byLine.get(lineNum)!.push({ date, value: rawVal })
+    }
+
+    // Store each line as a separate "series" in our existing observations table
+    for (const [lineNum, observations] of byLine) {
+      const sid = beaSeriesId(lineNum)
+      // Find the line description for metadata
+      const desc = data.find(r => parseInt(r.LineNumber) === lineNum)?.LineDescription ?? ''
+      storeObservations(sid, observations, {
+        title:     `PCE ${desc}`,
+        frequency: 'Monthly',
+        units:     'Index, 2017=100',
+      })
+    }
+
+    console.log(`[BEA] Ingested ${byLine.size} line items.`)
+  })()
+
+  fetchLock = promise
+  try {
+    await promise
+  } finally {
+    fetchLock = null
+  }
+}
+
+// ── Ensure data is fresh ────────────────────────────────────────────────────
+
+async function ensureFresh(lineNumber: number): Promise<void> {
+  const sid = beaSeriesId(lineNumber)
+  if (!isSeriesStale(sid, STALE_HOURS)) return
+  // BEA returns ALL lines in one call, so fetching once refreshes everything
+  await fetchAndCacheBEATable()
+}
+
+// ── GET /api/bea/pce?line_number=N ──────────────────────────────────────────
+
+beaRouter.get('/pce', async (req: Request, res: Response) => {
+  const { line_number } = req.query
+
+  if (!line_number || isNaN(Number(line_number))) {
+    res.status(400).json({ error: 'line_number query parameter is required (integer)' })
+    return
+  }
+
+  const lineNum = parseInt(String(line_number))
+
+  try {
+    await ensureFresh(lineNum)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'BEA API fetch failed'
+    const status = msg.includes('BEA_API_KEY') ? 500 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  const sid = beaSeriesId(lineNum)
+  const rows = getObservations(sid)
+
+  res.json({
+    observations: rows.map(r => ({ date: r.date, value: String(r.value) })),
+  })
+})
+
+// ── GET /api/bea/status ─────────────────────────────────────────────────────
+
+beaRouter.get('/status', (_req: Request, res: Response) => {
+  const row = db.prepare(
+    `SELECT MAX(last_fetched) as lastUpdated, COUNT(*) as seriesCount
+     FROM series_metadata WHERE series_id LIKE 'BEA_%' AND last_fetched IS NOT NULL`
+  ).get() as { lastUpdated: string | null; seriesCount: number }
+  res.json(row)
+})

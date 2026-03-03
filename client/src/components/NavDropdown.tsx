@@ -3,9 +3,10 @@ import { Link, useLocation } from 'react-router-dom'
 import styles from './NavDropdown.module.css'
 
 const NAV_OPTIONS = [
-  { path: '/',       label: 'US Macro Snapshot'     },
-  { path: '/models', label: 'Economic Data Models'  },
-  { path: '/news',   label: 'News Aggregator'       },
+  { path: '/',         label: 'US Macro Snapshot'        },
+  { path: '/models',   label: 'Economic Data Models'     },
+  { path: '/treasury', label: 'Treasury Auction Monitor' },
+  { path: '/news',     label: 'News Aggregator'          },
 ]
 
 export function NavDropdown() {

@@ -1,12 +1,54 @@
 import { Router, Request, Response } from 'express'
-import { getObservations, getDbStatus } from '../db'
-import { fetchAllSeries, ALL_SERIES } from '../fetchAllSeries'
+import {
+  getObservations, getDbStatus, isSeriesStale,
+  registerKnownSeries, getAllKnownSeriesIds,
+  getNegativeCacheEntry, setNegativeCacheEntry,
+} from '../db'
+import { fetchAllSeries, fetchOneSeries, getApiKey, ALL_SERIES, STALE_HOURS } from '../fetchAllSeries'
 
 export const fredRouter = Router()
 
 const VALID_FREQUENCIES         = new Set(['d', 'w', 'bw', 'm', 'q', 'sa', 'a'])
 const VALID_AGGREGATION_METHODS = new Set(['avg', 'sum', 'eop'])
 const DATE_RE                   = /^\d{4}-\d{2}-\d{2}$/
+
+// ── Per-series fetch lock ────────────────────────────────────────────────────
+
+const fetchLocks = new Map<string, Promise<void>>()
+
+async function ensureFresh(seriesId: string): Promise<void> {
+  // Already fresh — nothing to do
+  if (!isSeriesStale(seriesId, STALE_HOURS)) return
+
+  // Check negative cache (invalid FRED IDs)
+  const negMsg = getNegativeCacheEntry(seriesId)
+  if (negMsg) throw new Error(negMsg)
+
+  // If another request is already fetching this series, piggyback on it
+  const existing = fetchLocks.get(seriesId)
+  if (existing) { await existing; return }
+
+  const apiKey = getApiKey()
+
+  const promise = (async () => {
+    try {
+      await fetchOneSeries(seriesId, apiKey)
+      registerKnownSeries(seriesId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      // Cache 4xx-style FRED errors (bad series ID) so we don't re-hit
+      if (msg.includes('FRED 400') || msg.includes('Bad Request')) {
+        setNegativeCacheEntry(seriesId, msg)
+      }
+      throw err
+    } finally {
+      fetchLocks.delete(seriesId)
+    }
+  })()
+
+  fetchLocks.set(seriesId, promise)
+  await promise
+}
 
 // ── Monthly aggregation ───────────────────────────────────────────────────────
 
@@ -36,9 +78,9 @@ function aggregateMonthly(
   return result
 }
 
-// ── GET /api/fred — serve from SQLite ─────────────────────────────────────────
+// ── GET /api/fred — auto-fetch, cache, and serve any FRED series ─────────────
 
-fredRouter.get('/', (req: Request, res: Response) => {
+fredRouter.get('/', async (req: Request, res: Response) => {
   const {
     series_id, observation_start, observation_end,
     frequency, aggregation_method,
@@ -66,7 +108,19 @@ fredRouter.get('/', (req: Request, res: Response) => {
     return
   }
 
-  let rows = getObservations(series_id.trim(), {
+  const sid = series_id.trim().toUpperCase()
+
+  // Ensure data is fresh (fetches from FRED if stale/missing, uses lock + negative cache)
+  try {
+    await ensureFresh(sid)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'FRED API fetch failed'
+    res.status(502).json({ error: msg })
+    return
+  }
+
+  // Read from SQLite
+  let rows = getObservations(sid, {
     observationStart: observation_start ? String(observation_start) : undefined,
     observationEnd:   observation_end   ? String(observation_end)   : undefined,
   })
@@ -88,7 +142,7 @@ fredRouter.get('/status', (_req: Request, res: Response) => {
   res.json(getDbStatus())
 })
 
-// ── POST /api/fred/refresh — force re-fetch all series from FRED ──────────────
+// ── POST /api/fred/refresh — force re-fetch all series (incl. on-demand ones) ─
 
 let refreshInProgress = false
 
@@ -100,7 +154,10 @@ fredRouter.post('/refresh', async (_req: Request, res: Response) => {
 
   refreshInProgress = true
   try {
-    await fetchAllSeries({ force: true, seriesList: ALL_SERIES })
+    // Merge static list with any on-demand series the server has learned about
+    const known = getAllKnownSeriesIds()
+    const merged = [...new Set([...ALL_SERIES, ...known])]
+    await fetchAllSeries({ force: true, seriesList: merged })
     res.json({ success: true, ...getDbStatus() })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Refresh failed'

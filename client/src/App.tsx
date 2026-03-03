@@ -9,7 +9,15 @@ import { ClaimsDashboardPage } from './pages/ClaimsDashboardPage'
 import { CESDashboardPage }    from './pages/CESDashboardPage'
 import { JOLTSDashboardPage }  from './pages/JOLTSDashboardPage'
 import { ProductivityPage }      from './pages/ProductivityPage'
-import { NewsAggregatorPage }    from './pages/NewsAggregatorPage'
+import { InflationPage }         from './pages/InflationPage'
+import { CPIDashboardPage }      from './pages/CPIDashboardPage'
+import { CPIProjectionsPage }   from './pages/CPIProjectionsPage'
+import { PCEDashboardPage }    from './pages/PCEDashboardPage'
+import { PCEProjectionsPage }  from './pages/PCEProjectionsPage'
+import { PPIDashboardPage }    from './pages/PPIDashboardPage'
+import { NewsAggregatorPage }        from './pages/NewsAggregatorPage'
+import { TreasuryAuctionPage }      from './pages/TreasuryAuctionPage'
+import { OtherInflationPage }      from './pages/OtherInflationPage'
 
 function App() {
   return (
@@ -24,6 +32,14 @@ function App() {
         <Route path="/models/labor/ces"             element={<CESDashboardPage />} />
         <Route path="/models/labor/jolts"           element={<JOLTSDashboardPage />} />
         <Route path="/models/labor/productivity"    element={<ProductivityPage />} />
+        <Route path="/models/inflation"              element={<InflationPage />} />
+        <Route path="/models/inflation/cpi"          element={<CPIDashboardPage />} />
+        <Route path="/models/inflation/projections"  element={<CPIProjectionsPage />} />
+        <Route path="/models/inflation/pce"              element={<PCEDashboardPage />} />
+        <Route path="/models/inflation/pce-projections"  element={<PCEProjectionsPage />} />
+        <Route path="/models/inflation/ppi"                element={<PPIDashboardPage />} />
+        <Route path="/models/inflation/other"              element={<OtherInflationPage />} />
+        <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>
     </BrowserRouter>

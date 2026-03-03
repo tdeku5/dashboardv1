@@ -9,7 +9,15 @@ const MODEL_CARDS = [
     title:       'Labor Market',
     description: 'Unemployment and employment models based on CPS and payroll survey data.',
     accent:      '#22c55e',
-    tag:         'UNRATE · CE16OV · CLF16OV',
+    tag:         'UNRATE \u00b7 CE16OV \u00b7 CLF16OV',
+  },
+  {
+    path:        '/models/inflation',
+    category:    'Inflation',
+    title:       'Inflation',
+    description: 'CPI component analysis with series explorer, regime detection, and momentum decomposition.',
+    accent:      '#f59e0b',
+    tag:         'CPIAUCSL \u00b7 CPILFESL \u00b7 CPIUFDSL \u00b7 +101 more',
   },
 ]
 
