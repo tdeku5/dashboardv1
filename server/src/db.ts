@@ -488,3 +488,42 @@ export function getInvestorClassData(opts: {
 export function getInvestorClassCount(): number {
   return (db.prepare('SELECT COUNT(*) AS n FROM treasury_investor_class').get() as { n: number }).n
 }
+
+// ── DTS Tax Deposits ─────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS dts_tax_deposits (
+    record_date  TEXT NOT NULL,
+    deposit_type TEXT NOT NULL,
+    amount       REAL NOT NULL,
+    PRIMARY KEY (record_date, deposit_type)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_dts_tax_date ON dts_tax_deposits(record_date);
+`)
+
+// ── DTS Fiscal Flows ──────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS dts_fiscal_flows (
+    record_date     TEXT NOT NULL,
+    fiscal_year     INTEGER NOT NULL,
+    day_index       INTEGER NOT NULL,
+    net_fiscal_flow REAL NOT NULL DEFAULT 0,
+    cumulative_flow REAL NOT NULL,
+    PRIMARY KEY (record_date)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_dts_fy ON dts_fiscal_flows(fiscal_year);
+`)
+
+// Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)
+try {
+  // SQLite doesn't support DROP COLUMN before 3.35.0, so just recreate if needed
+  const cols = db.pragma('table_info(dts_fiscal_flows)') as { name: string }[]
+  if (cols.some((c) => c.name === 'delta_tga')) {
+    db.exec('DELETE FROM dts_fiscal_flows') // will be rebuilt on next sync
+  }
+} catch {
+  // table doesn't exist yet — will be created above
+}

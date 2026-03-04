@@ -18,6 +18,7 @@ import { PPIDashboardPage }    from './pages/PPIDashboardPage'
 import { NewsAggregatorPage }        from './pages/NewsAggregatorPage'
 import { TreasuryAuctionPage }      from './pages/TreasuryAuctionPage'
 import { OtherInflationPage }      from './pages/OtherInflationPage'
+import { FiscalFlowsPage }         from './pages/FiscalFlowsPage'
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
         <Route path="/models/inflation/pce-projections"  element={<PCEProjectionsPage />} />
         <Route path="/models/inflation/ppi"                element={<PPIDashboardPage />} />
         <Route path="/models/inflation/other"              element={<OtherInflationPage />} />
+        <Route path="/models/fiscal"                         element={<FiscalFlowsPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>

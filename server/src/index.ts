@@ -15,6 +15,10 @@ import { syncSCEData } from './sceData'
 import { sceRouter }   from './routes/sce'
 import { syncUMichExpectations } from './umichData'
 import { umichRouter }  from './routes/umich'
+import { fiscalRouter } from './routes/fiscal'
+import { fiscalFlowsRouter } from './routes/fiscalFlows'
+import { syncDtsFiscalFlows } from './dtsFiscalFlows'
+import { syncDtsTaxDeposits } from './dtsTaxDeposits'
 
 dotenv.config({ path: '../.env' })
 
@@ -30,6 +34,8 @@ app.use('/api/news',     newsRouter)
 app.use('/api/treasury', treasuryRouter)
 app.use('/api/sce',      sceRouter)
 app.use('/api/umich',    umichRouter)
+app.use('/api/fiscal',   fiscalRouter)
+app.use('/api/fiscal-flows', fiscalFlowsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -82,6 +88,16 @@ async function startup(): Promise<void> {
   // UMichigan 5-year inflation expectations sync (non-blocking)
   syncUMichExpectations().catch(err =>
     console.error('[startup] UMich sync error:', err)
+  )
+
+  // DTS fiscal flows sync (non-blocking)
+  syncDtsFiscalFlows().catch(err =>
+    console.error('[startup] DTS fiscal flows sync error:', err)
+  )
+
+  // DTS tax deposits sync (non-blocking)
+  syncDtsTaxDeposits().catch(err =>
+    console.error('[startup] DTS tax deposits sync error:', err)
   )
 
   // FRED: full refresh every day at 06:00 UTC (including on-demand series)

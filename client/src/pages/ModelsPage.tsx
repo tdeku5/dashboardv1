@@ -19,6 +19,14 @@ const MODEL_CARDS = [
     accent:      '#f59e0b',
     tag:         'CPIAUCSL \u00b7 CPILFESL \u00b7 CPIUFDSL \u00b7 +101 more',
   },
+  {
+    path:        '/models/fiscal',
+    category:    'Fiscal',
+    title:       'Fiscal',
+    description: 'Cumulative daily net fiscal flows by fiscal year from the Daily Treasury Statement.',
+    accent:      '#e04040',
+    tag:         'DTS \u00b7 TGA \u00b7 Public Debt Transactions',
+  },
 ]
 
 export function ModelsPage() {
