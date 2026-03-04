@@ -182,6 +182,149 @@ beaRouter.get('/pce', async (req: Request, res: Response) => {
   })
 })
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  NIPA Table 1.5.2 — GDP Contribution (quarterly)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const GDP_CONTRIB_TABLE = 'T10502'
+
+function gdpContribSeriesId(lineNumber: number): string {
+  return `BEA_${GDP_CONTRIB_TABLE}_L${lineNumber}`
+}
+
+/** Convert BEA "YYYYQn" -> "YYYY-MM-01" (first month of the quarter) */
+function beaQuarterToIso(timePeriod: string): string | null {
+  const match = timePeriod.match(/^(\d{4})Q([1-4])$/)
+  if (!match) return null
+  const [, year, q] = match
+  const month = ['01', '04', '07', '10'][parseInt(q) - 1]
+  return `${year}-${month}-01`
+}
+
+let gdpContribFetchLock: Promise<void> | null = null
+
+async function fetchAndCacheNIPATable(): Promise<void> {
+  if (gdpContribFetchLock) { await gdpContribFetchLock; return }
+
+  const apiKey = getBeaApiKey()
+
+  const promise = (async () => {
+    const url = new URL('https://apps.bea.gov/api/data/')
+    url.searchParams.set('UserID', apiKey)
+    url.searchParams.set('method', 'GetData')
+    url.searchParams.set('DataSetName', 'NIPA')
+    url.searchParams.set('TableName', GDP_CONTRIB_TABLE)
+    url.searchParams.set('Frequency', 'Q')
+    url.searchParams.set('Year', 'ALL')
+    url.searchParams.set('ResultFormat', 'JSON')
+
+    console.log(`[BEA] Fetching NIPA table ${GDP_CONTRIB_TABLE}...`)
+    const res = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`BEA API returned HTTP ${res.status}: ${text.slice(0, 200)}`)
+    }
+
+    const json = await res.json() as {
+      BEAAPI?: {
+        Results?: {
+          Error?: { ErrorDetail?: { Description?: string } }
+          Data?: BeaDataRow[]
+        }
+      }
+    }
+
+    const apiError = json.BEAAPI?.Results?.Error?.ErrorDetail?.Description
+    if (apiError) {
+      throw new Error(`BEA API error: ${apiError}`)
+    }
+
+    const data = json.BEAAPI?.Results?.Data
+    if (!data || !Array.isArray(data)) {
+      throw new Error('BEA API returned no data array')
+    }
+
+    console.log(`[BEA] Received ${data.length} rows for ${GDP_CONTRIB_TABLE}, ingesting...`)
+
+    const byLine = new Map<number, { date: string; value: string }[]>()
+
+    for (const row of data) {
+      const lineNum = parseInt(row.LineNumber)
+      if (isNaN(lineNum)) continue
+
+      const date = beaQuarterToIso(row.TimePeriod)
+      if (!date) continue
+
+      const rawVal = cleanValue(row.DataValue)
+      if (!rawVal || rawVal === 'N/A' || rawVal === '...' || rawVal.trim() === '') continue
+
+      const numVal = parseFloat(rawVal)
+      if (isNaN(numVal)) continue
+
+      if (!byLine.has(lineNum)) byLine.set(lineNum, [])
+      byLine.get(lineNum)!.push({ date, value: rawVal })
+    }
+
+    for (const [lineNum, observations] of byLine) {
+      const sid = gdpContribSeriesId(lineNum)
+      const desc = data.find(r => parseInt(r.LineNumber) === lineNum)?.LineDescription ?? ''
+      storeObservations(sid, observations, {
+        title:     `rGDP Contrib ${desc}`,
+        frequency: 'Quarterly',
+        units:     '%-pt contribution',
+      })
+    }
+
+    console.log(`[BEA] Ingested ${byLine.size} line items for ${GDP_CONTRIB_TABLE}.`)
+  })()
+
+  gdpContribFetchLock = promise
+  try {
+    await promise
+  } finally {
+    gdpContribFetchLock = null
+  }
+}
+
+async function ensureFreshGdp(lineNumber: number): Promise<void> {
+  const sid = gdpContribSeriesId(lineNumber)
+  if (!isSeriesStale(sid, STALE_HOURS)) return
+  await fetchAndCacheNIPATable()
+}
+
+// ── GET /api/bea/gdp-contrib?line_number=N ──────────────────────────────────
+
+beaRouter.get('/gdp-contrib', async (req: Request, res: Response) => {
+  const { line_number } = req.query
+
+  if (!line_number || isNaN(Number(line_number))) {
+    res.status(400).json({ error: 'line_number query parameter is required (integer)' })
+    return
+  }
+
+  const lineNum = parseInt(String(line_number))
+
+  try {
+    await ensureFreshGdp(lineNum)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'BEA API fetch failed'
+    const status = msg.includes('BEA_API_KEY') ? 500 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  const sid = gdpContribSeriesId(lineNum)
+  const rows = getObservations(sid)
+
+  res.json({
+    observations: rows.map(r => ({ date: r.date, value: String(r.value) })),
+  })
+})
+
 // ── GET /api/bea/status ─────────────────────────────────────────────────────
 
 beaRouter.get('/status', (_req: Request, res: Response) => {

@@ -19,6 +19,9 @@ import { NewsAggregatorPage }        from './pages/NewsAggregatorPage'
 import { TreasuryAuctionPage }      from './pages/TreasuryAuctionPage'
 import { OtherInflationPage }      from './pages/OtherInflationPage'
 import { FiscalFlowsPage }         from './pages/FiscalFlowsPage'
+import { GrowthPage }              from './pages/GrowthPage'
+import { NGDPDashboardPage }       from './pages/NGDPDashboardPage'
+import { RGDPDashboardPage }      from './pages/RGDPDashboardPage'
 
 function App() {
   return (
@@ -41,6 +44,9 @@ function App() {
         <Route path="/models/inflation/ppi"                element={<PPIDashboardPage />} />
         <Route path="/models/inflation/other"              element={<OtherInflationPage />} />
         <Route path="/models/fiscal"                         element={<FiscalFlowsPage />} />
+        <Route path="/models/growth"                         element={<GrowthPage />} />
+        <Route path="/models/growth/ngdp"                    element={<NGDPDashboardPage />} />
+        <Route path="/models/growth/rgdp"                    element={<RGDPDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>

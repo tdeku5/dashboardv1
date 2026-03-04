@@ -27,6 +27,14 @@ const MODEL_CARDS = [
     accent:      '#e04040',
     tag:         'DTS \u00b7 TGA \u00b7 Public Debt Transactions',
   },
+  {
+    path:        '/models/growth',
+    category:    'Growth',
+    title:       'Growth',
+    description: 'Gross Domestic Product, Income, and Investment models.',
+    accent:      '#3b82f6',
+    tag:         'GDP \u00b7 PCEC \u00b7 GPDI',
+  },
 ]
 
 export function ModelsPage() {
