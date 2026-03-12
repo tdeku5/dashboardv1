@@ -15,8 +15,7 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
-import { fetchBEAGdpContrib } from '../lib/bea'
-import styles from './RGDPDashboardPage.module.css'
+import styles from './RetailSalesDashboardPage.module.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,233 +23,37 @@ type WD         = { date: string; value: number }
 type AllData    = Record<string, WD[]>
 type BrushState = { start: number; end: number; period: string }
 
-type GdpContribRow = {
-  date: string
-  [key: string]: number | null | string
-}
+type ContribRow = { date: string; [key: string]: number | null | string }
 
-// ── Real GDP hierarchy (chained 2017 $) ───────────────────────────────────────
+// ── Retail hierarchy ─────────────────────────────────────────────────────────
 
-interface RgdpItem {
+interface RetailItem {
   id:    string
   label: string
   depth: number
 }
 
-const RGDP_HIERARCHY: RgdpItem[] = [
-  { id: 'GDPC1',             label: 'Total Real GDP',                                       depth: 0 },
-  { id: 'PCECC96',           label: 'Personal Consumption Expenditures',                    depth: 1 },
-  { id: 'DGDSRX1Q020SBEA',  label: 'Goods',                                                depth: 2 },
-  { id: 'PCDGCC96',          label: 'Durable Goods',                                        depth: 3 },
-  { id: 'DMOTRX1Q020SBEA',  label: 'Motor vehicles and parts',                             depth: 4 },
-  { id: 'DFDHRX1Q020SBEA',  label: 'Furnishings and durable household equipment',          depth: 4 },
-  { id: 'DREQRX1Q020SBEA',  label: 'Recreational goods and vehicles',                      depth: 4 },
-  { id: 'DODGRX1Q020SBEA',  label: 'Other durable goods',                                  depth: 4 },
-  { id: 'PCNDGC96',          label: 'Nondurable Goods',                                     depth: 3 },
-  { id: 'DFXARX1Q020SBEA',  label: 'Food and beverages for off-premises consumption',      depth: 4 },
-  { id: 'DCLORX1Q020SBEA',  label: 'Clothing and footwear',                                depth: 4 },
-  { id: 'DGOERX1Q020SBEA',  label: 'Gasoline and other energy goods',                      depth: 4 },
-  { id: 'DONGRX1Q020SBEA',  label: 'Other nondurable goods',                               depth: 4 },
-  { id: 'PCESVC96',          label: 'Services',                                             depth: 2 },
-  { id: 'DHCERX1Q020SBEA',  label: 'Household consumption expenditures (for services)',    depth: 3 },
-  { id: 'DHUTRX1Q020SBEA',  label: 'Housing and utilities',                                depth: 4 },
-  { id: 'DHLCRX1Q020SBEA',  label: 'Health care',                                          depth: 4 },
-  { id: 'DTRSRX1Q020SBEA',  label: 'Transportation services',                              depth: 4 },
-  { id: 'DRCARX1Q020SBEA',  label: 'Recreation services',                                  depth: 4 },
-  { id: 'DFSARX1Q020SBEA',  label: 'Food services and accommodations',                     depth: 4 },
-  { id: 'DIFSRX1Q020SBEA',  label: 'Financial services and accommodations',                depth: 4 },
-  { id: 'DOTSRX1Q020SBEA',  label: 'Other services',                                       depth: 4 },
-  { id: 'GPDIC1',            label: 'Gross Private Domestic Investment',                    depth: 1 },
-  { id: 'FPIC1',             label: 'Fixed Investment',                                     depth: 2 },
-  { id: 'PNFIC1',            label: 'Nonresidential',                                      depth: 3 },
-  { id: 'B009RX1Q020SBEA',  label: 'Structures',                                           depth: 4 },
-  { id: 'Y033RX1Q020SBEA',  label: 'Equipment',                                            depth: 4 },
-  { id: 'Y034RX1Q020SBEA',  label: 'Information processing equipment',                     depth: 5 },
-  { id: 'A680RX1Q020SBEA',  label: 'Industrial equipment',                                 depth: 5 },
-  { id: 'A681RX1Q020SBEA',  label: 'Transportation equipment',                             depth: 5 },
-  { id: 'A862RX1Q020SBEA',  label: 'Other equipment',                                      depth: 5 },
-  { id: 'Y001RX1Q020SBEA',  label: 'Intellectual Property Products',                       depth: 4 },
-  { id: 'B985RX1Q020SBEA',  label: 'Software',                                             depth: 5 },
-  { id: 'Y006RX1Q020SBEA',  label: 'Research and development',                             depth: 5 },
-  { id: 'Y020RX1Q020SBEA',  label: 'Entertainment, literary, and artistic originals',      depth: 5 },
-  { id: 'PRFIC1',            label: 'Residential',                                          depth: 3 },
-  { id: 'CBIC1',             label: 'Change in Private Inventories',                        depth: 2 },
-  { id: 'NETEXC',            label: 'Net Exports of Goods and Services',                    depth: 1 },
-  { id: 'EXPGSC1',           label: 'Exports',                                              depth: 2 },
-  { id: 'A253RX1Q020SBEA',  label: 'Goods',                                                depth: 3 },
-  { id: 'A646RX1Q020SBEA',  label: 'Services',                                             depth: 3 },
-  { id: 'IMPGSC1',           label: 'Imports',                                              depth: 2 },
-  { id: 'A255RX1Q020SBEA',  label: 'Goods',                                                depth: 3 },
-  { id: 'B656RX1Q020SBEA',  label: 'Services',                                             depth: 3 },
-  { id: 'GCEC1',             label: "Gov't Consumption Expenditures and Gross Investment",  depth: 1 },
-  { id: 'FGCEC1',            label: 'Federal',                                              depth: 2 },
-  { id: 'A824RX1Q020SBEA',  label: 'National Defense',                                     depth: 3 },
-  { id: 'A825RX1Q020SBEA',  label: 'Nondefense',                                           depth: 3 },
-  { id: 'SLCEC1',            label: 'State and Local',                                      depth: 2 },
+const RETAIL_HIERARCHY: RetailItem[] = [
+  { id: 'RSAFS',            label: 'Retail Trade and Food Services',                              depth: 0 },
+  { id: 'RSFSXMV',          label: 'Retail Trade and Food Services, ex Auto',                     depth: 0 },
+  { id: 'MRTSSM44W72USS',   label: 'Retail Trade and Food Services, ex Auto and Gas',             depth: 0 },
+  { id: 'RSMVPD',           label: 'Motor Vehicle and Parts Dealers',                             depth: 0 },
+  { id: 'RSGASS',           label: 'Gasoline Stations',                                           depth: 0 },
+  { id: 'MRTSSM4413USS',    label: 'Auto Parts, Accessories, and Tires Stores',                   depth: 0 },
+  { id: 'RSFHFS',           label: 'Furniture and Home Furnishings Stores',                       depth: 0 },
+  { id: 'RSEAS',            label: 'Electronics and Appliance Stores',                            depth: 0 },
+  { id: 'RSBMGESD',         label: 'Building Material and Garden Equipment & Supplies Dealers',   depth: 0 },
+  { id: 'RSDBS',            label: 'Food and Beverage Stores',                                    depth: 0 },
+  { id: 'RSHPCS',           label: 'Health and Personal Care Stores',                             depth: 0 },
+  { id: 'RSCCAS',           label: 'Clothing and Clothing Access. Stores',                        depth: 0 },
+  { id: 'RSSGHBMS',         label: 'Sporting Goods, Hobby, Book, and Music Stores',               depth: 0 },
+  { id: 'RSGMS',            label: 'General Merchandise Stores',                                  depth: 0 },
+  { id: 'RSMSR',            label: 'Miscellaneous Store Retailers',                               depth: 0 },
+  { id: 'RSNSR',            label: 'Nonstore Retailers',                                          depth: 0 },
+  { id: 'RSFSDP',           label: 'Food Services and Drinking Places',                           depth: 0 },
 ]
 
-const ALL_SERIES_IDS = RGDP_HIERARCHY.map(n => n.id)
-
-// ── BEA Table 1.5.2 line numbers ─────────────────────────────────────────────
-
-const GDP_CONTRIB_LINES: number[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-  16, 17, 18, 19, 20, 21, 22,
-  26, 27, 28, 29, 30, 34, 35, 36, 37, 38, 39, 40, 41,
-  42, 45, 52, 53, 54, 57, 60,
-]
-
-// ── Contribution chart pair definitions ──────────────────────────────────────
-
-interface ContribSeriesItem {
-  id:    string   // key in GdpContribRow = `L${lineNumber}`
-  line:  number   // BEA line number
-  label: string
-  color: string
-}
-
-interface ContribPairDef {
-  key:       string
-  title:     string
-  lineLine:  number   // BEA line number for white parent line
-  lineLabel: string
-  items:     ContribSeriesItem[]
-}
-
-const CONTRIB_PAIRS: ContribPairDef[][] = [
-  // Pair 1 — GDP Components
-  [
-    {
-      key: 'gdpC1L', title: '%-pt Contributions to rGDP',
-      lineLine: 1, lineLabel: 'GDP',
-      items: [
-        { id: 'L2',  line: 2,  label: 'PCE',                        color: '#60a5fa' },
-        { id: 'L27', line: 27, label: 'Fixed Investment',            color: '#f59e0b' },
-        { id: 'L42', line: 42, label: 'Change in Priv. Inventories', color: '#4ade80' },
-        { id: 'L52', line: 52, label: "Gov't Spending",              color: '#a78bfa' },
-        { id: 'L45', line: 45, label: 'Net Exports',                 color: '#f87171' },
-      ],
-    },
-    {
-      key: 'gdpC1R', title: '%-pt Contributions to rGDP \u2013 PCE',
-      lineLine: 2, lineLabel: 'PCE',
-      items: [
-        { id: 'L14', line: 14, label: 'Services', color: '#60a5fa' },
-        { id: 'L3',  line: 3,  label: 'Goods',    color: '#4ade80' },
-      ],
-    },
-  ],
-  // Pair 2 — PCE Breakdown
-  [
-    {
-      key: 'gdpC2L', title: '%-pt Contributions to rGDP \u2013 HH Services Consumption',
-      lineLine: 14, lineLabel: 'Services',
-      items: [
-        { id: 'L16', line: 16, label: 'Housing & Utilities',            color: '#60a5fa' },
-        { id: 'L17', line: 17, label: 'Health Care',                    color: '#4ade80' },
-        { id: 'L18', line: 18, label: 'Transportation Services',        color: '#f59e0b' },
-        { id: 'L19', line: 19, label: 'Recreation Services',            color: '#f87171' },
-        { id: 'L20', line: 20, label: 'Food Services & Accommodations', color: '#a78bfa' },
-        { id: 'L21', line: 21, label: 'Financial Services',             color: '#2dd4bf' },
-        { id: 'L22', line: 22, label: 'Other Services',                 color: '#facc15' },
-      ],
-    },
-    {
-      key: 'gdpC2R', title: '%-pt Contributions to rGDP \u2013 Goods PCE',
-      lineLine: 3, lineLabel: 'Goods',
-      items: [
-        { id: 'L4', line: 4, label: 'Durables',    color: '#fdba74' },
-        { id: 'L9', line: 9, label: 'Nondurables', color: '#a78bfa' },
-      ],
-    },
-  ],
-  // Pair 3 — Goods Detail
-  [
-    {
-      key: 'gdpC3L', title: '%-pt Contributions to rGDP \u2013 Durable Goods PCE',
-      lineLine: 4, lineLabel: 'Durable Goods',
-      items: [
-        { id: 'L5', line: 5, label: 'Motor Vehicles & Parts',       color: '#60a5fa' },
-        { id: 'L6', line: 6, label: 'Furnishings & HH Equipment',   color: '#4ade80' },
-        { id: 'L7', line: 7, label: 'Recreational Goods & Vehicles', color: '#f59e0b' },
-        { id: 'L8', line: 8, label: 'Other Durable Goods',          color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC3R', title: '%-pt Contributions to rGDP \u2013 Nondurable Goods PCE',
-      lineLine: 9, lineLabel: 'Nondurable Goods',
-      items: [
-        { id: 'L10', line: 10, label: 'Food & Beverage (Off-Premise)', color: '#60a5fa' },
-        { id: 'L11', line: 11, label: 'Clothing & Footwear',           color: '#4ade80' },
-        { id: 'L12', line: 12, label: 'Gas & Other Energy Goods',      color: '#f59e0b' },
-        { id: 'L13', line: 13, label: 'Other Nondurable Goods',        color: '#a78bfa' },
-      ],
-    },
-  ],
-  // Pair 4 — Investment
-  [
-    {
-      key: 'gdpC4L', title: '%-pt Contributions to rGDP \u2013 Fixed Investment',
-      lineLine: 27, lineLabel: 'Fixed Investment',
-      items: [
-        { id: 'L28', line: 28, label: 'Nonresidential', color: '#f59e0b' },
-        { id: 'L41', line: 41, label: 'Residential',    color: '#60a5fa' },
-      ],
-    },
-    {
-      key: 'gdpC4R', title: '%-pt Contributions to rGDP \u2013 Nonresidential Investment',
-      lineLine: 28, lineLabel: 'Nonresidential',
-      items: [
-        { id: 'L29', line: 29, label: 'Structures',  color: '#60a5fa' },
-        { id: 'L30', line: 30, label: 'Equipment',   color: '#4ade80' },
-        { id: 'L37', line: 37, label: 'IP Products', color: '#f87171' },
-      ],
-    },
-  ],
-  // Pair 5 — Equipment & IP
-  [
-    {
-      key: 'gdpC5L', title: '%-pt Contributions to rGDP \u2013 Equipment Investment',
-      lineLine: 30, lineLabel: 'Equipment',
-      items: [
-        { id: 'L31', line: 31, label: 'Information Processing', color: '#60a5fa' },
-        { id: 'L34', line: 34, label: 'Industrial',             color: '#4ade80' },
-        { id: 'L35', line: 35, label: 'Transportation',         color: '#f59e0b' },
-        { id: 'L36', line: 36, label: 'Other',                  color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC5R', title: '%-pt Contributions to rGDP \u2013 IP Investment',
-      lineLine: 37, lineLabel: 'IP Products',
-      items: [
-        { id: 'L38', line: 38, label: 'Software',                                    color: '#60a5fa' },
-        { id: 'L39', line: 39, label: 'R&D',                                         color: '#4ade80' },
-        { id: 'L40', line: 40, label: 'Entertainment, Literary, & Artistic Originals', color: '#f59e0b' },
-      ],
-    },
-  ],
-  // Pair 6 — Government
-  [
-    {
-      key: 'gdpC6L', title: "%-pt Contributions to rGDP \u2013 Gov't Spending",
-      lineLine: 52, lineLabel: "Gov't Spending",
-      items: [
-        { id: 'L53', line: 53, label: 'Federal',       color: '#4ade80' },
-        { id: 'L60', line: 60, label: 'State & Local', color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC6R', title: "%-pt Contributions to rGDP \u2013 Federal Gov't Spending",
-      lineLine: 53, lineLabel: "Federal Gov't Spending",
-      items: [
-        { id: 'L54', line: 54, label: 'Defense',    color: '#60a5fa' },
-        { id: 'L57', line: 57, label: 'Nondefense', color: '#f87171' },
-      ],
-    },
-  ],
-]
-
-const ALL_CONTRIB_KEYS = CONTRIB_PAIRS.flat().map(p => p.key) as ContribChartKey[]
+const FRED_SERIES_IDS = RETAIL_HIERARCHY.map(n => n.id)
 
 // ── Chart constants ──────────────────────────────────────────────────────────
 
@@ -284,23 +87,63 @@ const BRUSH_STYLE = {
   gap: 3,
 } as const
 
-const QUICK_PERIODS_Q = [
-  { label: '5Y',  count: 20  },
-  { label: '10Y', count: 40  },
-  { label: '20Y', count: 80  },
+const QUICK_PERIODS_M = [
+  { label: '1Y',  count: 12  },
+  { label: '3Y',  count: 36  },
+  { label: '5Y',  count: 60  },
+  { label: '10Y', count: 120 },
+  { label: 'Max', count: Infinity },
+] as const
+
+const QUICK_PERIODS_CONTRIB = [
+  { label: '5Y',  count: 60  },
+  { label: '10Y', count: 120 },
+  { label: '20Y', count: 240 },
   { label: 'Max', count: Infinity },
 ] as const
 
 const CONTRIB_CM = { top: 8, right: 16, bottom: 28, left: 62 } as const
 
+const RETAIL_CONTRIB_ITEMS = [
+  { id: 'mvpd',     label: 'Motor Vehicle & Parts',       color: '#60a5fa' },
+  { id: 'gas',      label: 'Gasoline Stations',           color: '#f59e0b' },
+  { id: 'foodServices', label: 'Food Services & Drinking Places', color: '#fb7185' },
+  { id: 'furn',     label: 'Furniture & Home Furnishings', color: '#a78bfa' },
+  { id: 'elec',     label: 'Electronics & Appliance',      color: '#f87171' },
+  { id: 'bldg',     label: 'Building Material & Garden',   color: '#fb923c' },
+  { id: 'food',     label: 'Food & Beverage Stores',       color: '#4ade80' },
+  { id: 'health',   label: 'Health & Personal Care',       color: '#38bdf8' },
+  { id: 'clothing', label: 'Clothing & Accessories',       color: '#e879f9' },
+  { id: 'sport',    label: 'Sporting/Hobby/Book/Music',    color: '#fbbf24' },
+  { id: 'genmerch', label: 'General Merchandise',          color: '#818cf8' },
+  { id: 'misc',     label: 'Miscellaneous Retailers',      color: '#94a3b8' },
+  { id: 'nonstore', label: 'Nonstore Retailers',           color: '#2dd4bf' },
+] as const
+
+const RETAIL_CONTRIB_COMPONENTS = [
+  { key: 'mvpd',     fredId: 'RSMVPD'           },
+  { key: 'gas',      fredId: 'RSGASS'           },
+  { key: 'foodServices', fredId: 'RSFSDP'        },
+  { key: 'furn',     fredId: 'RSFHFS'           },
+  { key: 'elec',     fredId: 'RSEAS'            },
+  { key: 'bldg',     fredId: 'RSBMGESD'         },
+  { key: 'food',     fredId: 'RSDBS'            },
+  { key: 'health',   fredId: 'RSHPCS'           },
+  { key: 'clothing', fredId: 'RSCCAS'           },
+  { key: 'sport',    fredId: 'RSSGHBMS'         },
+  { key: 'genmerch', fredId: 'RSGMS'            },
+  { key: 'misc',     fredId: 'RSMSR'            },
+  { key: 'nonstore', fredId: 'RSNSR'            },
+] as const
+
 // ── Chart key types ──────────────────────────────────────────────────────────
 
-type ExplorerChartKey = 'xLevel' | 'xRegime' | 'xYoyDelta' | 'xQoq' | 'xAnnQoq'
-type ContribChartKey  = 'gdpC1L' | 'gdpC1R' | 'gdpC2L' | 'gdpC2R' | 'gdpC3L' | 'gdpC3R'
-                      | 'gdpC4L' | 'gdpC4R' | 'gdpC5L' | 'gdpC5R' | 'gdpC6L' | 'gdpC6R'
-type ChartKey = ExplorerChartKey | ContribChartKey
+type ExplorerChartKey = 'xLevel' | 'xRegime' | 'xYoyDelta' | 'xMom' | 'xAnnMom'
+type ContribChartKey  = 'retailContribYoy' | 'retailContribMom'
+type RatesChartKey    = 'rsafsRates' | 'rsfsxmvRates'
+type ChartKey = ExplorerChartKey | ContribChartKey | RatesChartKey
 
-const EXPLORER_KEYS: ExplorerChartKey[] = ['xLevel', 'xRegime', 'xYoyDelta', 'xQoq', 'xAnnQoq']
+const EXPLORER_KEYS: ExplorerChartKey[] = ['xLevel', 'xRegime', 'xYoyDelta', 'xMom', 'xAnnMom']
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 
@@ -317,11 +160,9 @@ function fmtFullDate(d: string): string {
   return `${mo[parseInt(m) - 1]} ${y}`
 }
 
-function fmtBillions(v: number): string {
-  const abs = Math.abs(v)
-  if (abs >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}T`
-  if (abs >= 1000) return `$${(v / 1000).toFixed(abs >= 10000 ? 0 : 1)}B`
-  return `$${v.toFixed(0)}B`
+function fmtMillions(v: number): string {
+  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}B`
+  return `${v.toFixed(0)}M`
 }
 
 function fmtPctTick(v: number): string {
@@ -330,20 +171,6 @@ function fmtPctTick(v: number): string {
 
 function fmtPctTooltip(v: number): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
-}
-
-/** "2024-01-01" -> "Q1 2024" */
-function fmtQuarterDate(d: string): string {
-  const [y, m] = d.split('-')
-  const q = Math.ceil(parseInt(m) / 3)
-  return `Q${q} ${y}`
-}
-
-/** "2024-01-01" -> "Q1 '24" */
-function fmtAxisQuarter(d: string): string {
-  const [y, m] = d.split('-')
-  const q = Math.ceil(parseInt(m) / 3)
-  return `Q${q} '${y.slice(2)}`
 }
 
 // ── Compute helpers ──────────────────────────────────────────────────────────
@@ -356,14 +183,14 @@ function parseObs(obs: FredObservation[]): WD[] {
 
 function computeYoY(data: WD[]): { date: string; value: number | null }[] {
   return data.map((d, i) => {
-    if (i < 4) return { date: d.date, value: null }
-    const prev = data[i - 4].value
+    if (i < 12) return { date: d.date, value: null }
+    const prev = data[i - 12].value
     if (prev === 0) return { date: d.date, value: null }
     return { date: d.date, value: ((d.value - prev) / Math.abs(prev)) * 100 }
   })
 }
 
-function computeQoQ(data: WD[]): { date: string; value: number | null }[] {
+function computeMoM(data: WD[]): { date: string; value: number | null }[] {
   return data.map((d, i) => {
     if (i < 1) return { date: d.date, value: null }
     const prev = data[i - 1].value
@@ -372,12 +199,22 @@ function computeQoQ(data: WD[]): { date: string; value: number | null }[] {
   })
 }
 
-function computeAnnualizedQoQ(data: WD[]): { date: string; value: number | null }[] {
+function computeAnnualizedMoM(data: WD[]): { date: string; value: number | null }[] {
   return data.map((d, i) => {
     if (i < 1) return { date: d.date, value: null }
     const prev = data[i - 1].value
     if (prev === 0 || prev < 0) return { date: d.date, value: null }
-    return { date: d.date, value: (Math.pow(d.value / prev, 4) - 1) * 100 }
+    return { date: d.date, value: (Math.pow(d.value / prev, 12) - 1) * 100 }
+  })
+}
+
+function computeAnnNm(data: WD[], n: number): { date: string; value: number | null }[] {
+  const exp = 12 / n
+  return data.map((d, i) => {
+    if (i < n) return { date: d.date, value: null }
+    const prev = data[i - n].value
+    if (prev <= 0) return { date: d.date, value: null }
+    return { date: d.date, value: (Math.pow(d.value / prev, exp) - 1) * 100 }
   })
 }
 
@@ -415,20 +252,6 @@ function computeRegimes(
   })
 }
 
-function contribNiceTicks(min: number, max: number, target = 6): number[] {
-  if (min === max) return [min]
-  const range     = max - min
-  const roughStep = range / target
-  const mag       = Math.pow(10, Math.floor(Math.log10(Math.abs(roughStep) || 1)))
-  const niceStep  = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= roughStep) ?? roughStep
-  const start     = Math.ceil(min / niceStep) * niceStep
-  const ticks: number[] = []
-  for (let t = start; t <= max + niceStep * 0.01; t += niceStep) {
-    ticks.push(parseFloat(t.toFixed(6)))
-  }
-  return ticks
-}
-
 // ── QuickSelectRow ────────────────────────────────────────────────────────────
 
 function QuickSelectRow({
@@ -457,28 +280,101 @@ function QuickSelectRow({
   )
 }
 
-// ── GdpContribTooltip ─────────────────────────────────────────────────────────
+// ── contribNiceTicks ─────────────────────────────────────────────────────────
 
-function GdpContribTooltip({
+function contribNiceTicks(min: number, max: number, target = 6): number[] {
+  if (min === max) return [min]
+  const range     = max - min
+  const roughStep = range / target
+  const mag       = Math.pow(10, Math.floor(Math.log10(Math.abs(roughStep) || 1)))
+  const niceStep  = [1, 2, 2.5, 5, 10].map(m => m * mag).find(s => s >= roughStep) ?? roughStep
+  const start     = Math.ceil(min / niceStep) * niceStep
+  const ticks: number[] = []
+  for (let t = start; t <= max + niceStep * 0.01; t += niceStep) {
+    ticks.push(parseFloat(t.toFixed(6)))
+  }
+  return ticks
+}
+
+// ── buildRetailContribSeries ─────────────────────────────────────────────────
+
+function buildRetailContribSeries(
+  allData: AllData,
+  components: readonly { key: string; fredId: string }[],
+  lineKey: string,
+  mode: 'yoy' | 'mom',
+): ContribRow[] {
+  const parentData = allData['RSAFS'] ?? []
+  const compMaps = components.map(c => ({
+    key: c.key,
+    map: new Map((allData[c.fredId] ?? []).map(r => [r.date, r.value])),
+  }))
+  const parentMap = new Map(parentData.map(r => [r.date, r.value]))
+
+  return parentData.map((pt, i) => {
+    const { date } = pt
+    let priorDate: string | undefined
+
+    if (mode === 'yoy') {
+      const [y, m] = date.split('-').map(Number)
+      let pm = m - 12, py = y
+      if (pm <= 0) { pm += 12; py -= 1 }
+      priorDate = `${py}-${String(pm).padStart(2, '0')}-01`
+    } else {
+      if (i === 0) {
+        const row: ContribRow = { date }
+        for (const c of components) row[c.key] = null
+        row[lineKey] = null
+        return row
+      }
+      priorDate = parentData[i - 1].date
+    }
+
+    const pPrior = parentMap.get(priorDate!)
+    const pNow   = parentMap.get(date)
+    const row: ContribRow = { date }
+
+    for (const cm of compMaps) {
+      const now   = cm.map.get(date)
+      const prior = cm.map.get(priorDate!)
+      if (now == null || prior == null || prior === 0 || pPrior == null || pPrior === 0) {
+        row[cm.key] = null
+      } else {
+        row[cm.key] = (prior / pPrior) * ((now / prior) - 1) * 100
+      }
+    }
+
+    row[lineKey] = (pNow != null && pPrior != null && pPrior !== 0)
+      ? (pNow / pPrior - 1) * 100
+      : null
+
+    return row
+  })
+}
+
+// ── RetailContribTooltip ─────────────────────────────────────────────────────
+
+function RetailContribTooltip({
   row,
-  activeItems,
-  showLine,
-  lineLabel,
-  lineKey,
+  activeSeries,
   mouseX,
   mouseY,
   isRightHalf,
+  seriesItems,
+  lineKey,
+  lineLabel,
 }: {
-  row:           GdpContribRow
-  activeItems:   readonly ContribSeriesItem[]
-  showLine:      boolean
-  lineLabel:     string
-  lineKey:       string
+  row:           ContribRow
+  activeSeries:  Set<string>
   mouseX:        number
   mouseY:        number
   isRightHalf:   boolean
+  seriesItems:   readonly { id: string; label: string; color: string }[]
+  lineKey:       string
+  lineLabel:     string
 }) {
-  const items = [...activeItems]
+  const activeItems = seriesItems.filter(s => activeSeries.has(s.id))
+  const items = activeItems
     .map(s => ({ ...s, value: row[s.id] as number | null }))
     .filter(s => s.value != null)
     .sort((a, b) => Math.abs(b.value!) - Math.abs(a.value!))
@@ -487,6 +383,7 @@ function GdpContribTooltip({
     ? { right: window.innerWidth - mouseX + 14 }
     : { left:  mouseX + 14 }
 
+  const showLine = activeSeries.has(lineKey)
   const lineVal = row[lineKey] as number | null
 
   return (
@@ -505,7 +402,7 @@ function GdpContribTooltip({
       zIndex: 1000,
     }}>
       <div style={{ color: '#94A3B8', marginBottom: 6, letterSpacing: '0.05em' }}>
-        {fmtQuarterDate(row.date as string)}
+        {fmtFullDate(row.date)}
       </div>
       {items.map(item => (
         <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -528,7 +425,7 @@ function GdpContribTooltip({
           <span style={{ width: 14, height: 2, background: '#fff', display: 'inline-block', flexShrink: 0 }} />
           <span style={{ color: '#94A3B8', flex: 1 }}>{lineLabel}</span>
           <span style={{ color: lineVal >= 0 ? '#4ade80' : '#f87171' }}>
-            {lineVal >= 0 ? '+' : ''}{lineVal.toFixed(2)} pp
+            {lineVal >= 0 ? '+' : ''}{lineVal.toFixed(2)}%
           </span>
         </div>
       )}
@@ -536,28 +433,28 @@ function GdpContribTooltip({
   )
 }
 
-// ── GdpContribChart (custom SVG diverging stacked bar) ────────────────────────
+// ── RetailContribChart (custom SVG diverging stacked bar) ────────────────────
 
-function GdpContribChart({
+function RetailContribChart({
   data,
   visibleStart,
   visibleEnd,
   activeSeries,
+  lineWidth = 1.5,
+  clipPrefix = 'retailcontrib',
   seriesItems,
   lineKey,
   lineLabel,
-  lineWidth = 1.5,
-  clipPrefix = 'gdpcontrib',
 }: {
-  data:           GdpContribRow[]
+  data:           ContribRow[]
   visibleStart:   number
   visibleEnd:     number
   activeSeries:   Set<string>
-  seriesItems:    readonly ContribSeriesItem[]
-  lineKey:        string
-  lineLabel:      string
   lineWidth?:     number
   clipPrefix?:    string
+  seriesItems:    readonly { id: string; label: string; color: string }[]
+  lineKey:        string
+  lineLabel:      string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize]         = useState({ width: 600, height: 400 })
@@ -589,7 +486,7 @@ function GdpContribChart({
 
   const activeItems = useMemo(
     () => seriesItems.filter(s => activeSeries.has(s.id)),
-    [seriesItems, activeSeries]
+    [activeSeries, seriesItems]
   )
   const showLine = activeSeries.has(lineKey)
 
@@ -603,16 +500,15 @@ function GdpContribChart({
         if (v > 0) posStack += v; else negStack += v
       }
       if (showLine && row[lineKey] != null) {
-        const lv = row[lineKey] as number
-        posStack = Math.max(posStack, lv)
-        negStack = Math.min(negStack, lv)
+        posStack = Math.max(posStack, row[lineKey] as number)
+        negStack = Math.min(negStack, row[lineKey] as number)
       }
       if (posStack > max) max = posStack
       if (negStack < min) min = negStack
     }
     const pad = (max - min) * 0.08 || 0.5
     return [min - pad, max + pad]
-  }, [visible, activeItems, showLine, lineKey])
+  }, [visible, activeItems, showLine])
 
   const [yMin, yMax] = yDomain
   const yRange = yMax - yMin || 1
@@ -651,11 +547,11 @@ function GdpContribChart({
     })
 
     const pts = showLine
-      ? cols.filter(c => c.row[lineKey] != null).map(c => ({ cx: c.cx, cy: toY(c.row[lineKey] as number) }))
+      ? cols.filter(c => (c.row[lineKey] as number | null) != null).map(c => ({ cx: c.cx, cy: toY(c.row[lineKey] as number) }))
       : []
 
     return { columns: cols, linePts: pts }
-  }, [visible, activeItems, showLine, lineKey, colW, yMin, yRange, innerH])
+  }, [visible, activeItems, showLine, colW, yMin, yRange, innerH])
 
   const yTicks = useMemo(() => contribNiceTicks(yMin, yMax, 6), [yMin, yMax])
 
@@ -665,7 +561,7 @@ function GdpContribChart({
     visible.forEach((row, i) => {
       const cx = CONTRIB_CM.left + (i + 0.5) * colW
       if (cx - lastX >= 60) {
-        ticks.push({ label: fmtAxisQuarter(row.date as string), cx })
+        ticks.push({ label: fmtAxisDate(row.date), cx })
         lastX = cx
       }
     })
@@ -740,7 +636,7 @@ function GdpContribChart({
           {columns.map(col =>
             col.rects.map(r => (
               <rect
-                key={`${(col.row.date as string)}-${r.id}`}
+                key={`${col.row.date}-${r.id}`}
                 x={col.cx - barW / 2}
                 y={r.y}
                 width={barW}
@@ -789,15 +685,15 @@ function GdpContribChart({
       </svg>
 
       {hovCol && (
-        <GdpContribTooltip
+        <RetailContribTooltip
           row={hovCol.row}
-          activeItems={activeItems}
-          showLine={showLine}
-          lineLabel={lineLabel}
-          lineKey={lineKey}
+          activeSeries={activeSeries}
           mouseX={mousePos.x}
           mouseY={mousePos.y}
           isRightHalf={isRightHalf}
+          seriesItems={seriesItems}
+          lineKey={lineKey}
+          lineLabel={lineLabel}
         />
       )}
     </div>
@@ -808,7 +704,7 @@ function GdpContribChart({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function RGDPDashboardPage() {
+export function RetailSalesDashboardPage() {
   // ── FRED data fetch ────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<AllData>({})
   const [loading, setLoading] = useState(true)
@@ -819,8 +715,8 @@ export function RGDPDashboardPage() {
     async function load() {
       try {
         const entries = await Promise.all(
-          ALL_SERIES_IDS.map(async (id) => {
-            const obs = await fetchFredSeries(id, { frequency: 'q' })
+          FRED_SERIES_IDS.map(async (id) => {
+            const obs = await fetchFredSeries(id)
             return [id, parseObs(obs)] as [string, WD[]]
           })
         )
@@ -837,66 +733,36 @@ export function RGDPDashboardPage() {
     return () => { cancelled = true }
   }, [])
 
-  const gdp = allData['GDPC1'] ?? []
-
-  // ── BEA contribution data fetch ─────────────────────────────────────────
-  const [gdpContribData, setGdpContribData]       = useState<Map<number, WD[]>>(new Map())
-  const [gdpContribLoading, setGdpContribLoading] = useState(true)
-  const [gdpContribError, setGdpContribError]     = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const entries = await Promise.all(
-          GDP_CONTRIB_LINES.map(async (line) => {
-            const obs = await fetchBEAGdpContrib(line)
-            return [line, parseObs(obs)] as [number, WD[]]
-          })
-        )
-        if (cancelled) return
-        setGdpContribData(new Map(entries))
-      } catch (e) {
-        if (cancelled) return
-        setGdpContribError(e instanceof Error ? e.message : 'Failed to fetch BEA data')
-      } finally {
-        if (!cancelled) setGdpContribLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
-
   // ── Explorer state ────────────────────────────────────────────────────────
 
-  const [selectedId, setSelectedId] = useState('GDPC1')
+  const [selectedId, setSelectedId] = useState('RSAFS')
 
   const selectedItem = useMemo(
-    () => RGDP_HIERARCHY.find(n => n.id === selectedId),
+    () => RETAIL_HIERARCHY.find(n => n.id === selectedId),
     [selectedId]
   )
 
-  const selectedLabel = selectedItem?.label ?? 'Total Real GDP'
+  const selectedLabel = selectedItem?.label ?? 'Retail Trade and Food Services'
   const selectedData  = useMemo(() => allData[selectedId] ?? [], [allData, selectedId])
 
   // Explorer user-controlled parameters
-  const [regimeMa, setRegimeMa]       = useState(4)
+  const [regimeMa, setRegimeMa]       = useState(12)
   const [deltaWindow, setDeltaWindow] = useState(1)
   const [deltaMa, setDeltaMa]         = useState(12)
-  const [qoqMa1, setQoqMa1]          = useState(3)
-  const [qoqMa2, setQoqMa2]          = useState(6)
+  const [momMa1, setMomMa1]           = useState(3)
+  const [momMa2, setMomMa2]           = useState(6)
 
   // Explorer computed data
   const exYoY          = useMemo(() => computeYoY(selectedData), [selectedData])
-  const exQoQ          = useMemo(() => computeQoQ(selectedData), [selectedData])
-  const exAnnQoQ       = useMemo(() => computeAnnualizedQoQ(selectedData), [selectedData])
+  const exMoM          = useMemo(() => computeMoM(selectedData), [selectedData])
+  const exAnnMoM       = useMemo(() => computeAnnualizedMoM(selectedData), [selectedData])
   const exYoYDelta     = useMemo(() => computeYoYDelta(exYoY, deltaWindow), [exYoY, deltaWindow])
   const exYoYDeltaMa   = useMemo(() => computeMA(exYoYDelta, deltaMa), [exYoYDelta, deltaMa])
-  const exQoQMa1       = useMemo(() => computeMA(exQoQ, qoqMa1), [exQoQ, qoqMa1])
-  const exQoQMa2       = useMemo(() => computeMA(exQoQ, qoqMa2), [exQoQ, qoqMa2])
+  const exMoMMa1       = useMemo(() => computeMA(exMoM, momMa1), [exMoM, momMa1])
+  const exMoMMa2       = useMemo(() => computeMA(exMoM, momMa2), [exMoM, momMa2])
 
   const exLevelData = useMemo(
-    () => selectedData.map(d => ({ date: d.date, value: d.value / 1000 })),
+    () => selectedData.map(d => ({ date: d.date, value: d.value })),
     [selectedData]
   )
 
@@ -910,139 +776,64 @@ export function RGDPDashboardPage() {
     [exYoYDelta, exYoYDeltaMa]
   )
 
-  const exQoQData = useMemo(() =>
-    exQoQ.map((d, i) => ({ date: d.date, qoq: d.value, ma1: exQoQMa1[i]?.value ?? null, ma2: exQoQMa2[i]?.value ?? null })),
-    [exQoQ, exQoQMa1, exQoQMa2]
+  const exMoMData = useMemo(() =>
+    exMoM.map((d, i) => ({ date: d.date, mom: d.value, ma1: exMoMMa1[i]?.value ?? null, ma2: exMoMMa2[i]?.value ?? null })),
+    [exMoM, exMoMMa1, exMoMMa2]
   )
 
-  const exAnnQoQData = useMemo(() =>
-    exAnnQoQ.map(d => ({ date: d.date, value: d.value })),
-    [exAnnQoQ]
+  const exAnnMoMData = useMemo(() =>
+    exAnnMoM.map(d => ({ date: d.date, value: d.value })),
+    [exAnnMoM]
   )
-
-  // ── Contribution chart data memos (12 charts) ──────────────────────────
-
-  const buildContribRows = useCallback((pairDef: ContribPairDef): GdpContribRow[] => {
-    const parentSeries = gdpContribData.get(pairDef.lineLine)
-    if (!parentSeries?.length) return []
-    const lk = `L${pairDef.lineLine}`
-    return parentSeries.map(pt => {
-      const row: GdpContribRow = { date: pt.date }
-      row[lk] = pt.value
-      for (const item of pairDef.items) {
-        const series = gdpContribData.get(item.line)
-        const match = series?.find(s => s.date === pt.date)
-        row[item.id] = match?.value ?? null
-      }
-      return row
-    })
-  }, [gdpContribData])
-
-  // Build one data array per chart
-  const contribDataMap = useMemo(() => {
-    const map = new Map<string, GdpContribRow[]>()
-    for (const pair of CONTRIB_PAIRS.flat()) {
-      map.set(pair.key, buildContribRows(pair))
-    }
-    return map
-  }, [buildContribRows])
-
-  // ── Contribution visibility states (12 charts) ─────────────────────────
-
-  const mkInitialVis = (def: ContribPairDef): Set<string> => {
-    const keys = def.items.map(s => s.id)
-    keys.push(`L${def.lineLine}`)
-    return new Set(keys)
-  }
-
-  const [visC1L, setVisC1L] = useState(() => mkInitialVis(CONTRIB_PAIRS[0][0]))
-  const [visC1R, setVisC1R] = useState(() => mkInitialVis(CONTRIB_PAIRS[0][1]))
-  const [visC2L, setVisC2L] = useState(() => mkInitialVis(CONTRIB_PAIRS[1][0]))
-  const [visC2R, setVisC2R] = useState(() => mkInitialVis(CONTRIB_PAIRS[1][1]))
-  const [visC3L, setVisC3L] = useState(() => mkInitialVis(CONTRIB_PAIRS[2][0]))
-  const [visC3R, setVisC3R] = useState(() => mkInitialVis(CONTRIB_PAIRS[2][1]))
-  const [visC4L, setVisC4L] = useState(() => mkInitialVis(CONTRIB_PAIRS[3][0]))
-  const [visC4R, setVisC4R] = useState(() => mkInitialVis(CONTRIB_PAIRS[3][1]))
-  const [visC5L, setVisC5L] = useState(() => mkInitialVis(CONTRIB_PAIRS[4][0]))
-  const [visC5R, setVisC5R] = useState(() => mkInitialVis(CONTRIB_PAIRS[4][1]))
-  const [visC6L, setVisC6L] = useState(() => mkInitialVis(CONTRIB_PAIRS[5][0]))
-  const [visC6R, setVisC6R] = useState(() => mkInitialVis(CONTRIB_PAIRS[5][1]))
-
-  const visMap: Record<ContribChartKey, Set<string>> = {
-    gdpC1L: visC1L, gdpC1R: visC1R,
-    gdpC2L: visC2L, gdpC2R: visC2R,
-    gdpC3L: visC3L, gdpC3R: visC3R,
-    gdpC4L: visC4L, gdpC4R: visC4R,
-    gdpC5L: visC5L, gdpC5R: visC5R,
-    gdpC6L: visC6L, gdpC6R: visC6R,
-  }
-
-  const mkToggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
-    (key: string) => setter(prev => {
-      const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
-      return next
-    })
-
-  const toggleMap: Record<ContribChartKey, (key: string) => void> = {
-    gdpC1L: mkToggle(setVisC1L), gdpC1R: mkToggle(setVisC1R),
-    gdpC2L: mkToggle(setVisC2L), gdpC2R: mkToggle(setVisC2R),
-    gdpC3L: mkToggle(setVisC3L), gdpC3R: mkToggle(setVisC3R),
-    gdpC4L: mkToggle(setVisC4L), gdpC4R: mkToggle(setVisC4R),
-    gdpC5L: mkToggle(setVisC5L), gdpC5R: mkToggle(setVisC5R),
-    gdpC6L: mkToggle(setVisC6L), gdpC6R: mkToggle(setVisC6R),
-  }
 
   // ── Brush states ────────────────────────────────────────────────────────
 
-  const initBrush: BrushState = { start: 0, end: 0, period: '' }
-
   const [brushes, setBrushes] = useState<Record<ChartKey, BrushState>>({
-    // Explorer
-    xLevel:    { start: 0, end: 0, period: 'Max' },
-    xRegime:   { start: 0, end: 0, period: 'Max' },
-    xYoyDelta: { start: 0, end: 0, period: 'Max' },
-    xQoq:      { start: 0, end: 0, period: 'Max' },
-    xAnnQoq:   { start: 0, end: 0, period: 'Max' },
-    // Contribution charts
-    gdpC1L: { ...initBrush }, gdpC1R: { ...initBrush },
-    gdpC2L: { ...initBrush }, gdpC2R: { ...initBrush },
-    gdpC3L: { ...initBrush }, gdpC3R: { ...initBrush },
-    gdpC4L: { ...initBrush }, gdpC4R: { ...initBrush },
-    gdpC5L: { ...initBrush }, gdpC5R: { ...initBrush },
-    gdpC6L: { ...initBrush }, gdpC6R: { ...initBrush },
+    xLevel:    { start: 0, end: 0, period: '10Y' },
+    xRegime:   { start: 0, end: 0, period: '10Y' },
+    xYoyDelta: { start: 0, end: 0, period: '10Y' },
+    xMom:      { start: 0, end: 0, period: '10Y' },
+    xAnnMom:   { start: 0, end: 0, period: '10Y' },
+    retailContribYoy: { start: 0, end: 0, period: '5Y' },
+    retailContribMom: { start: 0, end: 0, period: '5Y' },
+    rsafsRates:       { start: 0, end: 0, period: '10Y' },
+    rsfsxmvRates:     { start: 0, end: 0, period: '10Y' },
   })
 
-  // Initialize contribution brushes when data arrives
-  useEffect(() => {
-    const refLen = gdpContribData.get(1)?.length ?? 0
-    if (refLen === 0) return
-    const end = refLen - 1
-    const start = Math.max(0, end - 59) // ~15 years
-    setBrushes(prev => {
-      const next = { ...prev }
-      for (const k of ALL_CONTRIB_KEYS) {
-        next[k] = { start, end, period: '' }
-      }
-      return next
-    })
-  }, [gdpContribData])
-
-  // Reset all explorer brushes when selected component changes
+  // Initialize explorer brushes when data arrives or component changes
   useEffect(() => {
     if (!selectedData.length) return
-    const endQ = selectedData.length - 1
-    const maxBrush = { start: 0, end: endQ, period: 'Max' }
+    const endM = selectedData.length - 1
+    const start = Math.max(0, endM - 119)
+    const newBrush: BrushState = { start, end: endM, period: '10Y' }
     setBrushes(prev => {
       const next = { ...prev }
-      for (const k of EXPLORER_KEYS) next[k] = { ...maxBrush }
+      for (const k of EXPLORER_KEYS) next[k] = { ...newBrush }
       return next
     })
   }, [selectedId, selectedData.length])
 
+  // ── Level chart Y-domain (auto-scaled to visible range) ─────────────────
+
+  const yDomainLevel = useMemo((): [number, number] | undefined => {
+    const { start, end } = brushes.xLevel
+    if (!exLevelData.length || end < start) return undefined
+    const visible = exLevelData.slice(
+      Math.max(0, start),
+      Math.min(exLevelData.length, end + 1)
+    )
+    if (!visible.length) return undefined
+    const vals = visible.map(d => d.value).filter(v => v != null) as number[]
+    if (!vals.length) return undefined
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const pad = (max - min) * 0.06 || max * 0.02
+    return [min - pad, max + pad]
+  }, [exLevelData, brushes.xLevel.start, brushes.xLevel.end])
+
   // Synchronized explorer brush
   const handleExplorerBrush = useCallback(
-    (_key: ExplorerChartKey, startIndex?: number, endIndex?: number) => {
+    (_key: ChartKey, startIndex?: number, endIndex?: number) => {
       setBrushes(prev => {
         const newBrush = {
           period: '',
@@ -1058,7 +849,7 @@ export function RGDPDashboardPage() {
   )
 
   const handleExplorerQuickSelect = useCallback(
-    (_key: ExplorerChartKey, label: string, count: number, dataLen: number) => {
+    (_key: ChartKey, label: string, count: number, dataLen: number) => {
       const end = dataLen - 1
       const newBrush = {
         start:  isFinite(count) ? Math.max(0, end - count + 1) : 0,
@@ -1072,34 +863,146 @@ export function RGDPDashboardPage() {
     []
   )
 
-  // Contribution chart brush handler
+  // ── Contribution chart data ────────────────────────────────────────────────
+
+  const retailContribYoyData = useMemo(
+    () => Object.keys(allData).length > 0
+      ? buildRetailContribSeries(allData, RETAIL_CONTRIB_COMPONENTS, 'line', 'yoy')
+      : [],
+    [allData]
+  )
+
+  const retailContribMomData = useMemo(
+    () => Object.keys(allData).length > 0
+      ? buildRetailContribSeries(allData, RETAIL_CONTRIB_COMPONENTS, 'line', 'mom')
+      : [],
+    [allData]
+  )
+
+  // ── Contribution visibility states ────────────────────────────────────────
+
+  const mkVis = (items: readonly { id: string }[]) => {
+    const all = new Set(items.map(s => s.id))
+    all.add('line')
+    return all
+  }
+
+  const [visRetailYoy, setVisRetailYoy] = useState(() => mkVis(RETAIL_CONTRIB_ITEMS))
+  const [visRetailMom, setVisRetailMom] = useState(() => mkVis(RETAIL_CONTRIB_ITEMS))
+
+  const mkToggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
+    (id: string) => setter(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const toggleRetailYoy = mkToggle(setVisRetailYoy)
+  const toggleRetailMom = mkToggle(setVisRetailMom)
+
+  // ── Contribution brush initialization ─────────────────────────────────────
+
+  useEffect(() => {
+    if (retailContribYoyData.length === 0) return
+    const endIdx = retailContribYoyData.length - 1
+    const startIdx = Math.max(0, endIdx - 59)
+    setBrushes(prev => ({
+      ...prev,
+      retailContribYoy: { start: startIdx, end: endIdx, period: '5Y' },
+      retailContribMom: { start: startIdx, end: endIdx, period: '5Y' },
+    }))
+  }, [retailContribYoyData.length])
+
+  // ── Contribution brush handlers ───────────────────────────────────────────
+
   const handleContribBrush = useCallback(
     (key: ContribChartKey, startIndex?: number, endIndex?: number) => {
       setBrushes(prev => ({
         ...prev,
-        [key]: {
-          period: '',
-          start:  startIndex ?? prev[key].start,
-          end:    endIndex   ?? prev[key].end,
-        },
+        [key]: { period: '', start: startIndex ?? prev[key].start, end: endIndex ?? prev[key].end },
       }))
     },
     []
   )
 
-  const handleGdpContribQuickSelect = useCallback(
-    (key: ContribChartKey, label: string, count: number) => {
-      const end = (gdpContribData.get(1)?.length ?? 1) - 1
+  const handleContribQuickSelect = useCallback(
+    (key: ContribChartKey, label: string, count: number, dataLen: number) => {
+      const end = dataLen - 1
       setBrushes(prev => ({
         ...prev,
-        [key]: {
-          start:  isFinite(count) ? Math.max(0, end - count + 1) : 0,
-          end,
-          period: label,
-        },
+        [key]: { start: isFinite(count) ? Math.max(0, end - count + 1) : 0, end, period: label },
       }))
     },
-    [gdpContribData]
+    []
+  )
+
+  // ── Growth rate chart data ─────────────────────────────────────────────────
+
+  const rsafsRatesData = useMemo(() => {
+    const data = allData['RSAFS'] ?? []
+    const yoy = computeYoY(data)
+    const a6  = computeAnnNm(data, 6)
+    const a3  = computeAnnNm(data, 3)
+    return data.map((d, i) => ({
+      date:  d.date,
+      yoy:   yoy[i]?.value ?? null,
+      ann6m: a6[i]?.value  ?? null,
+      ann3m: a3[i]?.value  ?? null,
+    }))
+  }, [allData])
+
+  const rsfsxmvRatesData = useMemo(() => {
+    const data = allData['RSFSXMV'] ?? []
+    const yoy = computeYoY(data)
+    const a6  = computeAnnNm(data, 6)
+    const a3  = computeAnnNm(data, 3)
+    return data.map((d, i) => ({
+      date:  d.date,
+      yoy:   yoy[i]?.value ?? null,
+      ann6m: a6[i]?.value  ?? null,
+      ann3m: a3[i]?.value  ?? null,
+    }))
+  }, [allData])
+
+  // ── Growth rate visibility states ─────────────────────────────────────────
+
+  const [visRSAFS,    setVisRSAFS]    = useState(() => new Set(['yoy', 'ann6m', 'ann3m']))
+  const [visRSFSXMV,  setVisRSFSXMV]  = useState(() => new Set(['yoy', 'ann6m', 'ann3m']))
+
+  const toggleRSAFS    = mkToggle(setVisRSAFS)
+  const toggleRSFSXMV  = mkToggle(setVisRSFSXMV)
+
+  // ── Growth rate brush initialization ──────────────────────────────────────
+
+  useEffect(() => {
+    const data = allData['RSAFS'] ?? []
+    if (!data.length) return
+    const endIdx = data.length - 1
+    const startIdx = Math.max(0, endIdx - 119)
+    setBrushes(prev => ({
+      ...prev,
+      rsafsRates:   { start: startIdx, end: endIdx, period: '10Y' },
+      rsfsxmvRates: { start: startIdx, end: endIdx, period: '10Y' },
+    }))
+  }, [allData])
+
+  // ── Growth rate brush handlers ────────────────────────────────────────────
+
+  const handleRateBrush = useCallback(
+    (key: RatesChartKey, startIndex?: number, endIndex?: number) => {
+      setBrushes(prev => ({
+        ...prev,
+        [key]: { period: '', start: startIndex ?? prev[key].start, end: endIndex ?? prev[key].end },
+      }))
+    },
+    []
+  )
+
+  const handleRateQuickSelect = useCallback(
+    (key: RatesChartKey, label: string, count: number, dataLen: number) => {
+      const end = dataLen - 1
+      setBrushes(prev => ({
+        ...prev,
+        [key]: { start: isFinite(count) ? Math.max(0, end - count + 1) : 0, end, period: label },
+      }))
+    },
+    []
   )
 
   // ════════════════════════════════════════════════════════════════════════════
@@ -1123,44 +1026,314 @@ export function RGDPDashboardPage() {
         <span className={styles.breadcrumbSep}>&rsaquo;</span>
         <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
         <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Real GDP Dashboard</span>
+        <span className={styles.breadcrumbCurrent}>Retail Sales</span>
       </nav>
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       <div className={styles.body}>
-        <div className={styles.majorHeader}>Real GDP Dashboard</div>
+        <div className={styles.majorHeader}>Retail Sales Dashboard</div>
         <div className={styles.sectionSubtitle} style={{ padding: '0 2px', marginTop: -8 }}>
-          BEA National Income &amp; Product Accounts &mdash; quarterly, chained 2017 dollars
+          U.S. Census Bureau &mdash; monthly, millions of dollars, seasonally adjusted
         </div>
 
         {/* Loading / Error */}
         {loading && (
-          <div className={styles.statusBlock}>Loading 49 real GDP series...</div>
+          <div className={styles.statusBlock}>Loading {FRED_SERIES_IDS.length} retail sales series...</div>
         )}
         {error && (
           <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
         )}
 
-        {!loading && !error && gdp.length > 0 && (
+        {!loading && !error && Object.keys(allData).length > 0 && (
           <>
+            {/* ═══════════════════════════════════════════════════════════════
+                Contribution Charts — YoY and MoM
+            ═══════════════════════════════════════════════════════════════ */}
+
+            <div className={styles.twoColGrid}>
+              {/* YoY Contribution */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <div className={styles.sectionTitle}>Retail Sales &mdash; YoY Contribution</div>
+                    <div className={styles.sectionSubtitle}>Weighted contribution to Total Retail Sales (RSAFS) YoY %&Delta;</div>
+                  </div>
+                </div>
+                <div className={styles.legendRow}>
+                  <div className={styles.legend}>
+                    {RETAIL_CONTRIB_ITEMS.map(s => (
+                      <button key={s.id} type="button"
+                        className={`${styles.legendItem} ${visRetailYoy.has(s.id) ? '' : styles.legendItemOff}`}
+                        onClick={() => toggleRetailYoy(s.id)}>
+                        <span className={styles.legendSwatch} style={{ background: s.color }} />
+                        {s.label}
+                      </button>
+                    ))}
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRetailYoy.has('line') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRetailYoy('line')}>
+                      <span className={styles.legendLine} style={{ background: '#fff' }} />
+                      Total YoY
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.chartWrap}>
+                  <RetailContribChart
+                    data={retailContribYoyData}
+                    visibleStart={brushes.retailContribYoy.start}
+                    visibleEnd={brushes.retailContribYoy.end}
+                    activeSeries={visRetailYoy}
+                    clipPrefix="rcyoy"
+                    seriesItems={RETAIL_CONTRIB_ITEMS}
+                    lineKey="line"
+                    lineLabel="Total YoY"
+                  />
+                </div>
+                <div className={styles.brushWrap}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={retailContribYoyData} margin={{ top: 0, right: 16, bottom: 0, left: 8 }}>
+                      <XAxis dataKey="date" hide />
+                      <YAxis hide />
+                      <Brush dataKey="date"
+                        startIndex={brushes.retailContribYoy.start}
+                        endIndex={brushes.retailContribYoy.end}
+                        onChange={({ startIndex, endIndex }) => handleContribBrush('retailContribYoy', startIndex, endIndex)}
+                        {...BRUSH_STYLE} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <QuickSelectRow
+                  period={brushes.retailContribYoy.period}
+                  onSelect={(l, c) => handleContribQuickSelect('retailContribYoy', l, c, retailContribYoyData.length)}
+                  periods={QUICK_PERIODS_CONTRIB}
+                />
+              </div>
+
+              {/* MoM Contribution */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <div className={styles.sectionTitle}>Retail Sales &mdash; MoM Contribution</div>
+                    <div className={styles.sectionSubtitle}>Weighted contribution to Total Retail Sales (RSAFS) MoM %&Delta;</div>
+                  </div>
+                </div>
+                <div className={styles.legendRow}>
+                  <div className={styles.legend}>
+                    {RETAIL_CONTRIB_ITEMS.map(s => (
+                      <button key={s.id} type="button"
+                        className={`${styles.legendItem} ${visRetailMom.has(s.id) ? '' : styles.legendItemOff}`}
+                        onClick={() => toggleRetailMom(s.id)}>
+                        <span className={styles.legendSwatch} style={{ background: s.color }} />
+                        {s.label}
+                      </button>
+                    ))}
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRetailMom.has('line') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRetailMom('line')}>
+                      <span className={styles.legendLine} style={{ background: '#fff' }} />
+                      Total MoM
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.chartWrap}>
+                  <RetailContribChart
+                    data={retailContribMomData}
+                    visibleStart={brushes.retailContribMom.start}
+                    visibleEnd={brushes.retailContribMom.end}
+                    activeSeries={visRetailMom}
+                    clipPrefix="rcmom"
+                    seriesItems={RETAIL_CONTRIB_ITEMS}
+                    lineKey="line"
+                    lineLabel="Total MoM"
+                  />
+                </div>
+                <div className={styles.brushWrap}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={retailContribMomData} margin={{ top: 0, right: 16, bottom: 0, left: 8 }}>
+                      <XAxis dataKey="date" hide />
+                      <YAxis hide />
+                      <Brush dataKey="date"
+                        startIndex={brushes.retailContribMom.start}
+                        endIndex={brushes.retailContribMom.end}
+                        onChange={({ startIndex, endIndex }) => handleContribBrush('retailContribMom', startIndex, endIndex)}
+                        {...BRUSH_STYLE} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <QuickSelectRow
+                  period={brushes.retailContribMom.period}
+                  onSelect={(l, c) => handleContribQuickSelect('retailContribMom', l, c, retailContribMomData.length)}
+                  periods={QUICK_PERIODS_CONTRIB}
+                />
+              </div>
+            </div>
+
+            {/* ═══════════════════════════════════════════════════════════════
+                Retail Sales Growth Rates
+            ═══════════════════════════════════════════════════════════════ */}
+
+            <div className={styles.majorHeader}>Retail Sales Growth Rates</div>
+
+            <div className={styles.twoColGrid}>
+              {/* Retail Sales */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div className={styles.sectionTitle}>Retail Sales</div>
+                </div>
+                <div className={styles.legendRow}>
+                  <div className={styles.legend}>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSAFS.has('yoy') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSAFS('yoy')}>
+                      <span className={styles.legendLine} style={{ background: '#ec4899' }} />
+                      YoY
+                    </button>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSAFS.has('ann6m') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSAFS('ann6m')}>
+                      <span className={styles.legendLine} style={{ background: '#94a3b8', opacity: 0.7 }} />
+                      6mo&Delta; ann.
+                    </button>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSAFS.has('ann3m') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSAFS('ann3m')}>
+                      <span className={styles.legendLine} style={{ background: '#94a3b8', opacity: 0.5 }} />
+                      3mo&Delta; ann.
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.chartWrap}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={rsafsRatesData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+                      <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+                      <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
+                        tickFormatter={fmtAxisDate} minTickGap={60} />
+                      <YAxis tick={TICK} tickLine={false} axisLine={false} width={58} tickFormatter={fmtPctTick} />
+                      <Tooltip {...TOOLTIP_STYLE}
+                        formatter={(v: unknown, name: unknown) => {
+                          if (typeof v !== 'number') return ['-', '']
+                          const lbl = name === 'yoy' ? 'YoY' : name === 'ann6m' ? '6mo\u0394 ann.' : '3mo\u0394 ann.'
+                          return [fmtPctTooltip(v), lbl] as [string, string]
+                        }} />
+                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
+                      {visRSAFS.has('ann3m') && (
+                        <Line type="monotone" dataKey="ann3m" name="3moΔ ann."
+                          stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="2 3" strokeOpacity={0.5}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      {visRSAFS.has('ann6m') && (
+                        <Line type="monotone" dataKey="ann6m" name="6moΔ ann."
+                          stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 3" strokeOpacity={0.7}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      {visRSAFS.has('yoy') && (
+                        <Line type="monotone" dataKey="yoy" name="YoY"
+                          stroke="#ec4899" strokeWidth={2.5}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      <Brush dataKey="date"
+                        startIndex={brushes.rsafsRates.start}
+                        endIndex={brushes.rsafsRates.end}
+                        onChange={({ startIndex, endIndex }) => handleRateBrush('rsafsRates', startIndex, endIndex)}
+                        {...BRUSH_STYLE} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <QuickSelectRow
+                  period={brushes.rsafsRates.period}
+                  onSelect={(l, c) => handleRateQuickSelect('rsafsRates', l, c, rsafsRatesData.length)}
+                  periods={QUICK_PERIODS_M}
+                />
+              </div>
+
+              {/* Retail Sales ex Auto */}
+              <div className={styles.section}>
+                <div className={styles.sectionHeader}>
+                  <div className={styles.sectionTitle}>Retail Sales ex Auto</div>
+                </div>
+                <div className={styles.legendRow}>
+                  <div className={styles.legend}>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSFSXMV.has('yoy') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSFSXMV('yoy')}>
+                      <span className={styles.legendLine} style={{ background: '#ec4899' }} />
+                      YoY
+                    </button>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSFSXMV.has('ann6m') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSFSXMV('ann6m')}>
+                      <span className={styles.legendLine} style={{ background: '#94a3b8', opacity: 0.7 }} />
+                      6mo&Delta; ann.
+                    </button>
+                    <button type="button"
+                      className={`${styles.legendItem} ${visRSFSXMV.has('ann3m') ? '' : styles.legendItemOff}`}
+                      onClick={() => toggleRSFSXMV('ann3m')}>
+                      <span className={styles.legendLine} style={{ background: '#94a3b8', opacity: 0.5 }} />
+                      3mo&Delta; ann.
+                    </button>
+                  </div>
+                </div>
+                <div className={styles.chartWrap}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={rsfsxmvRatesData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+                      <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
+                      <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
+                        tickFormatter={fmtAxisDate} minTickGap={60} />
+                      <YAxis tick={TICK} tickLine={false} axisLine={false} width={58} tickFormatter={fmtPctTick} />
+                      <Tooltip {...TOOLTIP_STYLE}
+                        formatter={(v: unknown, name: unknown) => {
+                          if (typeof v !== 'number') return ['-', '']
+                          const lbl = name === 'yoy' ? 'YoY' : name === 'ann6m' ? '6mo\u0394 ann.' : '3mo\u0394 ann.'
+                          return [fmtPctTooltip(v), lbl] as [string, string]
+                        }} />
+                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
+                      {visRSFSXMV.has('ann3m') && (
+                        <Line type="monotone" dataKey="ann3m" name="3moΔ ann."
+                          stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="2 3" strokeOpacity={0.5}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      {visRSFSXMV.has('ann6m') && (
+                        <Line type="monotone" dataKey="ann6m" name="6moΔ ann."
+                          stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 3" strokeOpacity={0.7}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      {visRSFSXMV.has('yoy') && (
+                        <Line type="monotone" dataKey="yoy" name="YoY"
+                          stroke="#ec4899" strokeWidth={2.5}
+                          dot={false} isAnimationActive={false} connectNulls legendType="none" />
+                      )}
+                      <Brush dataKey="date"
+                        startIndex={brushes.rsfsxmvRates.start}
+                        endIndex={brushes.rsfsxmvRates.end}
+                        onChange={({ startIndex, endIndex }) => handleRateBrush('rsfsxmvRates', startIndex, endIndex)}
+                        {...BRUSH_STYLE} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <QuickSelectRow
+                  period={brushes.rsfsxmvRates.period}
+                  onSelect={(l, c) => handleRateQuickSelect('rsfsxmvRates', l, c, rsfsxmvRatesData.length)}
+                  periods={QUICK_PERIODS_M}
+                />
+              </div>
+            </div>
+
             {/* ═══════════════════════════════════════════════════════════════
                 Component Explorer
             ═══════════════════════════════════════════════════════════════ */}
 
-            <div className={styles.majorHeader}>Component Explorer</div>
-
             <div className={styles.explorerHeader}>
-              <div className={styles.sectionTitle}>GDP Component Explorer</div>
+              <div className={styles.sectionTitle}>Retail Sales Explorer</div>
               <div className={styles.sectorSelectWrap}>
-                <span className={styles.lookbackLabel}>Component</span>
+                <span className={styles.lookbackLabel}>Category</span>
                 <select
                   className={styles.sectorSelect}
                   value={selectedId}
                   onChange={e => setSelectedId(e.target.value)}
                 >
-                  {RGDP_HIERARCHY.map(item => (
+                  {RETAIL_HIERARCHY.map(item => (
                     <option key={item.id} value={item.id}>
-                      {'\u2014 '.repeat(item.depth)}{item.label}
+                      {item.label}
                     </option>
                   ))}
                 </select>
@@ -1177,7 +1350,7 @@ export function RGDPDashboardPage() {
                   <div className={styles.sectionHeader}>
                     <div>
                       <div className={styles.sectionTitle}>{selectedLabel} &mdash; Level</div>
-                      <div className={styles.sectionSubtitle}>Billions chained 2017 $</div>
+                      <div className={styles.sectionSubtitle}>Millions of dollars, seasonally adjusted</div>
                     </div>
                   </div>
                   <div className={styles.legendRow}>
@@ -1194,10 +1367,10 @@ export function RGDPDashboardPage() {
                         <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
                         <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
                           tickFormatter={fmtAxisDate} minTickGap={60} />
-                        <YAxis tick={TICK} tickLine={false} axisLine={false} width={58}
-                          tickFormatter={(v: number) => fmtBillions(v * 1000)} />
+                        <YAxis domain={yDomainLevel} tick={TICK} tickLine={false} axisLine={false} width={58}
+                          tickFormatter={fmtMillions} />
                         <Tooltip {...TOOLTIP_STYLE}
-                          formatter={(v: unknown) => [typeof v === 'number' ? fmtBillions(v * 1000) : '-', ''] as [string, string]} />
+                          formatter={(v: unknown) => [typeof v === 'number' ? fmtMillions(v) : '-', ''] as [string, string]} />
                         <Line type="monotone" dataKey="value" name="Level"
                           stroke="#60a5fa" strokeWidth={1.8}
                           dot={false} isAnimationActive={false} connectNulls legendType="none" />
@@ -1212,7 +1385,7 @@ export function RGDPDashboardPage() {
                   <QuickSelectRow
                     period={brushes.xLevel.period}
                     onSelect={(l, c) => handleExplorerQuickSelect('xLevel', l, c, exLevelData.length)}
-                    periods={QUICK_PERIODS_Q}
+                    periods={QUICK_PERIODS_M}
                   />
                 </div>
 
@@ -1286,7 +1459,7 @@ export function RGDPDashboardPage() {
                   <QuickSelectRow
                     period={brushes.xRegime.period}
                     onSelect={(l, c) => handleExplorerQuickSelect('xRegime', l, c, exRegimeData.length)}
-                    periods={QUICK_PERIODS_Q}
+                    periods={QUICK_PERIODS_M}
                   />
                 </div>
 
@@ -1358,28 +1531,28 @@ export function RGDPDashboardPage() {
                   <QuickSelectRow
                     period={brushes.xYoyDelta.period}
                     onSelect={(l, c) => handleExplorerQuickSelect('xYoyDelta', l, c, exYoYDeltaData.length)}
-                    periods={QUICK_PERIODS_Q}
+                    periods={QUICK_PERIODS_M}
                   />
                 </div>
 
-                {/* E4: QoQ %Delta */}
+                {/* E4: MoM %Delta */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; QoQ %&Delta;</div>
-                      <div className={styles.sectionSubtitle}>Quarter-over-Quarter</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; MoM %&Delta;</div>
+                      <div className={styles.sectionSubtitle}>Month-over-Month</div>
                     </div>
                     <div className={styles.controls}>
                       <div className={styles.lookbackWrap}>
                         <span className={styles.lookbackLabel}>MA1</span>
-                        <input type="number" min={1} max={16} value={qoqMa1}
-                          onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n >= 1 && n <= 16) setQoqMa1(n) }}
+                        <input type="number" min={1} max={24} value={momMa1}
+                          onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n >= 1 && n <= 24) setMomMa1(n) }}
                           className={styles.lookbackInput} />
                       </div>
                       <div className={styles.lookbackWrap}>
                         <span className={styles.lookbackLabel}>MA2</span>
-                        <input type="number" min={1} max={16} value={qoqMa2}
-                          onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n >= 1 && n <= 16) setQoqMa2(n) }}
+                        <input type="number" min={1} max={24} value={momMa2}
+                          onChange={e => { const n = parseInt(e.target.value); if (!isNaN(n) && n >= 1 && n <= 24) setMomMa2(n) }}
                           className={styles.lookbackInput} />
                       </div>
                     </div>
@@ -1388,21 +1561,21 @@ export function RGDPDashboardPage() {
                     <div className={styles.legend}>
                       <span className={styles.legendItem} style={{ cursor: 'default' }}>
                         <span className={styles.legendSwatch} style={{ background: 'rgba(147,197,253,0.75)' }} />
-                        QoQ %
+                        MoM %
                       </span>
                       <span className={styles.legendItem} style={{ cursor: 'default' }}>
                         <span className={styles.legendLine} style={{ background: '#4ade80' }} />
-                        {qoqMa1}-pd MA
+                        {momMa1}-pd MA
                       </span>
                       <span className={styles.legendItem} style={{ cursor: 'default' }}>
                         <span className={styles.legendLine} style={{ background: '#f97316' }} />
-                        {qoqMa2}-pd MA
+                        {momMa2}-pd MA
                       </span>
                     </div>
                   </div>
                   <div className={styles.chartWrap}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={exQoQData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+                      <ComposedChart data={exMoMData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                         <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
                         <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
                           tickFormatter={fmtAxisDate} minTickGap={60} />
@@ -1410,52 +1583,52 @@ export function RGDPDashboardPage() {
                         <Tooltip {...TOOLTIP_STYLE}
                           formatter={(v: unknown, name: unknown) => {
                             if (typeof v !== 'number') return ['-', '']
-                            const lbl = name === 'ma1' ? `${qoqMa1}-pd MA` : name === 'ma2' ? `${qoqMa2}-pd MA` : 'QoQ'
+                            const lbl = name === 'ma1' ? `${momMa1}-pd MA` : name === 'ma2' ? `${momMa2}-pd MA` : 'MoM'
                             return [fmtPctTooltip(v), lbl] as [string, string]
                           }} />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
-                        <Bar dataKey="qoq" name="QoQ" isAnimationActive={false} legendType="none" maxBarSize={16}
+                        <Bar dataKey="mom" name="MoM" isAnimationActive={false} legendType="none" maxBarSize={16}
                           fill="rgba(147,197,253,0.75)" />
-                        <Line type="monotone" dataKey="ma1" name={`${qoqMa1}-pd MA`}
+                        <Line type="monotone" dataKey="ma1" name={`${momMa1}-pd MA`}
                           stroke="#4ade80" strokeWidth={1.5}
                           dot={false} isAnimationActive={false} connectNulls legendType="none" />
-                        <Line type="monotone" dataKey="ma2" name={`${qoqMa2}-pd MA`}
+                        <Line type="monotone" dataKey="ma2" name={`${momMa2}-pd MA`}
                           stroke="#f97316" strokeWidth={1.5}
                           dot={false} isAnimationActive={false} connectNulls legendType="none" />
                         <Brush dataKey="date"
-                          startIndex={brushes.xQoq.start}
-                          endIndex={brushes.xQoq.end}
-                          onChange={({ startIndex, endIndex }) => handleExplorerBrush('xQoq', startIndex, endIndex)}
+                          startIndex={brushes.xMom.start}
+                          endIndex={brushes.xMom.end}
+                          onChange={({ startIndex, endIndex }) => handleExplorerBrush('xMom', startIndex, endIndex)}
                           {...BRUSH_STYLE} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                   <QuickSelectRow
-                    period={brushes.xQoq.period}
-                    onSelect={(l, c) => handleExplorerQuickSelect('xQoq', l, c, exQoQData.length)}
-                    periods={QUICK_PERIODS_Q}
+                    period={brushes.xMom.period}
+                    onSelect={(l, c) => handleExplorerQuickSelect('xMom', l, c, exMoMData.length)}
+                    periods={QUICK_PERIODS_M}
                   />
                 </div>
 
-                {/* E5: Annualized QoQ %Delta */}
+                {/* E5: Annualized MoM %Delta */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; Annualized QoQ %&Delta;</div>
-                      <div className={styles.sectionSubtitle}>(Q/Q)^4 &minus; 1</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; Annualized MoM %&Delta;</div>
+                      <div className={styles.sectionSubtitle}>(M/M)^12 &minus; 1</div>
                     </div>
                   </div>
                   <div className={styles.legendRow}>
                     <div className={styles.legend}>
                       <span className={styles.legendItem} style={{ cursor: 'default' }}>
                         <span className={styles.legendLine} style={{ background: '#fdba74' }} />
-                        Annualized QoQ %
+                        Annualized MoM %
                       </span>
                     </div>
                   </div>
                   <div className={styles.chartWrap}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={exAnnQoQData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
+                      <ComposedChart data={exAnnMoMData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
                         <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
                         <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
                           tickFormatter={fmtAxisDate} minTickGap={60} />
@@ -1463,120 +1636,23 @@ export function RGDPDashboardPage() {
                         <Tooltip {...TOOLTIP_STYLE}
                           formatter={(v: unknown) => [typeof v === 'number' ? fmtPctTooltip(v) : '-', ''] as [string, string]} />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
-                        <Line type="monotone" dataKey="value" name="Ann. QoQ"
+                        <Line type="monotone" dataKey="value" name="Ann. MoM"
                           stroke="#fdba74" strokeWidth={1.8}
                           dot={false} isAnimationActive={false} connectNulls legendType="none" />
                         <Brush dataKey="date"
-                          startIndex={brushes.xAnnQoq.start}
-                          endIndex={brushes.xAnnQoq.end}
-                          onChange={({ startIndex, endIndex }) => handleExplorerBrush('xAnnQoq', startIndex, endIndex)}
+                          startIndex={brushes.xAnnMom.start}
+                          endIndex={brushes.xAnnMom.end}
+                          onChange={({ startIndex, endIndex }) => handleExplorerBrush('xAnnMom', startIndex, endIndex)}
                           {...BRUSH_STYLE} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </div>
                   <QuickSelectRow
-                    period={brushes.xAnnQoq.period}
-                    onSelect={(l, c) => handleExplorerQuickSelect('xAnnQoq', l, c, exAnnQoQData.length)}
-                    periods={QUICK_PERIODS_Q}
+                    period={brushes.xAnnMom.period}
+                    onSelect={(l, c) => handleExplorerQuickSelect('xAnnMom', l, c, exAnnMoMData.length)}
+                    periods={QUICK_PERIODS_M}
                   />
                 </div>
-              </>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════════════
-                rGDP Contribution Decomposition
-            ═══════════════════════════════════════════════════════════════ */}
-
-            <div className={styles.explorerHeader}>
-              <div>
-                <div className={styles.sectionTitle}>rGDP Contribution Decomposition</div>
-                <div className={styles.sectionSubtitle}>BEA NIPA Table 1.5.2 &middot; SAAR &middot; Annualized QoQ %-pt</div>
-              </div>
-            </div>
-
-            {gdpContribLoading && (
-              <div className={styles.statusBlock}>Loading contribution data...</div>
-            )}
-            {gdpContribError && (
-              <div className={`${styles.statusBlock} ${styles.statusError}`}>{gdpContribError}</div>
-            )}
-
-            {!gdpContribLoading && !gdpContribError && gdpContribData.size > 0 && (
-              <>
-                {CONTRIB_PAIRS.map((pair, pairIdx) => (
-                  <div key={pairIdx} className={styles.twoColGrid}>
-                    {pair.map(def => {
-                      const chartKey = def.key as ContribChartKey
-                      const data = contribDataMap.get(def.key) ?? []
-                      const vis = visMap[chartKey]
-                      const toggle = toggleMap[chartKey]
-                      const brush = brushes[chartKey]
-                      const lineKey = `L${def.lineLine}`
-
-                      return (
-                        <div key={def.key} className={styles.section}>
-                          <div className={styles.sectionHeader}>
-                            <div>
-                              <div className={styles.sectionTitle}>{def.title}</div>
-                              <div className={styles.sectionSubtitle}>SAAR &middot; %-pt contribution to rGDP</div>
-                            </div>
-                          </div>
-                          <div className={styles.legendRow}>
-                            <div className={styles.legend}>
-                              {def.items.map(item => (
-                                <button key={item.id} type="button"
-                                  className={`${styles.legendItem} ${!vis.has(item.id) ? styles.legendItemOff : ''}`}
-                                  onClick={() => toggle(item.id)}
-                                >
-                                  <span className={styles.legendSwatch} style={{ background: item.color }} />
-                                  {item.label}
-                                </button>
-                              ))}
-                              <button type="button"
-                                className={`${styles.legendItem} ${!vis.has(lineKey) ? styles.legendItemOff : ''}`}
-                                onClick={() => toggle(lineKey)}
-                              >
-                                <span className={styles.legendLine} style={{ background: '#ffffff' }} />
-                                {def.lineLabel}
-                              </button>
-                            </div>
-                          </div>
-                          <div className={styles.chartWrap}>
-                            <GdpContribChart
-                              data={data}
-                              visibleStart={brush.start}
-                              visibleEnd={brush.end}
-                              activeSeries={vis}
-                              seriesItems={def.items}
-                              lineKey={lineKey}
-                              lineLabel={def.lineLabel}
-                              clipPrefix={def.key}
-                            />
-                          </div>
-                          <div className={styles.brushWrap}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={data} margin={{ top: 0, right: 16, bottom: 0, left: 62 }}>
-                                <Brush
-                                  dataKey="date"
-                                  startIndex={brush.start}
-                                  endIndex={brush.end}
-                                  onChange={({ startIndex, endIndex }) =>
-                                    handleContribBrush(chartKey, startIndex, endIndex)}
-                                  {...BRUSH_STYLE}
-                                />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <QuickSelectRow
-                            period={brush.period}
-                            onSelect={(l, c) => handleGdpContribQuickSelect(chartKey, l, c)}
-                            periods={QUICK_PERIODS_Q}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
               </>
             )}
           </>

@@ -22,6 +22,13 @@ import { FiscalFlowsPage }         from './pages/FiscalFlowsPage'
 import { GrowthPage }              from './pages/GrowthPage'
 import { NGDPDashboardPage }       from './pages/NGDPDashboardPage'
 import { RGDPDashboardPage }      from './pages/RGDPDashboardPage'
+import { PIODashboardPage }      from './pages/PIODashboardPage'
+import { RetailSalesDashboardPage } from './pages/RetailSalesDashboardPage'
+import { NPCEDashboardPage }        from './pages/NPCEDashboardPage'
+import { RPCEDashboardPage }        from './pages/RPCEDashboardPage'
+import { GDIDashboardPage }         from './pages/GDIDashboardPage'
+import { ConsumerHealthDashboardPage } from './pages/ConsumerHealthDashboardPage'
+import { TradeDashboardPage }          from './pages/TradeDashboardPage'
 
 function App() {
   return (
@@ -47,6 +54,13 @@ function App() {
         <Route path="/models/growth"                         element={<GrowthPage />} />
         <Route path="/models/growth/ngdp"                    element={<NGDPDashboardPage />} />
         <Route path="/models/growth/rgdp"                    element={<RGDPDashboardPage />} />
+        <Route path="/models/growth/pio"                     element={<PIODashboardPage />} />
+        <Route path="/models/growth/retail"                  element={<RetailSalesDashboardPage />} />
+        <Route path="/models/growth/npce"                   element={<NPCEDashboardPage />} />
+        <Route path="/models/growth/rpce"                   element={<RPCEDashboardPage />} />
+        <Route path="/models/growth/gdi"                    element={<GDIDashboardPage />} />
+        <Route path="/models/growth/consumer-health"       element={<ConsumerHealthDashboardPage />} />
+        <Route path="/models/growth/trade"                element={<TradeDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>

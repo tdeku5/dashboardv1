@@ -150,7 +150,7 @@ function CustomTooltip({ active, payload, label }: any) {
   const monthLabel = dayIndexToMonth(label as number)
 
   const entries = payload
-    .filter((p: any) => p.value != null)
+    .filter((p: any) => p.value != null && !String(p.dataKey).endsWith('_ma'))
     .sort((a: any, b: any) => a.value - b.value)
 
   return (
@@ -183,6 +183,16 @@ export function FiscalFlowsPage() {
   const [error, setError] = useState<string | null>(null)
   const [taxData, setTaxData] = useState<TaxReceiptsResponse | null>(null)
   const [taxLoading, setTaxLoading] = useState(true)
+  const [hiddenFYs, setHiddenFYs] = useState<Set<string>>(new Set())
+
+  const toggleFY = (fy: string) => {
+    setHiddenFYs(prev => {
+      const next = new Set(prev)
+      if (next.has(fy)) next.delete(fy)
+      else next.add(fy)
+      return next
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -235,9 +245,25 @@ export function FiscalFlowsPage() {
       }
     }
 
-    return Array.from(byDay.entries())
+    const sorted = Array.from(byDay.entries())
       .sort((a, b) => a[0] - b[0])
-      .map(([day, vals]) => ({ dayIndex: day, ...vals }))
+      .map(([day, vals]) => ({ dayIndex: day, ...vals } as Record<string, number>))
+
+    // Compute 7-day simple moving average for each FY series
+    for (const line of fyLines) {
+      const key = `FY${line.fy}`
+      const maKey = `FY${line.fy}_ma`
+      const window: number[] = []
+      for (const row of sorted) {
+        const v = row[key]
+        if (v == null) continue
+        window.push(v)
+        if (window.length > 7) window.shift()
+        row[maKey] = window.reduce((s, x) => s + x, 0) / window.length
+      }
+    }
+
+    return sorted
   }, [rawData, fyLines])
 
   const stats = useMemo(() => {
@@ -257,8 +283,11 @@ export function FiscalFlowsPage() {
     }
 
     const delta = prevAtSameDay != null ? currentYtd - prevAtSameDay : null
+    const pctDelta = prevAtSameDay != null && prevAtSameDay !== 0
+      ? ((currentYtd - prevAtSameDay) / Math.abs(prevAtSameDay)) * 100
+      : null
 
-    return { currentYtd, delta }
+    return { currentYtd, delta, pctDelta }
   }, [rawData])
 
   return (
@@ -281,16 +310,11 @@ export function FiscalFlowsPage() {
       </nav>
 
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Cumulative Net Fiscal Flows</div>
-          <div className={styles.pageSub}>(ΔTGA − ΔDebt) — Federal Deficit Proxy</div>
-        </div>
-
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <div>
               <div className={styles.sectionTitle}>Cumulative Daily Net Fiscal Flows</div>
-              <div className={styles.sectionSub}>$ billions · FY2016–FY{CURRENT_FY}</div>
+              <div className={styles.sectionSub}>$ billions · (ΔTGA − ΔDebt)</div>
             </div>
           </div>
 
@@ -298,13 +322,21 @@ export function FiscalFlowsPage() {
           <div className={styles.legendRow}>
             <div className={styles.legend}>
               {fyLines.map(l => (
-                <span key={l.fy} className={styles.legendItem}>
+                <span
+                  key={l.fy}
+                  className={styles.legendItem}
+                  onClick={() => toggleFY(l.fy)}
+                  style={{
+                    cursor: 'pointer',
+                    opacity: hiddenFYs.has(l.fy) ? 0.3 : 1,
+                  }}
+                >
                   <span
                     className={styles.legendLine}
                     style={{
                       background: l.color,
                       height: l.fy === CURRENT_FY ? 3 : 2,
-                      opacity: l.opacity,
+                      opacity: hiddenFYs.has(l.fy) ? 0.3 : l.opacity,
                     }}
                   />
                   FY{l.fy}
@@ -350,18 +382,32 @@ export function FiscalFlowsPage() {
                     />
                     <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
                     <Tooltip content={<CustomTooltip />} />
-                    {fyLines.map(l => (
-                      <Line
-                        key={l.fy}
-                        dataKey={`FY${l.fy}`}
-                        stroke={l.color}
-                        strokeOpacity={l.opacity}
-                        strokeWidth={l.width}
-                        dot={false}
-                        connectNulls={false}
-                        isAnimationActive={false}
-                      />
-                    ))}
+                    {fyLines.flatMap(l => {
+                      const hidden = hiddenFYs.has(l.fy)
+                      return [
+                        <Line
+                          key={`${l.fy}_raw`}
+                          dataKey={`FY${l.fy}`}
+                          stroke={l.color}
+                          strokeOpacity={hidden ? 0 : l.opacity * 0.6}
+                          strokeWidth={0.8}
+                          strokeDasharray="2 3"
+                          dot={false}
+                          connectNulls={false}
+                          isAnimationActive={false}
+                        />,
+                        <Line
+                          key={`${l.fy}_ma`}
+                          dataKey={`FY${l.fy}_ma`}
+                          stroke={l.color}
+                          strokeOpacity={hidden ? 0 : l.opacity}
+                          strokeWidth={l.width}
+                          dot={false}
+                          connectNulls={false}
+                          isAnimationActive={false}
+                        />,
+                      ]
+                    })}
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -386,7 +432,7 @@ export function FiscalFlowsPage() {
                       }}
                     >
                       {stats.delta != null
-                        ? `${stats.delta > 0 ? '+' : ''}${fmtBillionsExact(stats.delta)}`
+                        ? `${stats.delta > 0 ? '+' : ''}${fmtBillionsExact(stats.delta)}${stats.pctDelta != null ? ` (${stats.pctDelta > 0 ? '+' : ''}${stats.pctDelta.toFixed(1)}%)` : ''}`
                         : '—'}
                     </div>
                   </div>

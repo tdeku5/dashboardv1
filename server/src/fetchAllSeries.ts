@@ -154,6 +154,8 @@ export const ALL_SERIES: string[] = [
   'BOPTIMP', 'BOPGIMP', 'BOPSIMP',
   'ITMMARM133S', 'ITMTRAM133S', 'ITMTAEM133S', 'ITMINSM133S', 'ITMFISM133S',
   'ITMCIPM133S', 'ITMTCIM133S', 'ITMOBSM133S', 'ITMGGSM133S',
+  // UMich consumer sentiment
+  'UMCSENT',
 ]
 
 export const STALE_HOURS = 20

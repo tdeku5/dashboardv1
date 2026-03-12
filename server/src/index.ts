@@ -19,6 +19,7 @@ import { fiscalRouter } from './routes/fiscal'
 import { fiscalFlowsRouter } from './routes/fiscalFlows'
 import { syncDtsFiscalFlows } from './dtsFiscalFlows'
 import { syncDtsTaxDeposits } from './dtsTaxDeposits'
+import { censusTradeRouter, isCensusTradeStale, fetchAndStoreCensusTrade } from './routes/census-trade'
 
 dotenv.config({ path: '../.env' })
 
@@ -36,6 +37,7 @@ app.use('/api/sce',      sceRouter)
 app.use('/api/umich',    umichRouter)
 app.use('/api/fiscal',   fiscalRouter)
 app.use('/api/fiscal-flows', fiscalFlowsRouter)
+app.use('/api/census-trade', censusTradeRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -99,6 +101,13 @@ async function startup(): Promise<void> {
   syncDtsTaxDeposits().catch(err =>
     console.error('[startup] DTS tax deposits sync error:', err)
   )
+
+  // Census trade end-use data sync (non-blocking)
+  if (isCensusTradeStale()) {
+    fetchAndStoreCensusTrade().catch(err =>
+      console.error('[startup] Census trade ingestion error:', err)
+    )
+  }
 
   // FRED: full refresh every day at 06:00 UTC (including on-demand series)
   cron.schedule('0 6 * * *', () => {

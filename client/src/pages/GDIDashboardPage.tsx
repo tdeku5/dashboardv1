@@ -15,8 +15,7 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
-import { fetchBEAGdpContrib } from '../lib/bea'
-import styles from './RGDPDashboardPage.module.css'
+import styles from './GDIDashboardPage.module.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,237 +23,85 @@ type WD         = { date: string; value: number }
 type AllData    = Record<string, WD[]>
 type BrushState = { start: number; end: number; period: string }
 
-type GdpContribRow = {
-  date: string
-  [key: string]: number | null | string
+type ContribRow = Record<string, string | number | null> & { date: string; line: number | null }
+
+// ── GDI Hierarchy ─────────────────────────────────────────────────────────────
+
+interface GdiItem {
+  id:      string
+  label:   string
+  depth:   number
+  divider?: string
 }
 
-// ── Real GDP hierarchy (chained 2017 $) ───────────────────────────────────────
-
-interface RgdpItem {
-  id:    string
-  label: string
-  depth: number
-}
-
-const RGDP_HIERARCHY: RgdpItem[] = [
-  { id: 'GDPC1',             label: 'Total Real GDP',                                       depth: 0 },
-  { id: 'PCECC96',           label: 'Personal Consumption Expenditures',                    depth: 1 },
-  { id: 'DGDSRX1Q020SBEA',  label: 'Goods',                                                depth: 2 },
-  { id: 'PCDGCC96',          label: 'Durable Goods',                                        depth: 3 },
-  { id: 'DMOTRX1Q020SBEA',  label: 'Motor vehicles and parts',                             depth: 4 },
-  { id: 'DFDHRX1Q020SBEA',  label: 'Furnishings and durable household equipment',          depth: 4 },
-  { id: 'DREQRX1Q020SBEA',  label: 'Recreational goods and vehicles',                      depth: 4 },
-  { id: 'DODGRX1Q020SBEA',  label: 'Other durable goods',                                  depth: 4 },
-  { id: 'PCNDGC96',          label: 'Nondurable Goods',                                     depth: 3 },
-  { id: 'DFXARX1Q020SBEA',  label: 'Food and beverages for off-premises consumption',      depth: 4 },
-  { id: 'DCLORX1Q020SBEA',  label: 'Clothing and footwear',                                depth: 4 },
-  { id: 'DGOERX1Q020SBEA',  label: 'Gasoline and other energy goods',                      depth: 4 },
-  { id: 'DONGRX1Q020SBEA',  label: 'Other nondurable goods',                               depth: 4 },
-  { id: 'PCESVC96',          label: 'Services',                                             depth: 2 },
-  { id: 'DHCERX1Q020SBEA',  label: 'Household consumption expenditures (for services)',    depth: 3 },
-  { id: 'DHUTRX1Q020SBEA',  label: 'Housing and utilities',                                depth: 4 },
-  { id: 'DHLCRX1Q020SBEA',  label: 'Health care',                                          depth: 4 },
-  { id: 'DTRSRX1Q020SBEA',  label: 'Transportation services',                              depth: 4 },
-  { id: 'DRCARX1Q020SBEA',  label: 'Recreation services',                                  depth: 4 },
-  { id: 'DFSARX1Q020SBEA',  label: 'Food services and accommodations',                     depth: 4 },
-  { id: 'DIFSRX1Q020SBEA',  label: 'Financial services and accommodations',                depth: 4 },
-  { id: 'DOTSRX1Q020SBEA',  label: 'Other services',                                       depth: 4 },
-  { id: 'GPDIC1',            label: 'Gross Private Domestic Investment',                    depth: 1 },
-  { id: 'FPIC1',             label: 'Fixed Investment',                                     depth: 2 },
-  { id: 'PNFIC1',            label: 'Nonresidential',                                      depth: 3 },
-  { id: 'B009RX1Q020SBEA',  label: 'Structures',                                           depth: 4 },
-  { id: 'Y033RX1Q020SBEA',  label: 'Equipment',                                            depth: 4 },
-  { id: 'Y034RX1Q020SBEA',  label: 'Information processing equipment',                     depth: 5 },
-  { id: 'A680RX1Q020SBEA',  label: 'Industrial equipment',                                 depth: 5 },
-  { id: 'A681RX1Q020SBEA',  label: 'Transportation equipment',                             depth: 5 },
-  { id: 'A862RX1Q020SBEA',  label: 'Other equipment',                                      depth: 5 },
-  { id: 'Y001RX1Q020SBEA',  label: 'Intellectual Property Products',                       depth: 4 },
-  { id: 'B985RX1Q020SBEA',  label: 'Software',                                             depth: 5 },
-  { id: 'Y006RX1Q020SBEA',  label: 'Research and development',                             depth: 5 },
-  { id: 'Y020RX1Q020SBEA',  label: 'Entertainment, literary, and artistic originals',      depth: 5 },
-  { id: 'PRFIC1',            label: 'Residential',                                          depth: 3 },
-  { id: 'CBIC1',             label: 'Change in Private Inventories',                        depth: 2 },
-  { id: 'NETEXC',            label: 'Net Exports of Goods and Services',                    depth: 1 },
-  { id: 'EXPGSC1',           label: 'Exports',                                              depth: 2 },
-  { id: 'A253RX1Q020SBEA',  label: 'Goods',                                                depth: 3 },
-  { id: 'A646RX1Q020SBEA',  label: 'Services',                                             depth: 3 },
-  { id: 'IMPGSC1',           label: 'Imports',                                              depth: 2 },
-  { id: 'A255RX1Q020SBEA',  label: 'Goods',                                                depth: 3 },
-  { id: 'B656RX1Q020SBEA',  label: 'Services',                                             depth: 3 },
-  { id: 'GCEC1',             label: "Gov't Consumption Expenditures and Gross Investment",  depth: 1 },
-  { id: 'FGCEC1',            label: 'Federal',                                              depth: 2 },
-  { id: 'A824RX1Q020SBEA',  label: 'National Defense',                                     depth: 3 },
-  { id: 'A825RX1Q020SBEA',  label: 'Nondefense',                                           depth: 3 },
-  { id: 'SLCEC1',            label: 'State and Local',                                      depth: 2 },
+const GDI_HIERARCHY: GdiItem[] = [
+  { id: 'GDI',              label: 'Gross Domestic Income',                                        depth: 0 },
+  { id: 'GDICOMP',          label: 'Compensation of Employees',                                    depth: 1 },
+  { id: 'A4102C1Q027SBEA',  label: 'Wages & Salaries',                                             depth: 2 },
+  { id: 'W270RC1Q027SBEA',  label: 'To Persons',                                                   depth: 3 },
+  { id: 'B4189C1Q027SBEA',  label: 'To the RoW',                                                   depth: 3 },
+  { id: 'A038RC1Q027SBEA',  label: 'Supplements to Wages & Salaries',                              depth: 2 },
+  { id: 'GDITAXES',         label: 'Taxes on Production & Imports',                                depth: 1 },
+  { id: 'GDISUBS',          label: '- Subsidies',                                                  depth: 1 },
+  { id: 'GDINOS',           label: 'Net Operating Surplus',                                        depth: 1 },
+  { id: 'W260RC1Q027SBEA',  label: 'Private Enterprises',                                          depth: 2 },
+  { id: 'W272RC1Q027SBEA',  label: 'Net interest and misc. payments, domestic industries',         depth: 3 },
+  { id: 'B029RC1Q027SBEA',  label: 'Business current transfer payments (net)',                     depth: 3 },
+  { id: 'PROPINC',          label: "Proprietor's Income w IVCCadj",                                depth: 3 },
+  { id: 'RENTIN',           label: 'Rental Income w CCadj',                                        depth: 3 },
+  { id: 'A445RC1Q027SBEA',  label: 'Corporate Profits w IVCCadj',                                  depth: 3 },
+  { id: 'A054RC1Q027SBEA',  label: 'Taxes on Corporate Income',                                    depth: 4 },
+  { id: 'W273RC1Q027SBEA',  label: 'Profits After Tax w IVCCadj',                                  depth: 4 },
+  { id: 'A449RC1Q027SBEA',  label: 'Net Dividends',                                                depth: 5 },
+  { id: 'W274RC1Q027SBEA',  label: 'Undistributed Corporate Profits w IVCCadj',                    depth: 5 },
+  { id: 'A108RC1Q027SBEA',  label: 'Current Surplus of Government Enterprises',                    depth: 2 },
+  { id: 'COFC',             label: 'Consumption of Fixed Capital',                                 depth: 1 },
+  { id: 'A024RC1Q027SBEA',  label: 'Private',                                                      depth: 2 },
+  { id: 'A264RC1Q027SBEA',  label: 'Government',                                                   depth: 2 },
+  { id: 'A261RX1Q020SBEA',  label: 'Real GDI*',                                                    depth: 0, divider: '── Real ──' },
 ]
 
-const ALL_SERIES_IDS = RGDP_HIERARCHY.map(n => n.id)
+const ALL_SERIES_IDS = GDI_HIERARCHY.map(n => n.id)
 
-// ── BEA Table 1.5.2 line numbers ─────────────────────────────────────────────
+const REAL_GDI_ID = 'A261RX1Q020SBEA'
 
-const GDP_CONTRIB_LINES: number[] = [
-  1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
-  16, 17, 18, 19, 20, 21, 22,
-  26, 27, 28, 29, 30, 34, 35, 36, 37, 38, 39, 40, 41,
-  42, 45, 52, 53, 54, 57, 60,
-]
+// ── Contribution item configs ────────────────────────────────────────────────
 
-// ── Contribution chart pair definitions ──────────────────────────────────────
+const GDI_TOP_ITEMS = [
+  { id: 'comp',    label: 'Compensation of Employees',    color: '#93c5fd' },
+  { id: 'taxes',   label: 'Taxes on Production & Imports', color: '#fdba74' },
+  { id: 'subs',    label: '-Subsidies',                   color: '#c4b5fd' },
+  { id: 'nos',     label: 'Net Operating Surplus',        color: '#86efac' },
+  { id: 'cofc',    label: 'Consumption of Fixed Capital', color: '#fca5a5' },
+] as const
 
-interface ContribSeriesItem {
-  id:    string   // key in GdpContribRow = `L${lineNumber}`
-  line:  number   // BEA line number
-  label: string
-  color: string
-}
+const GDI_NOS_ITEMS = [
+  { id: 'netInterest', label: 'Net Interest & Misc. Payments',        color: '#fca5a5' },
+  { id: 'bizTransfer', label: 'Business Current Transfer Payments',   color: '#86efac' },
+  { id: 'propInc',     label: "Proprietor's Income",                  color: '#fdba74' },
+  { id: 'rentInc',     label: 'Rental Income',                        color: '#c4b5fd' },
+  { id: 'corpProf',    label: 'Corporate Profits',                    color: '#93c5fd' },
+] as const
 
-interface ContribPairDef {
-  key:       string
-  title:     string
-  lineLine:  number   // BEA line number for white parent line
-  lineLabel: string
-  items:     ContribSeriesItem[]
-}
+const GDI_CORP_PROFIT_ITEMS = [
+  { id: 'corpTax',       label: 'Taxes',          color: '#93c5fd' },
+  { id: 'profitsAfTax',  label: 'Profits After Tax', color: '#fca5a5' },
+] as const
 
-const CONTRIB_PAIRS: ContribPairDef[][] = [
-  // Pair 1 — GDP Components
-  [
-    {
-      key: 'gdpC1L', title: '%-pt Contributions to rGDP',
-      lineLine: 1, lineLabel: 'GDP',
-      items: [
-        { id: 'L2',  line: 2,  label: 'PCE',                        color: '#60a5fa' },
-        { id: 'L27', line: 27, label: 'Fixed Investment',            color: '#f59e0b' },
-        { id: 'L42', line: 42, label: 'Change in Priv. Inventories', color: '#4ade80' },
-        { id: 'L52', line: 52, label: "Gov't Spending",              color: '#a78bfa' },
-        { id: 'L45', line: 45, label: 'Net Exports',                 color: '#f87171' },
-      ],
-    },
-    {
-      key: 'gdpC1R', title: '%-pt Contributions to rGDP \u2013 PCE',
-      lineLine: 2, lineLabel: 'PCE',
-      items: [
-        { id: 'L14', line: 14, label: 'Services', color: '#60a5fa' },
-        { id: 'L3',  line: 3,  label: 'Goods',    color: '#4ade80' },
-      ],
-    },
-  ],
-  // Pair 2 — PCE Breakdown
-  [
-    {
-      key: 'gdpC2L', title: '%-pt Contributions to rGDP \u2013 HH Services Consumption',
-      lineLine: 14, lineLabel: 'Services',
-      items: [
-        { id: 'L16', line: 16, label: 'Housing & Utilities',            color: '#60a5fa' },
-        { id: 'L17', line: 17, label: 'Health Care',                    color: '#4ade80' },
-        { id: 'L18', line: 18, label: 'Transportation Services',        color: '#f59e0b' },
-        { id: 'L19', line: 19, label: 'Recreation Services',            color: '#f87171' },
-        { id: 'L20', line: 20, label: 'Food Services & Accommodations', color: '#a78bfa' },
-        { id: 'L21', line: 21, label: 'Financial Services',             color: '#2dd4bf' },
-        { id: 'L22', line: 22, label: 'Other Services',                 color: '#facc15' },
-      ],
-    },
-    {
-      key: 'gdpC2R', title: '%-pt Contributions to rGDP \u2013 Goods PCE',
-      lineLine: 3, lineLabel: 'Goods',
-      items: [
-        { id: 'L4', line: 4, label: 'Durables',    color: '#fdba74' },
-        { id: 'L9', line: 9, label: 'Nondurables', color: '#a78bfa' },
-      ],
-    },
-  ],
-  // Pair 3 — Goods Detail
-  [
-    {
-      key: 'gdpC3L', title: '%-pt Contributions to rGDP \u2013 Durable Goods PCE',
-      lineLine: 4, lineLabel: 'Durable Goods',
-      items: [
-        { id: 'L5', line: 5, label: 'Motor Vehicles & Parts',       color: '#60a5fa' },
-        { id: 'L6', line: 6, label: 'Furnishings & HH Equipment',   color: '#4ade80' },
-        { id: 'L7', line: 7, label: 'Recreational Goods & Vehicles', color: '#f59e0b' },
-        { id: 'L8', line: 8, label: 'Other Durable Goods',          color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC3R', title: '%-pt Contributions to rGDP \u2013 Nondurable Goods PCE',
-      lineLine: 9, lineLabel: 'Nondurable Goods',
-      items: [
-        { id: 'L10', line: 10, label: 'Food & Beverage (Off-Premise)', color: '#60a5fa' },
-        { id: 'L11', line: 11, label: 'Clothing & Footwear',           color: '#4ade80' },
-        { id: 'L12', line: 12, label: 'Gas & Other Energy Goods',      color: '#f59e0b' },
-        { id: 'L13', line: 13, label: 'Other Nondurable Goods',        color: '#a78bfa' },
-      ],
-    },
-  ],
-  // Pair 4 — Investment
-  [
-    {
-      key: 'gdpC4L', title: '%-pt Contributions to rGDP \u2013 Fixed Investment',
-      lineLine: 27, lineLabel: 'Fixed Investment',
-      items: [
-        { id: 'L28', line: 28, label: 'Nonresidential', color: '#f59e0b' },
-        { id: 'L41', line: 41, label: 'Residential',    color: '#60a5fa' },
-      ],
-    },
-    {
-      key: 'gdpC4R', title: '%-pt Contributions to rGDP \u2013 Nonresidential Investment',
-      lineLine: 28, lineLabel: 'Nonresidential',
-      items: [
-        { id: 'L29', line: 29, label: 'Structures',  color: '#60a5fa' },
-        { id: 'L30', line: 30, label: 'Equipment',   color: '#4ade80' },
-        { id: 'L37', line: 37, label: 'IP Products', color: '#f87171' },
-      ],
-    },
-  ],
-  // Pair 5 — Equipment & IP
-  [
-    {
-      key: 'gdpC5L', title: '%-pt Contributions to rGDP \u2013 Equipment Investment',
-      lineLine: 30, lineLabel: 'Equipment',
-      items: [
-        { id: 'L31', line: 31, label: 'Information Processing', color: '#60a5fa' },
-        { id: 'L34', line: 34, label: 'Industrial',             color: '#4ade80' },
-        { id: 'L35', line: 35, label: 'Transportation',         color: '#f59e0b' },
-        { id: 'L36', line: 36, label: 'Other',                  color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC5R', title: '%-pt Contributions to rGDP \u2013 IP Investment',
-      lineLine: 37, lineLabel: 'IP Products',
-      items: [
-        { id: 'L38', line: 38, label: 'Software',                                    color: '#60a5fa' },
-        { id: 'L39', line: 39, label: 'R&D',                                         color: '#4ade80' },
-        { id: 'L40', line: 40, label: 'Entertainment, Literary, & Artistic Originals', color: '#f59e0b' },
-      ],
-    },
-  ],
-  // Pair 6 — Government
-  [
-    {
-      key: 'gdpC6L', title: "%-pt Contributions to rGDP \u2013 Gov't Spending",
-      lineLine: 52, lineLabel: "Gov't Spending",
-      items: [
-        { id: 'L53', line: 53, label: 'Federal',       color: '#4ade80' },
-        { id: 'L60', line: 60, label: 'State & Local', color: '#a78bfa' },
-      ],
-    },
-    {
-      key: 'gdpC6R', title: "%-pt Contributions to rGDP \u2013 Federal Gov't Spending",
-      lineLine: 53, lineLabel: "Federal Gov't Spending",
-      items: [
-        { id: 'L54', line: 54, label: 'Defense',    color: '#60a5fa' },
-        { id: 'L57', line: 57, label: 'Nondefense', color: '#f87171' },
-      ],
-    },
-  ],
-]
+const GDI_PROFITS_AFT_TAX_ITEMS = [
+  { id: 'netDiv',    label: 'Net Dividends',                    color: '#86efac' },
+  { id: 'undistrib', label: 'Undistributed Corporate Profits',  color: '#c4b5fd' },
+] as const
 
-const ALL_CONTRIB_KEYS = CONTRIB_PAIRS.flat().map(p => p.key) as ContribChartKey[]
+const GDI_COFC_ITEMS = [
+  { id: 'cofcPriv', label: 'Private',    color: '#93c5fd' },
+  { id: 'cofcGov',  label: 'Government', color: '#fdba74' },
+] as const
 
 // ── Chart constants ──────────────────────────────────────────────────────────
 
 const TICK = { fontSize: 11, fontFamily: 'var(--font-mono)', fill: '#64748B' }
+const CONTRIB_CM = { top: 8, right: 16, bottom: 28, left: 62 } as const
 
 const TOOLTIP_STYLE = {
   contentStyle: {
@@ -291,16 +138,20 @@ const QUICK_PERIODS_Q = [
   { label: 'Max', count: Infinity },
 ] as const
 
-const CONTRIB_CM = { top: 8, right: 16, bottom: 28, left: 62 } as const
-
-// ── Chart key types ──────────────────────────────────────────────────────────
+// ── Explorer chart keys ──────────────────────────────────────────────────────
 
 type ExplorerChartKey = 'xLevel' | 'xRegime' | 'xYoyDelta' | 'xQoq' | 'xAnnQoq'
-type ContribChartKey  = 'gdpC1L' | 'gdpC1R' | 'gdpC2L' | 'gdpC2R' | 'gdpC3L' | 'gdpC3R'
-                      | 'gdpC4L' | 'gdpC4R' | 'gdpC5L' | 'gdpC5R' | 'gdpC6L' | 'gdpC6R'
-type ChartKey = ExplorerChartKey | ContribChartKey
 
-const EXPLORER_KEYS: ExplorerChartKey[] = ['xLevel', 'xRegime', 'xYoyDelta', 'xQoq', 'xAnnQoq']
+// ── Contribution chart keys ──────────────────────────────────────────────────
+
+type ContribChartKey =
+  | 'gdiTopQoq' | 'gdiTopYoy'
+  | 'gdiNosQoq' | 'gdiNosYoy'
+  | 'gdiCorpQoq' | 'gdiCorpYoy'
+  | 'gdiPATQoq' | 'gdiPATYoy'
+  | 'gdiCofcQoq' | 'gdiCofcYoy'
+
+type ChartKey = ExplorerChartKey | ContribChartKey
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 
@@ -324,26 +175,16 @@ function fmtBillions(v: number): string {
   return `$${v.toFixed(0)}B`
 }
 
+function fmtIndex(v: number): string {
+  return v.toFixed(1)
+}
+
 function fmtPctTick(v: number): string {
   return `${v.toFixed(1)}%`
 }
 
 function fmtPctTooltip(v: number): string {
   return `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
-}
-
-/** "2024-01-01" -> "Q1 2024" */
-function fmtQuarterDate(d: string): string {
-  const [y, m] = d.split('-')
-  const q = Math.ceil(parseInt(m) / 3)
-  return `Q${q} ${y}`
-}
-
-/** "2024-01-01" -> "Q1 '24" */
-function fmtAxisQuarter(d: string): string {
-  const [y, m] = d.split('-')
-  const q = Math.ceil(parseInt(m) / 3)
-  return `Q${q} '${y.slice(2)}`
 }
 
 // ── Compute helpers ──────────────────────────────────────────────────────────
@@ -415,6 +256,43 @@ function computeRegimes(
   })
 }
 
+// ── Contribution helpers ─────────────────────────────────────────────────────
+
+function makeMap(data: WD[] | undefined): Map<string, number> {
+  return new Map((data ?? []).map(d => [d.date, d.value]))
+}
+
+function buildGDIContribData(
+  parentData: WD[],
+  compMaps: Record<string, Map<string, number>>,
+  lag: number,
+): ContribRow[] {
+  const parentMap = new Map(parentData.map(d => [d.date, d.value]))
+  const compKeys = Object.keys(compMaps)
+  return parentData.map((pt, i) => {
+    if (i < lag) {
+      const row: ContribRow = { date: pt.date, line: null }
+      for (const k of compKeys) row[k] = null
+      return row
+    }
+    const priorDate = parentData[i - lag].date
+    const pNow   = parentMap.get(pt.date)
+    const pPrior = parentMap.get(priorDate)
+    const contrib = (cMap: Map<string, number>): number | null => {
+      const cNow   = cMap.get(pt.date)
+      const cPrior = cMap.get(priorDate)
+      if (cNow == null || cPrior == null || cPrior === 0 || pPrior == null || pPrior === 0) return null
+      return (cPrior / pPrior) * ((cNow / cPrior) - 1) * 100
+    }
+    const row: ContribRow = {
+      date: pt.date,
+      line: (pNow != null && pPrior != null && pPrior !== 0) ? (pNow / pPrior - 1) * 100 : null,
+    }
+    for (const [k, m] of Object.entries(compMaps)) row[k] = contrib(m)
+    return row
+  })
+}
+
 function contribNiceTicks(min: number, max: number, target = 6): number[] {
   if (min === max) return [min]
   const range     = max - min
@@ -429,56 +307,29 @@ function contribNiceTicks(min: number, max: number, target = 6): number[] {
   return ticks
 }
 
-// ── QuickSelectRow ────────────────────────────────────────────────────────────
+// ── GDIContribTooltip ────────────────────────────────────────────────────────
 
-function QuickSelectRow({
-  period,
-  onSelect,
-  periods,
-}: {
-  period:   string
-  onSelect: (label: string, count: number) => void
-  periods:  readonly { label: string; count: number }[]
-}) {
-  return (
-    <div className={styles.quickSelectRow}>
-      <span className={styles.quickSelectLabel}>Range</span>
-      {periods.map(p => (
-        <button
-          key={p.label}
-          type="button"
-          className={`${styles.qsBtn} ${period === p.label ? styles.qsBtnActive : ''}`}
-          onClick={() => onSelect(p.label, p.count)}
-        >
-          {p.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ── GdpContribTooltip ─────────────────────────────────────────────────────────
-
-function GdpContribTooltip({
+function GDIContribTooltip({
   row,
-  activeItems,
-  showLine,
-  lineLabel,
-  lineKey,
+  activeSeries,
   mouseX,
   mouseY,
   isRightHalf,
+  seriesItems,
+  lineKey,
+  lineLabel,
 }: {
-  row:           GdpContribRow
-  activeItems:   readonly ContribSeriesItem[]
-  showLine:      boolean
-  lineLabel:     string
-  lineKey:       string
+  row:           ContribRow
+  activeSeries:  Set<string>
   mouseX:        number
   mouseY:        number
   isRightHalf:   boolean
+  seriesItems:   readonly { id: string; label: string; color: string }[]
+  lineKey:       string
+  lineLabel:     string
 }) {
-  const items = [...activeItems]
+  const activeItems = seriesItems.filter(s => activeSeries.has(s.id))
+  const items = activeItems
     .map(s => ({ ...s, value: row[s.id] as number | null }))
     .filter(s => s.value != null)
     .sort((a, b) => Math.abs(b.value!) - Math.abs(a.value!))
@@ -487,6 +338,7 @@ function GdpContribTooltip({
     ? { right: window.innerWidth - mouseX + 14 }
     : { left:  mouseX + 14 }
 
+  const showLine = activeSeries.has(lineKey)
   const lineVal = row[lineKey] as number | null
 
   return (
@@ -505,7 +357,7 @@ function GdpContribTooltip({
       zIndex: 1000,
     }}>
       <div style={{ color: '#94A3B8', marginBottom: 6, letterSpacing: '0.05em' }}>
-        {fmtQuarterDate(row.date as string)}
+        {fmtFullDate(row.date)}
       </div>
       {items.map(item => (
         <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -528,7 +380,7 @@ function GdpContribTooltip({
           <span style={{ width: 14, height: 2, background: '#fff', display: 'inline-block', flexShrink: 0 }} />
           <span style={{ color: '#94A3B8', flex: 1 }}>{lineLabel}</span>
           <span style={{ color: lineVal >= 0 ? '#4ade80' : '#f87171' }}>
-            {lineVal >= 0 ? '+' : ''}{lineVal.toFixed(2)} pp
+            {lineVal >= 0 ? '+' : ''}{lineVal.toFixed(2)}%
           </span>
         </div>
       )}
@@ -536,28 +388,28 @@ function GdpContribTooltip({
   )
 }
 
-// ── GdpContribChart (custom SVG diverging stacked bar) ────────────────────────
+// ── GDIContribChart (custom SVG diverging stacked bar) ───────────────────────
 
-function GdpContribChart({
+function GDIContribChart({
   data,
   visibleStart,
   visibleEnd,
   activeSeries,
+  lineWidth = 1.5,
+  clipPrefix = 'gdicontrib',
   seriesItems,
   lineKey,
   lineLabel,
-  lineWidth = 1.5,
-  clipPrefix = 'gdpcontrib',
 }: {
-  data:           GdpContribRow[]
+  data:           ContribRow[]
   visibleStart:   number
   visibleEnd:     number
   activeSeries:   Set<string>
-  seriesItems:    readonly ContribSeriesItem[]
-  lineKey:        string
-  lineLabel:      string
   lineWidth?:     number
   clipPrefix?:    string
+  seriesItems:    readonly { id: string; label: string; color: string }[]
+  lineKey:        string
+  lineLabel:      string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [size, setSize]         = useState({ width: 600, height: 400 })
@@ -589,7 +441,7 @@ function GdpContribChart({
 
   const activeItems = useMemo(
     () => seriesItems.filter(s => activeSeries.has(s.id)),
-    [seriesItems, activeSeries]
+    [activeSeries, seriesItems]
   )
   const showLine = activeSeries.has(lineKey)
 
@@ -603,9 +455,8 @@ function GdpContribChart({
         if (v > 0) posStack += v; else negStack += v
       }
       if (showLine && row[lineKey] != null) {
-        const lv = row[lineKey] as number
-        posStack = Math.max(posStack, lv)
-        negStack = Math.min(negStack, lv)
+        posStack = Math.max(posStack, row[lineKey] as number)
+        negStack = Math.min(negStack, row[lineKey] as number)
       }
       if (posStack > max) max = posStack
       if (negStack < min) min = negStack
@@ -651,7 +502,7 @@ function GdpContribChart({
     })
 
     const pts = showLine
-      ? cols.filter(c => c.row[lineKey] != null).map(c => ({ cx: c.cx, cy: toY(c.row[lineKey] as number) }))
+      ? cols.filter(c => (c.row[lineKey] as number | null) != null).map(c => ({ cx: c.cx, cy: toY(c.row[lineKey] as number) }))
       : []
 
     return { columns: cols, linePts: pts }
@@ -665,7 +516,7 @@ function GdpContribChart({
     visible.forEach((row, i) => {
       const cx = CONTRIB_CM.left + (i + 0.5) * colW
       if (cx - lastX >= 60) {
-        ticks.push({ label: fmtAxisQuarter(row.date as string), cx })
+        ticks.push({ label: fmtAxisDate(row.date), cx })
         lastX = cx
       }
     })
@@ -740,7 +591,7 @@ function GdpContribChart({
           {columns.map(col =>
             col.rects.map(r => (
               <rect
-                key={`${(col.row.date as string)}-${r.id}`}
+                key={`${col.row.date}-${r.id}`}
                 x={col.cx - barW / 2}
                 y={r.y}
                 width={barW}
@@ -789,17 +640,45 @@ function GdpContribChart({
       </svg>
 
       {hovCol && (
-        <GdpContribTooltip
+        <GDIContribTooltip
           row={hovCol.row}
-          activeItems={activeItems}
-          showLine={showLine}
-          lineLabel={lineLabel}
-          lineKey={lineKey}
+          activeSeries={activeSeries}
           mouseX={mousePos.x}
           mouseY={mousePos.y}
           isRightHalf={isRightHalf}
+          seriesItems={seriesItems}
+          lineKey={lineKey}
+          lineLabel={lineLabel}
         />
       )}
+    </div>
+  )
+}
+
+// ── QuickSelectRow ────────────────────────────────────────────────────────────
+
+function QuickSelectRow({
+  period,
+  onSelect,
+  periods,
+}: {
+  period:   string
+  onSelect: (label: string, count: number) => void
+  periods:  readonly { label: string; count: number }[]
+}) {
+  return (
+    <div className={styles.quickSelectRow}>
+      <span className={styles.quickSelectLabel}>Range</span>
+      {periods.map(p => (
+        <button
+          key={p.label}
+          type="button"
+          className={`${styles.qsBtn} ${period === p.label ? styles.qsBtnActive : ''}`}
+          onClick={() => onSelect(p.label, p.count)}
+        >
+          {p.label}
+        </button>
+      ))}
     </div>
   )
 }
@@ -808,8 +687,8 @@ function GdpContribChart({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function RGDPDashboardPage() {
-  // ── FRED data fetch ────────────────────────────────────────────────────────
+export function GDIDashboardPage() {
+  // ── Data fetch ────────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<AllData>({})
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -837,47 +716,22 @@ export function RGDPDashboardPage() {
     return () => { cancelled = true }
   }, [])
 
-  const gdp = allData['GDPC1'] ?? []
-
-  // ── BEA contribution data fetch ─────────────────────────────────────────
-  const [gdpContribData, setGdpContribData]       = useState<Map<number, WD[]>>(new Map())
-  const [gdpContribLoading, setGdpContribLoading] = useState(true)
-  const [gdpContribError, setGdpContribError]     = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const entries = await Promise.all(
-          GDP_CONTRIB_LINES.map(async (line) => {
-            const obs = await fetchBEAGdpContrib(line)
-            return [line, parseObs(obs)] as [number, WD[]]
-          })
-        )
-        if (cancelled) return
-        setGdpContribData(new Map(entries))
-      } catch (e) {
-        if (cancelled) return
-        setGdpContribError(e instanceof Error ? e.message : 'Failed to fetch BEA data')
-      } finally {
-        if (!cancelled) setGdpContribLoading(false)
-      }
-    }
-    load()
-    return () => { cancelled = true }
-  }, [])
+  const gdi = allData['GDI'] ?? []
 
   // ── Explorer state ────────────────────────────────────────────────────────
 
-  const [selectedId, setSelectedId] = useState('GDPC1')
+  const [selectedKey, setSelectedKey] = useState('GDI')
 
   const selectedItem = useMemo(
-    () => RGDP_HIERARCHY.find(n => n.id === selectedId),
-    [selectedId]
+    () => GDI_HIERARCHY.find(n => n.id === selectedKey),
+    [selectedKey]
   )
 
-  const selectedLabel = selectedItem?.label ?? 'Total Real GDP'
-  const selectedData  = useMemo(() => allData[selectedId] ?? [], [allData, selectedId])
+  const selectedFredId = selectedItem?.id ?? 'GDI'
+  const selectedLabel  = selectedItem?.label ?? 'GDI'
+  const selectedData   = useMemo(() => allData[selectedFredId] ?? [], [allData, selectedFredId])
+
+  const isRealGDI = selectedFredId === REAL_GDI_ID
 
   // Explorer user-controlled parameters
   const [regimeMa, setRegimeMa]       = useState(4)
@@ -896,8 +750,10 @@ export function RGDPDashboardPage() {
   const exQoQMa2       = useMemo(() => computeMA(exQoQ, qoqMa2), [exQoQ, qoqMa2])
 
   const exLevelData = useMemo(
-    () => selectedData.map(d => ({ date: d.date, value: d.value / 1000 })),
-    [selectedData]
+    () => isRealGDI
+      ? selectedData.map(d => ({ date: d.date, value: d.value }))
+      : selectedData.map(d => ({ date: d.date, value: d.value / 1000 })),
+    [selectedData, isRealGDI]
   )
 
   const exRegimeData = useMemo(
@@ -920,62 +776,30 @@ export function RGDPDashboardPage() {
     [exAnnQoQ]
   )
 
-  // ── Contribution chart data memos (12 charts) ──────────────────────────
+  // ── Contribution data memos ─────────────────────────────────────────────
 
-  const buildContribRows = useCallback((pairDef: ContribPairDef): GdpContribRow[] => {
-    const parentSeries = gdpContribData.get(pairDef.lineLine)
-    if (!parentSeries?.length) return []
-    const lk = `L${pairDef.lineLine}`
-    return parentSeries.map(pt => {
-      const row: GdpContribRow = { date: pt.date }
-      row[lk] = pt.value
-      for (const item of pairDef.items) {
-        const series = gdpContribData.get(item.line)
-        const match = series?.find(s => s.date === pt.date)
-        row[item.id] = match?.value ?? null
-      }
-      return row
-    })
-  }, [gdpContribData])
+  const gdiTopQoqData  = useMemo(() =>
+    buildGDIContribData(allData['GDI'] ?? [], { comp: makeMap(allData['GDICOMP']), taxes: makeMap(allData['GDITAXES']), subs: makeMap(allData['GDISUBS']), nos: makeMap(allData['GDINOS']), cofc: makeMap(allData['COFC']) }, 1)
+      .map(row => ({ ...row, subs: row.subs != null ? -(row.subs as number) : null })),
+  [allData])
+  const gdiTopYoyData  = useMemo(() =>
+    buildGDIContribData(allData['GDI'] ?? [], { comp: makeMap(allData['GDICOMP']), taxes: makeMap(allData['GDITAXES']), subs: makeMap(allData['GDISUBS']), nos: makeMap(allData['GDINOS']), cofc: makeMap(allData['COFC']) }, 4)
+      .map(row => ({ ...row, subs: row.subs != null ? -(row.subs as number) : null })),
+  [allData])
 
-  // Build one data array per chart
-  const contribDataMap = useMemo(() => {
-    const map = new Map<string, GdpContribRow[]>()
-    for (const pair of CONTRIB_PAIRS.flat()) {
-      map.set(pair.key, buildContribRows(pair))
-    }
-    return map
-  }, [buildContribRows])
+  const gdiNosQoqData  = useMemo(() => buildGDIContribData(allData['W260RC1Q027SBEA'] ?? [], { netInterest: makeMap(allData['W272RC1Q027SBEA']), bizTransfer: makeMap(allData['B029RC1Q027SBEA']), propInc: makeMap(allData['PROPINC']), rentInc: makeMap(allData['RENTIN']), corpProf: makeMap(allData['A445RC1Q027SBEA']) }, 1), [allData])
+  const gdiNosYoyData  = useMemo(() => buildGDIContribData(allData['W260RC1Q027SBEA'] ?? [], { netInterest: makeMap(allData['W272RC1Q027SBEA']), bizTransfer: makeMap(allData['B029RC1Q027SBEA']), propInc: makeMap(allData['PROPINC']), rentInc: makeMap(allData['RENTIN']), corpProf: makeMap(allData['A445RC1Q027SBEA']) }, 4), [allData])
 
-  // ── Contribution visibility states (12 charts) ─────────────────────────
+  const gdiCorpQoqData = useMemo(() => buildGDIContribData(allData['A445RC1Q027SBEA'] ?? [], { corpTax: makeMap(allData['A054RC1Q027SBEA']), profitsAfTax: makeMap(allData['W273RC1Q027SBEA']) }, 1), [allData])
+  const gdiCorpYoyData = useMemo(() => buildGDIContribData(allData['A445RC1Q027SBEA'] ?? [], { corpTax: makeMap(allData['A054RC1Q027SBEA']), profitsAfTax: makeMap(allData['W273RC1Q027SBEA']) }, 4), [allData])
 
-  const mkInitialVis = (def: ContribPairDef): Set<string> => {
-    const keys = def.items.map(s => s.id)
-    keys.push(`L${def.lineLine}`)
-    return new Set(keys)
-  }
+  const gdiPATQoqData  = useMemo(() => buildGDIContribData(allData['W273RC1Q027SBEA'] ?? [], { netDiv: makeMap(allData['A449RC1Q027SBEA']), undistrib: makeMap(allData['W274RC1Q027SBEA']) }, 1), [allData])
+  const gdiPATYoyData  = useMemo(() => buildGDIContribData(allData['W273RC1Q027SBEA'] ?? [], { netDiv: makeMap(allData['A449RC1Q027SBEA']), undistrib: makeMap(allData['W274RC1Q027SBEA']) }, 4), [allData])
 
-  const [visC1L, setVisC1L] = useState(() => mkInitialVis(CONTRIB_PAIRS[0][0]))
-  const [visC1R, setVisC1R] = useState(() => mkInitialVis(CONTRIB_PAIRS[0][1]))
-  const [visC2L, setVisC2L] = useState(() => mkInitialVis(CONTRIB_PAIRS[1][0]))
-  const [visC2R, setVisC2R] = useState(() => mkInitialVis(CONTRIB_PAIRS[1][1]))
-  const [visC3L, setVisC3L] = useState(() => mkInitialVis(CONTRIB_PAIRS[2][0]))
-  const [visC3R, setVisC3R] = useState(() => mkInitialVis(CONTRIB_PAIRS[2][1]))
-  const [visC4L, setVisC4L] = useState(() => mkInitialVis(CONTRIB_PAIRS[3][0]))
-  const [visC4R, setVisC4R] = useState(() => mkInitialVis(CONTRIB_PAIRS[3][1]))
-  const [visC5L, setVisC5L] = useState(() => mkInitialVis(CONTRIB_PAIRS[4][0]))
-  const [visC5R, setVisC5R] = useState(() => mkInitialVis(CONTRIB_PAIRS[4][1]))
-  const [visC6L, setVisC6L] = useState(() => mkInitialVis(CONTRIB_PAIRS[5][0]))
-  const [visC6R, setVisC6R] = useState(() => mkInitialVis(CONTRIB_PAIRS[5][1]))
+  const gdiCofcQoqData = useMemo(() => buildGDIContribData(allData['COFC'] ?? [], { cofcPriv: makeMap(allData['A024RC1Q027SBEA']), cofcGov: makeMap(allData['A264RC1Q027SBEA']) }, 1), [allData])
+  const gdiCofcYoyData = useMemo(() => buildGDIContribData(allData['COFC'] ?? [], { cofcPriv: makeMap(allData['A024RC1Q027SBEA']), cofcGov: makeMap(allData['A264RC1Q027SBEA']) }, 4), [allData])
 
-  const visMap: Record<ContribChartKey, Set<string>> = {
-    gdpC1L: visC1L, gdpC1R: visC1R,
-    gdpC2L: visC2L, gdpC2R: visC2R,
-    gdpC3L: visC3L, gdpC3R: visC3R,
-    gdpC4L: visC4L, gdpC4R: visC4R,
-    gdpC5L: visC5L, gdpC5R: visC5R,
-    gdpC6L: visC6L, gdpC6R: visC6R,
-  }
+  // ── Contribution visibility state ───────────────────────────────────────
 
   const mkToggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>) =>
     (key: string) => setter(prev => {
@@ -984,63 +808,90 @@ export function RGDPDashboardPage() {
       return next
     })
 
-  const toggleMap: Record<ContribChartKey, (key: string) => void> = {
-    gdpC1L: mkToggle(setVisC1L), gdpC1R: mkToggle(setVisC1R),
-    gdpC2L: mkToggle(setVisC2L), gdpC2R: mkToggle(setVisC2R),
-    gdpC3L: mkToggle(setVisC3L), gdpC3R: mkToggle(setVisC3R),
-    gdpC4L: mkToggle(setVisC4L), gdpC4R: mkToggle(setVisC4R),
-    gdpC5L: mkToggle(setVisC5L), gdpC5R: mkToggle(setVisC5R),
-    gdpC6L: mkToggle(setVisC6L), gdpC6R: mkToggle(setVisC6R),
-  }
+  const [visGdiTopQoq,  setVisGdiTopQoq]  = useState(() => new Set([...GDI_TOP_ITEMS.map(s => s.id), 'line']))
+  const [visGdiTopYoy,  setVisGdiTopYoy]  = useState(() => new Set([...GDI_TOP_ITEMS.map(s => s.id), 'line']))
+  const [visGdiNosQoq,  setVisGdiNosQoq]  = useState(() => new Set([...GDI_NOS_ITEMS.map(s => s.id), 'line']))
+  const [visGdiNosYoy,  setVisGdiNosYoy]  = useState(() => new Set([...GDI_NOS_ITEMS.map(s => s.id), 'line']))
+  const [visGdiCorpQoq, setVisGdiCorpQoq] = useState(() => new Set([...GDI_CORP_PROFIT_ITEMS.map(s => s.id), 'line']))
+  const [visGdiCorpYoy, setVisGdiCorpYoy] = useState(() => new Set([...GDI_CORP_PROFIT_ITEMS.map(s => s.id), 'line']))
+  const [visGdiPATQoq,  setVisGdiPATQoq]  = useState(() => new Set([...GDI_PROFITS_AFT_TAX_ITEMS.map(s => s.id), 'line']))
+  const [visGdiPATYoy,  setVisGdiPATYoy]  = useState(() => new Set([...GDI_PROFITS_AFT_TAX_ITEMS.map(s => s.id), 'line']))
+  const [visGdiCofcQoq, setVisGdiCofcQoq] = useState(() => new Set([...GDI_COFC_ITEMS.map(s => s.id), 'line']))
+  const [visGdiCofcYoy, setVisGdiCofcYoy] = useState(() => new Set([...GDI_COFC_ITEMS.map(s => s.id), 'line']))
 
-  // ── Brush states ────────────────────────────────────────────────────────
+  const toggleGdiTopQoq  = useMemo(() => mkToggle(setVisGdiTopQoq), [])
+  const toggleGdiTopYoy  = useMemo(() => mkToggle(setVisGdiTopYoy), [])
+  const toggleGdiNosQoq  = useMemo(() => mkToggle(setVisGdiNosQoq), [])
+  const toggleGdiNosYoy  = useMemo(() => mkToggle(setVisGdiNosYoy), [])
+  const toggleGdiCorpQoq = useMemo(() => mkToggle(setVisGdiCorpQoq), [])
+  const toggleGdiCorpYoy = useMemo(() => mkToggle(setVisGdiCorpYoy), [])
+  const toggleGdiPATQoq  = useMemo(() => mkToggle(setVisGdiPATQoq), [])
+  const toggleGdiPATYoy  = useMemo(() => mkToggle(setVisGdiPATYoy), [])
+  const toggleGdiCofcQoq = useMemo(() => mkToggle(setVisGdiCofcQoq), [])
+  const toggleGdiCofcYoy = useMemo(() => mkToggle(setVisGdiCofcYoy), [])
 
-  const initBrush: BrushState = { start: 0, end: 0, period: '' }
+  // ── Brush state ─────────────────────────────────────────────────────────
 
   const [brushes, setBrushes] = useState<Record<ChartKey, BrushState>>({
-    // Explorer
-    xLevel:    { start: 0, end: 0, period: 'Max' },
-    xRegime:   { start: 0, end: 0, period: 'Max' },
-    xYoyDelta: { start: 0, end: 0, period: 'Max' },
-    xQoq:      { start: 0, end: 0, period: 'Max' },
-    xAnnQoq:   { start: 0, end: 0, period: 'Max' },
-    // Contribution charts
-    gdpC1L: { ...initBrush }, gdpC1R: { ...initBrush },
-    gdpC2L: { ...initBrush }, gdpC2R: { ...initBrush },
-    gdpC3L: { ...initBrush }, gdpC3R: { ...initBrush },
-    gdpC4L: { ...initBrush }, gdpC4R: { ...initBrush },
-    gdpC5L: { ...initBrush }, gdpC5R: { ...initBrush },
-    gdpC6L: { ...initBrush }, gdpC6R: { ...initBrush },
+    xLevel:    { start: 0, end: 0, period: '10Y' },
+    xRegime:   { start: 0, end: 0, period: '10Y' },
+    xYoyDelta: { start: 0, end: 0, period: '10Y' },
+    xQoq:      { start: 0, end: 0, period: '10Y' },
+    xAnnQoq:   { start: 0, end: 0, period: '10Y' },
+    gdiTopQoq:  { start: 0, end: 0, period: '' },
+    gdiTopYoy:  { start: 0, end: 0, period: '' },
+    gdiNosQoq:  { start: 0, end: 0, period: '' },
+    gdiNosYoy:  { start: 0, end: 0, period: '' },
+    gdiCorpQoq: { start: 0, end: 0, period: '' },
+    gdiCorpYoy: { start: 0, end: 0, period: '' },
+    gdiPATQoq:  { start: 0, end: 0, period: '' },
+    gdiPATYoy:  { start: 0, end: 0, period: '' },
+    gdiCofcQoq: { start: 0, end: 0, period: '' },
+    gdiCofcYoy: { start: 0, end: 0, period: '' },
   })
 
-  // Initialize contribution brushes when data arrives
-  useEffect(() => {
-    const refLen = gdpContribData.get(1)?.length ?? 0
-    if (refLen === 0) return
-    const end = refLen - 1
-    const start = Math.max(0, end - 59) // ~15 years
-    setBrushes(prev => {
-      const next = { ...prev }
-      for (const k of ALL_CONTRIB_KEYS) {
-        next[k] = { start, end, period: '' }
-      }
-      return next
-    })
-  }, [gdpContribData])
-
-  // Reset all explorer brushes when selected component changes
+  // Reset explorer brushes to 10Y when selected component changes
   useEffect(() => {
     if (!selectedData.length) return
     const endQ = selectedData.length - 1
-    const maxBrush = { start: 0, end: endQ, period: 'Max' }
-    setBrushes(prev => {
-      const next = { ...prev }
-      for (const k of EXPLORER_KEYS) next[k] = { ...maxBrush }
-      return next
-    })
-  }, [selectedId, selectedData.length])
+    const startQ = Math.max(0, endQ - 40 + 1)
+    const brush10Y = { start: startQ, end: endQ, period: '10Y' }
+    setBrushes(prev => ({
+      ...prev,
+      xLevel:    { ...brush10Y },
+      xRegime:   { ...brush10Y },
+      xYoyDelta: { ...brush10Y },
+      xQoq:      { ...brush10Y },
+      xAnnQoq:   { ...brush10Y },
+    }))
+  }, [selectedKey, selectedData.length])
 
-  // Synchronized explorer brush
+  // Initialize contribution brushes to last 40 quarters (10Y)
+  useEffect(() => {
+    const initBrush = (len: number) => {
+      if (len === 0) return { start: 0, end: 0, period: '' }
+      const end = len - 1
+      return { start: Math.max(0, end - 39), end, period: '' }
+    }
+    if (!gdiTopQoqData.length) return
+    setBrushes(prev => ({
+      ...prev,
+      gdiTopQoq:  initBrush(gdiTopQoqData.length),
+      gdiTopYoy:  initBrush(gdiTopYoyData.length),
+      gdiNosQoq:  initBrush(gdiNosQoqData.length),
+      gdiNosYoy:  initBrush(gdiNosYoyData.length),
+      gdiCorpQoq: initBrush(gdiCorpQoqData.length),
+      gdiCorpYoy: initBrush(gdiCorpYoyData.length),
+      gdiPATQoq:  initBrush(gdiPATQoqData.length),
+      gdiPATYoy:  initBrush(gdiPATYoyData.length),
+      gdiCofcQoq: initBrush(gdiCofcQoqData.length),
+      gdiCofcYoy: initBrush(gdiCofcYoyData.length),
+    }))
+  }, [gdiTopQoqData.length, gdiTopYoyData.length, gdiNosQoqData.length, gdiNosYoyData.length,
+      gdiCorpQoqData.length, gdiCorpYoyData.length, gdiPATQoqData.length, gdiPATYoyData.length,
+      gdiCofcQoqData.length, gdiCofcYoyData.length])
+
+  // Synchronized explorer brush — changing one updates all 5
   const handleExplorerBrush = useCallback(
     (_key: ExplorerChartKey, startIndex?: number, endIndex?: number) => {
       setBrushes(prev => {
@@ -1049,14 +900,20 @@ export function RGDPDashboardPage() {
           start:  startIndex ?? prev[_key].start,
           end:    endIndex   ?? prev[_key].end,
         }
-        const next = { ...prev }
-        for (const k of EXPLORER_KEYS) next[k] = { ...newBrush }
-        return next
+        return {
+          ...prev,
+          xLevel:    { ...newBrush },
+          xRegime:   { ...newBrush },
+          xYoyDelta: { ...newBrush },
+          xQoq:      { ...newBrush },
+          xAnnQoq:   { ...newBrush },
+        }
       })
     },
     []
   )
 
+  // Synchronized explorer quick-select
   const handleExplorerQuickSelect = useCallback(
     (_key: ExplorerChartKey, label: string, count: number, dataLen: number) => {
       const end = dataLen - 1
@@ -1065,14 +922,19 @@ export function RGDPDashboardPage() {
         end,
         period: label,
       }
-      const next = {} as Record<string, BrushState>
-      for (const k of EXPLORER_KEYS) next[k] = { ...newBrush }
-      setBrushes(prev => ({ ...prev, ...next }))
+      setBrushes(prev => ({
+        ...prev,
+        xLevel:    { ...newBrush },
+        xRegime:   { ...newBrush },
+        xYoyDelta: { ...newBrush },
+        xQoq:      { ...newBrush },
+        xAnnQoq:   { ...newBrush },
+      }))
     },
     []
   )
 
-  // Contribution chart brush handler
+  // Contribution brush handler (per chart)
   const handleContribBrush = useCallback(
     (key: ContribChartKey, startIndex?: number, endIndex?: number) => {
       setBrushes(prev => ({
@@ -1087,9 +949,10 @@ export function RGDPDashboardPage() {
     []
   )
 
-  const handleGdpContribQuickSelect = useCallback(
-    (key: ContribChartKey, label: string, count: number) => {
-      const end = (gdpContribData.get(1)?.length ?? 1) - 1
+  // Contribution quick-select (per chart)
+  const handleContribQuickSelect = useCallback(
+    (key: ContribChartKey, label: string, count: number, dataLen: number) => {
+      const end = dataLen - 1
       setBrushes(prev => ({
         ...prev,
         [key]: {
@@ -1099,8 +962,94 @@ export function RGDPDashboardPage() {
         },
       }))
     },
-    [gdpContribData]
+    []
   )
+
+  // Level chart formatters — conditional on Real GDI*
+  const levelTickFmt = isRealGDI
+    ? (v: number) => fmtIndex(v)
+    : (v: number) => fmtBillions(v * 1000)
+
+  const levelTooltipFmt = isRealGDI
+    ? (v: unknown) => [typeof v === 'number' ? fmtIndex(v) : '-', ''] as [string, string]
+    : (v: unknown) => [typeof v === 'number' ? fmtBillions(v * 1000) : '-', ''] as [string, string]
+
+  const levelSubtitle = isRealGDI ? 'Quantity Index, 2017=100' : '$ Billions SAAR'
+
+  // ── Contrib cell renderer helper ────────────────────────────────────────
+
+  function renderContribCell(
+    title: string,
+    data: ContribRow[],
+    items: readonly { id: string; label: string; color: string }[],
+    lineLabel: string,
+    vis: Set<string>,
+    toggle: (key: string) => void,
+    brushKey: ContribChartKey,
+    clipPrefix: string,
+  ) {
+    return (
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>{title}</div>
+        </div>
+        <div className={styles.legendRow}>
+          <div className={styles.legend}>
+            {items.map(item => (
+              <button key={item.id} type="button"
+                className={`${styles.legendItem} ${!vis.has(item.id) ? styles.legendItemOff : ''}`}
+                onClick={() => toggle(item.id)}
+              >
+                <span className={styles.legendSwatch} style={{ background: item.color }} />
+                {item.label}
+              </button>
+            ))}
+            <button type="button"
+              className={`${styles.legendItem} ${!vis.has('line') ? styles.legendItemOff : ''}`}
+              onClick={() => toggle('line')}
+            >
+              <span className={styles.legendLine} style={{ background: '#ffffff' }} />
+              {lineLabel}
+            </button>
+          </div>
+        </div>
+        <div className={styles.chartWrap}>
+          <GDIContribChart
+            data={data}
+            visibleStart={brushes[brushKey].start}
+            visibleEnd={brushes[brushKey].end}
+            activeSeries={vis}
+            seriesItems={items}
+            lineKey="line"
+            lineLabel={lineLabel}
+            clipPrefix={clipPrefix}
+          />
+        </div>
+        <div className={styles.brushWrap}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 0, right: CONTRIB_CM.right, bottom: 0, left: CONTRIB_CM.left }}>
+              <XAxis dataKey="date" hide />
+              <YAxis hide />
+              <Line type="monotone" dataKey="line" stroke="rgba(255,255,255,0.18)"
+                strokeWidth={1} dot={false} isAnimationActive={false} legendType="none" connectNulls />
+              <Brush dataKey="date"
+                startIndex={brushes[brushKey].start}
+                endIndex={brushes[brushKey].end}
+                onChange={({ startIndex, endIndex }) => handleContribBrush(brushKey, startIndex, endIndex)}
+                height={40} stroke="rgba(255,255,255,0.10)" fill="#070b10"
+                travellerWidth={7} tickFormatter={fmtAxisDate} gap={4}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <QuickSelectRow
+          period={brushes[brushKey].period}
+          onSelect={(l, c) => handleContribQuickSelect(brushKey, l, c, data.length)}
+          periods={QUICK_PERIODS_Q}
+        />
+      </div>
+    )
+  }
 
   // ════════════════════════════════════════════════════════════════════════════
   // ██  RENDER
@@ -1120,64 +1069,61 @@ export function RGDPDashboardPage() {
 
       <nav className={styles.breadcrumb}>
         <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbSep}>›</span>
         <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Real GDP Dashboard</span>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>Gross Domestic Income</span>
       </nav>
 
       {/* ── Body ───────────────────────────────────────────────────────────── */}
       <div className={styles.body}>
-        <div className={styles.majorHeader}>Real GDP Dashboard</div>
-        <div className={styles.sectionSubtitle} style={{ padding: '0 2px', marginTop: -8 }}>
-          BEA National Income &amp; Product Accounts &mdash; quarterly, chained 2017 dollars
-        </div>
+        <div className={styles.majorHeader}>Gross Domestic Income</div>
 
         {/* Loading / Error */}
         {loading && (
-          <div className={styles.statusBlock}>Loading 49 real GDP series...</div>
+          <div className={styles.statusBlock}>Loading 24 GDI series...</div>
         )}
         {error && (
           <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
         )}
 
-        {!loading && !error && gdp.length > 0 && (
+        {!loading && !error && gdi.length > 0 && (
           <>
             {/* ═══════════════════════════════════════════════════════════════
                 Component Explorer
             ═══════════════════════════════════════════════════════════════ */}
 
-            <div className={styles.majorHeader}>Component Explorer</div>
-
             <div className={styles.explorerHeader}>
-              <div className={styles.sectionTitle}>GDP Component Explorer</div>
+              <div className={styles.sectionTitle}>GDI Component Explorer</div>
               <div className={styles.sectorSelectWrap}>
                 <span className={styles.lookbackLabel}>Component</span>
                 <select
                   className={styles.sectorSelect}
-                  value={selectedId}
-                  onChange={e => setSelectedId(e.target.value)}
+                  value={selectedKey}
+                  onChange={e => setSelectedKey(e.target.value)}
                 >
-                  {RGDP_HIERARCHY.map(item => (
-                    <option key={item.id} value={item.id}>
-                      {'\u2014 '.repeat(item.depth)}{item.label}
+                  {GDI_HIERARCHY.map(item => (
+                    <option key={item.id} value={item.id}
+                      {...(item.divider ? { 'data-divider': item.divider } : {})}
+                    >
+                      {item.divider ? `${item.divider} ` : ''}{'— '.repeat(item.depth)}{item.label}
                     </option>
                   ))}
                 </select>
-                <span className={styles.fredId}>{selectedId}</span>
+                <span className={styles.fredId}>{selectedFredId}</span>
               </div>
             </div>
 
             {selectedData.length === 0 ? (
-              <div className={styles.statusBlock}>No data for {selectedId}</div>
+              <div className={styles.statusBlock}>No data for {selectedFredId}</div>
             ) : (
               <>
                 {/* E1: Level */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; Level</div>
-                      <div className={styles.sectionSubtitle}>Billions chained 2017 $</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} — Level</div>
+                      <div className={styles.sectionSubtitle}>{levelSubtitle}</div>
                     </div>
                   </div>
                   <div className={styles.legendRow}>
@@ -1195,9 +1141,9 @@ export function RGDPDashboardPage() {
                         <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
                           tickFormatter={fmtAxisDate} minTickGap={60} />
                         <YAxis tick={TICK} tickLine={false} axisLine={false} width={58}
-                          tickFormatter={(v: number) => fmtBillions(v * 1000)} />
+                          tickFormatter={levelTickFmt} />
                         <Tooltip {...TOOLTIP_STYLE}
-                          formatter={(v: unknown) => [typeof v === 'number' ? fmtBillions(v * 1000) : '-', ''] as [string, string]} />
+                          formatter={levelTooltipFmt} />
                         <Line type="monotone" dataKey="value" name="Level"
                           stroke="#60a5fa" strokeWidth={1.8}
                           dot={false} isAnimationActive={false} connectNulls legendType="none" />
@@ -1220,7 +1166,7 @@ export function RGDPDashboardPage() {
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; YoY % Change</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} — YoY % Change</div>
                       <div className={styles.sectionSubtitle}>Regime Shading</div>
                     </div>
                     <div className={styles.controls}>
@@ -1290,11 +1236,11 @@ export function RGDPDashboardPage() {
                   />
                 </div>
 
-                {/* E3: YoY Delta */}
+                {/* E3: YoY Δ */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; YoY &Delta;</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} — YoY &Delta;</div>
                       <div className={styles.sectionSubtitle}>Change in Year-over-Year %</div>
                     </div>
                     <div className={styles.controls}>
@@ -1334,7 +1280,7 @@ export function RGDPDashboardPage() {
                         <Tooltip {...TOOLTIP_STYLE}
                           formatter={(v: unknown, name: unknown) => {
                             if (typeof v !== 'number') return ['-', '']
-                            const lbl = name === 'ma' ? `${deltaMa}-pd MA` : `YoY \u0394(${deltaWindow})`
+                            const lbl = name === 'ma' ? `${deltaMa}-pd MA` : `YoY Δ(${deltaWindow})`
                             return [fmtPctTooltip(v), lbl] as [string, string]
                           }} />
                         <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" strokeWidth={1} />
@@ -1362,11 +1308,11 @@ export function RGDPDashboardPage() {
                   />
                 </div>
 
-                {/* E4: QoQ %Delta */}
+                {/* E4: QoQ %Δ */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; QoQ %&Delta;</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} — QoQ %&Delta;</div>
                       <div className={styles.sectionSubtitle}>Quarter-over-Quarter</div>
                     </div>
                     <div className={styles.controls}>
@@ -1437,12 +1383,12 @@ export function RGDPDashboardPage() {
                   />
                 </div>
 
-                {/* E5: Annualized QoQ %Delta */}
+                {/* E5: Annualized QoQ %Δ */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
                     <div>
-                      <div className={styles.sectionTitle}>{selectedLabel} &mdash; Annualized QoQ %&Delta;</div>
-                      <div className={styles.sectionSubtitle}>(Q/Q)^4 &minus; 1</div>
+                      <div className={styles.sectionTitle}>{selectedLabel} — Annualized QoQ %&Delta;</div>
+                      <div className={styles.sectionSubtitle}>(Q/Q)^4 − 1</div>
                     </div>
                   </div>
                   <div className={styles.legendRow}>
@@ -1484,101 +1430,40 @@ export function RGDPDashboardPage() {
             )}
 
             {/* ═══════════════════════════════════════════════════════════════
-                rGDP Contribution Decomposition
+                GDI Contribution Decompositions
             ═══════════════════════════════════════════════════════════════ */}
 
-            <div className={styles.explorerHeader}>
-              <div>
-                <div className={styles.sectionTitle}>rGDP Contribution Decomposition</div>
-                <div className={styles.sectionSubtitle}>BEA NIPA Table 1.5.2 &middot; SAAR &middot; Annualized QoQ %-pt</div>
-              </div>
+            <div className={styles.majorHeader}>GDI Contribution Decompositions</div>
+
+            {/* 1. Top-Level GDI Decomposition */}
+            <div className={styles.twoColGrid}>
+              {renderContribCell('Contributions to QoQ GDI', gdiTopQoqData, GDI_TOP_ITEMS, 'GDI', visGdiTopQoq, toggleGdiTopQoq, 'gdiTopQoq', 'gditopqoq')}
+              {renderContribCell('Contributions to YoY GDI', gdiTopYoyData, GDI_TOP_ITEMS, 'GDI', visGdiTopYoy, toggleGdiTopYoy, 'gdiTopYoy', 'gditopyoy')}
             </div>
 
-            {gdpContribLoading && (
-              <div className={styles.statusBlock}>Loading contribution data...</div>
-            )}
-            {gdpContribError && (
-              <div className={`${styles.statusBlock} ${styles.statusError}`}>{gdpContribError}</div>
-            )}
+            {/* 2. Private Enterprise NOS */}
+            <div className={styles.twoColGrid}>
+              {renderContribCell('Contributions to QoQ Private Enterprise NOS', gdiNosQoqData, GDI_NOS_ITEMS, 'Private Enterprises Net Operating Surplus', visGdiNosQoq, toggleGdiNosQoq, 'gdiNosQoq', 'gdinosqoq')}
+              {renderContribCell('Contributions to YoY Private Enterprise NOS', gdiNosYoyData, GDI_NOS_ITEMS, 'Private Enterprises Net Operating Surplus', visGdiNosYoy, toggleGdiNosYoy, 'gdiNosYoy', 'gdinosyoy')}
+            </div>
 
-            {!gdpContribLoading && !gdpContribError && gdpContribData.size > 0 && (
-              <>
-                {CONTRIB_PAIRS.map((pair, pairIdx) => (
-                  <div key={pairIdx} className={styles.twoColGrid}>
-                    {pair.map(def => {
-                      const chartKey = def.key as ContribChartKey
-                      const data = contribDataMap.get(def.key) ?? []
-                      const vis = visMap[chartKey]
-                      const toggle = toggleMap[chartKey]
-                      const brush = brushes[chartKey]
-                      const lineKey = `L${def.lineLine}`
+            {/* 3. Corporate Profits */}
+            <div className={styles.twoColGrid}>
+              {renderContribCell('Contributions to QoQ Corporate Profits', gdiCorpQoqData, GDI_CORP_PROFIT_ITEMS, 'Corporate Profits', visGdiCorpQoq, toggleGdiCorpQoq, 'gdiCorpQoq', 'gdicorpqoq')}
+              {renderContribCell('Contributions to YoY Corporate Profits', gdiCorpYoyData, GDI_CORP_PROFIT_ITEMS, 'Corporate Profits', visGdiCorpYoy, toggleGdiCorpYoy, 'gdiCorpYoy', 'gdicorpyoy')}
+            </div>
 
-                      return (
-                        <div key={def.key} className={styles.section}>
-                          <div className={styles.sectionHeader}>
-                            <div>
-                              <div className={styles.sectionTitle}>{def.title}</div>
-                              <div className={styles.sectionSubtitle}>SAAR &middot; %-pt contribution to rGDP</div>
-                            </div>
-                          </div>
-                          <div className={styles.legendRow}>
-                            <div className={styles.legend}>
-                              {def.items.map(item => (
-                                <button key={item.id} type="button"
-                                  className={`${styles.legendItem} ${!vis.has(item.id) ? styles.legendItemOff : ''}`}
-                                  onClick={() => toggle(item.id)}
-                                >
-                                  <span className={styles.legendSwatch} style={{ background: item.color }} />
-                                  {item.label}
-                                </button>
-                              ))}
-                              <button type="button"
-                                className={`${styles.legendItem} ${!vis.has(lineKey) ? styles.legendItemOff : ''}`}
-                                onClick={() => toggle(lineKey)}
-                              >
-                                <span className={styles.legendLine} style={{ background: '#ffffff' }} />
-                                {def.lineLabel}
-                              </button>
-                            </div>
-                          </div>
-                          <div className={styles.chartWrap}>
-                            <GdpContribChart
-                              data={data}
-                              visibleStart={brush.start}
-                              visibleEnd={brush.end}
-                              activeSeries={vis}
-                              seriesItems={def.items}
-                              lineKey={lineKey}
-                              lineLabel={def.lineLabel}
-                              clipPrefix={def.key}
-                            />
-                          </div>
-                          <div className={styles.brushWrap}>
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={data} margin={{ top: 0, right: 16, bottom: 0, left: 62 }}>
-                                <Brush
-                                  dataKey="date"
-                                  startIndex={brush.start}
-                                  endIndex={brush.end}
-                                  onChange={({ startIndex, endIndex }) =>
-                                    handleContribBrush(chartKey, startIndex, endIndex)}
-                                  {...BRUSH_STYLE}
-                                />
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <QuickSelectRow
-                            period={brush.period}
-                            onSelect={(l, c) => handleGdpContribQuickSelect(chartKey, l, c)}
-                            periods={QUICK_PERIODS_Q}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                ))}
-              </>
-            )}
+            {/* 4. Corporate Profits After Tax */}
+            <div className={styles.twoColGrid}>
+              {renderContribCell('Contributions to QoQ Corporate Profits After Tax', gdiPATQoqData, GDI_PROFITS_AFT_TAX_ITEMS, 'Corporate Profits After Tax', visGdiPATQoq, toggleGdiPATQoq, 'gdiPATQoq', 'gdipatqoq')}
+              {renderContribCell('Contributions to YoY Corporate Profits After Tax', gdiPATYoyData, GDI_PROFITS_AFT_TAX_ITEMS, 'Corporate Profits After Tax', visGdiPATYoy, toggleGdiPATYoy, 'gdiPATYoy', 'gdipatyoy')}
+            </div>
+
+            {/* 5. Consumption of Fixed Capital */}
+            <div className={styles.twoColGrid}>
+              {renderContribCell('Contributions to QoQ Consumption of Fixed Capital', gdiCofcQoqData, GDI_COFC_ITEMS, 'Consumption of Fixed Capital', visGdiCofcQoq, toggleGdiCofcQoq, 'gdiCofcQoq', 'gdicofcqoq')}
+              {renderContribCell('Contributions to YoY Consumption of Fixed Capital', gdiCofcYoyData, GDI_COFC_ITEMS, 'Consumption of Fixed Capital', visGdiCofcYoy, toggleGdiCofcYoy, 'gdiCofcYoy', 'gdicofcyoy')}
+            </div>
           </>
         )}
       </div>

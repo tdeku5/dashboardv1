@@ -325,6 +325,274 @@ beaRouter.get('/gdp-contrib', async (req: Request, res: Response) => {
   })
 })
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  NIPA Table T20805 — Nominal PCE (monthly, SAAR, millions $)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const NPCE_TABLE = 'T20805'
+
+function npceSeriesId(lineNumber: number): string {
+  return `BEA_${NPCE_TABLE}_L${lineNumber}`
+}
+
+let npceFetchLock: Promise<void> | null = null
+
+async function fetchAndCacheNPCETable(): Promise<void> {
+  if (npceFetchLock) { await npceFetchLock; return }
+
+  const apiKey = getBeaApiKey()
+
+  const promise = (async () => {
+    const url = new URL('https://apps.bea.gov/api/data/')
+    url.searchParams.set('UserID', apiKey)
+    url.searchParams.set('method', 'GetData')
+    url.searchParams.set('DataSetName', 'NIPA')
+    url.searchParams.set('TableName', NPCE_TABLE)
+    url.searchParams.set('Frequency', 'M')
+    url.searchParams.set('Year', 'ALL')
+    url.searchParams.set('ResultFormat', 'JSON')
+
+    console.log(`[BEA] Fetching NIPA table ${NPCE_TABLE}...`)
+    const res = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`BEA API returned HTTP ${res.status}: ${text.slice(0, 200)}`)
+    }
+
+    const json = await res.json() as {
+      BEAAPI?: {
+        Results?: {
+          Error?: { ErrorDetail?: { Description?: string } }
+          Data?: BeaDataRow[]
+        }
+      }
+    }
+
+    const apiError = json.BEAAPI?.Results?.Error?.ErrorDetail?.Description
+    if (apiError) {
+      throw new Error(`BEA API error: ${apiError}`)
+    }
+
+    const data = json.BEAAPI?.Results?.Data
+    if (!data || !Array.isArray(data)) {
+      throw new Error('BEA API returned no data array')
+    }
+
+    console.log(`[BEA] Received ${data.length} rows for ${NPCE_TABLE}, ingesting...`)
+
+    const byLine = new Map<number, { date: string; value: string }[]>()
+
+    for (const row of data) {
+      const lineNum = parseInt(row.LineNumber)
+      if (isNaN(lineNum)) continue
+
+      const date = beaDateToIso(row.TimePeriod)
+      if (!date) continue
+
+      const rawVal = cleanValue(row.DataValue)
+      if (!rawVal || rawVal === 'N/A' || rawVal === '...' || rawVal.trim() === '') continue
+
+      const numVal = parseFloat(rawVal)
+      if (isNaN(numVal)) continue
+
+      if (!byLine.has(lineNum)) byLine.set(lineNum, [])
+      byLine.get(lineNum)!.push({ date, value: rawVal })
+    }
+
+    for (const [lineNum, observations] of byLine) {
+      const sid = npceSeriesId(lineNum)
+      const desc = data.find(r => parseInt(r.LineNumber) === lineNum)?.LineDescription ?? ''
+      storeObservations(sid, observations, {
+        title:     `nPCE ${desc}`,
+        frequency: 'Monthly',
+        units:     'Millions of dollars, SAAR',
+      })
+    }
+
+    console.log(`[BEA] Ingested ${byLine.size} line items for ${NPCE_TABLE}.`)
+  })()
+
+  npceFetchLock = promise
+  try {
+    await promise
+  } finally {
+    npceFetchLock = null
+  }
+}
+
+async function ensureFreshNPCE(lineNumber: number): Promise<void> {
+  const sid = npceSeriesId(lineNumber)
+  if (!isSeriesStale(sid, STALE_HOURS)) return
+  await fetchAndCacheNPCETable()
+}
+
+// ── GET /api/bea/npce?line_number=N ─────────────────────────────────────────
+
+beaRouter.get('/npce', async (req: Request, res: Response) => {
+  const { line_number } = req.query
+
+  if (!line_number || isNaN(Number(line_number))) {
+    res.status(400).json({ error: 'line_number query parameter is required (integer)' })
+    return
+  }
+
+  const lineNum = parseInt(String(line_number))
+
+  try {
+    await ensureFreshNPCE(lineNum)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'BEA API fetch failed'
+    const status = msg.includes('BEA_API_KEY') ? 500 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  const sid = npceSeriesId(lineNum)
+  const rows = getObservations(sid)
+
+  res.json({
+    observations: rows.map(r => ({ date: r.date, value: String(r.value) })),
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ██  NIPA Table T20803 — Real PCE (monthly, quantity indexes, 2017=100)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const RPCE_TABLE = 'T20803'
+
+function rpceSeriesId(lineNumber: number): string {
+  return `BEA_${RPCE_TABLE}_L${lineNumber}`
+}
+
+let rpceFetchLock: Promise<void> | null = null
+
+async function fetchAndCacheRPCETable(): Promise<void> {
+  if (rpceFetchLock) { await rpceFetchLock; return }
+
+  const apiKey = getBeaApiKey()
+
+  const promise = (async () => {
+    const url = new URL('https://apps.bea.gov/api/data/')
+    url.searchParams.set('UserID', apiKey)
+    url.searchParams.set('method', 'GetData')
+    url.searchParams.set('DataSetName', 'NIPA')
+    url.searchParams.set('TableName', RPCE_TABLE)
+    url.searchParams.set('Frequency', 'M')
+    url.searchParams.set('Year', 'ALL')
+    url.searchParams.set('ResultFormat', 'JSON')
+
+    console.log(`[BEA] Fetching NIPA table ${RPCE_TABLE}...`)
+    const res = await fetch(url.toString(), {
+      headers: { 'Accept': 'application/json' },
+      signal: AbortSignal.timeout(120_000),
+    })
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`BEA API returned HTTP ${res.status}: ${text.slice(0, 200)}`)
+    }
+
+    const json = await res.json() as {
+      BEAAPI?: {
+        Results?: {
+          Error?: { ErrorDetail?: { Description?: string } }
+          Data?: BeaDataRow[]
+        }
+      }
+    }
+
+    const apiError = json.BEAAPI?.Results?.Error?.ErrorDetail?.Description
+    if (apiError) {
+      throw new Error(`BEA API error: ${apiError}`)
+    }
+
+    const data = json.BEAAPI?.Results?.Data
+    if (!data || !Array.isArray(data)) {
+      throw new Error('BEA API returned no data array')
+    }
+
+    console.log(`[BEA] Received ${data.length} rows for ${RPCE_TABLE}, ingesting...`)
+
+    const byLine = new Map<number, { date: string; value: string }[]>()
+
+    for (const row of data) {
+      const lineNum = parseInt(row.LineNumber)
+      if (isNaN(lineNum)) continue
+
+      const date = beaDateToIso(row.TimePeriod)
+      if (!date) continue
+
+      const rawVal = cleanValue(row.DataValue)
+      if (!rawVal || rawVal === 'N/A' || rawVal === '...' || rawVal.trim() === '') continue
+
+      const numVal = parseFloat(rawVal)
+      if (isNaN(numVal)) continue
+
+      if (!byLine.has(lineNum)) byLine.set(lineNum, [])
+      byLine.get(lineNum)!.push({ date, value: rawVal })
+    }
+
+    for (const [lineNum, observations] of byLine) {
+      const sid = rpceSeriesId(lineNum)
+      const desc = data.find(r => parseInt(r.LineNumber) === lineNum)?.LineDescription ?? ''
+      storeObservations(sid, observations, {
+        title:     `rPCE ${desc}`,
+        frequency: 'Monthly',
+        units:     'Quantity index, 2017=100',
+      })
+    }
+
+    console.log(`[BEA] Ingested ${byLine.size} line items for ${RPCE_TABLE}.`)
+  })()
+
+  rpceFetchLock = promise
+  try {
+    await promise
+  } finally {
+    rpceFetchLock = null
+  }
+}
+
+async function ensureFreshRPCE(lineNumber: number): Promise<void> {
+  const sid = rpceSeriesId(lineNumber)
+  if (!isSeriesStale(sid, STALE_HOURS)) return
+  await fetchAndCacheRPCETable()
+}
+
+// ── GET /api/bea/rpce?line_number=N ─────────────────────────────────────────
+
+beaRouter.get('/rpce', async (req: Request, res: Response) => {
+  const { line_number } = req.query
+
+  if (!line_number || isNaN(Number(line_number))) {
+    res.status(400).json({ error: 'line_number query parameter is required (integer)' })
+    return
+  }
+
+  const lineNum = parseInt(String(line_number))
+
+  try {
+    await ensureFreshRPCE(lineNum)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'BEA API fetch failed'
+    const status = msg.includes('BEA_API_KEY') ? 500 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  const sid = rpceSeriesId(lineNum)
+  const rows = getObservations(sid)
+
+  res.json({
+    observations: rows.map(r => ({ date: r.date, value: String(r.value) })),
+  })
+})
+
 // ── GET /api/bea/status ─────────────────────────────────────────────────────
 
 beaRouter.get('/status', (_req: Request, res: Response) => {
