@@ -18,7 +18,9 @@ import { PPIDashboardPage }    from './pages/PPIDashboardPage'
 import { NewsAggregatorPage }        from './pages/NewsAggregatorPage'
 import { TreasuryAuctionPage }      from './pages/TreasuryAuctionPage'
 import { OtherInflationPage }      from './pages/OtherInflationPage'
+import { FiscalPage }              from './pages/FiscalPage'
 import { FiscalFlowsPage }         from './pages/FiscalFlowsPage'
+import { MtsPage }                 from './pages/MtsPage'
 import { GrowthPage }              from './pages/GrowthPage'
 import { NGDPDashboardPage }       from './pages/NGDPDashboardPage'
 import { RGDPDashboardPage }      from './pages/RGDPDashboardPage'
@@ -50,7 +52,9 @@ function App() {
         <Route path="/models/inflation/pce-projections"  element={<PCEProjectionsPage />} />
         <Route path="/models/inflation/ppi"                element={<PPIDashboardPage />} />
         <Route path="/models/inflation/other"              element={<OtherInflationPage />} />
-        <Route path="/models/fiscal"                         element={<FiscalFlowsPage />} />
+        <Route path="/models/fiscal"                         element={<FiscalPage />} />
+        <Route path="/models/fiscal/dts"                     element={<FiscalFlowsPage />} />
+        <Route path="/models/fiscal/mts"                     element={<MtsPage />} />
         <Route path="/models/growth"                         element={<GrowthPage />} />
         <Route path="/models/growth/ngdp"                    element={<NGDPDashboardPage />} />
         <Route path="/models/growth/rgdp"                    element={<RGDPDashboardPage />} />

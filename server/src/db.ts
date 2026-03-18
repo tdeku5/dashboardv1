@@ -517,6 +517,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_dts_fy ON dts_fiscal_flows(fiscal_year);
 `)
 
+// ── MTS Fiscal Balance ──────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS mts_fiscal_balance (
+    record_date    TEXT PRIMARY KEY,
+    fiscal_year    INTEGER NOT NULL,
+    month_index    INTEGER NOT NULL,
+    monthly_amount REAL NOT NULL,
+    cumulative     REAL NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_mts_fy ON mts_fiscal_balance(fiscal_year);
+`)
+
 // Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)
 try {
   // SQLite doesn't support DROP COLUMN before 3.35.0, so just recreate if needed

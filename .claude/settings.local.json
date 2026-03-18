@@ -219,7 +219,10 @@
       "Bash(node -e \"\nconst Database = require\\('better-sqlite3'\\);\nconst db = new Database\\('/home/tdeku/dashboardv1/fred_data.db'\\);\ndb.prepare\\('DELETE FROM dts_tax_deposits'\\).run\\(\\);\nconsole.log\\('Cleared table'\\);\ndb.close\\(\\);\n\")",
       "Bash(sleep 60 && node -e \"\nconst Database = require\\('better-sqlite3'\\);\nconst db = new Database\\('/home/tdeku/dashboardv1/fred_data.db'\\);\nconst types = db.prepare\\('SELECT deposit_type, COUNT\\(*\\) as cnt FROM dts_tax_deposits GROUP BY deposit_type'\\).all\\(\\);\nconst total = db.prepare\\('SELECT COUNT\\(*\\) as n FROM dts_tax_deposits'\\).get\\(\\);\nconsole.log\\('Total rows:', total.n\\);\nconsole.log\\('By type:', JSON.stringify\\(types, null, 2\\)\\);\ndb.close\\(\\);\n\")",
       "Bash(git checkout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)"
     ]
   },
   "sandbox": {

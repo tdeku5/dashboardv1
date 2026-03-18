@@ -302,11 +302,11 @@ export function FiscalFlowsPage() {
       </header>
 
       <nav className={styles.breadcrumb}>
-        <Link to="/" className={styles.breadcrumbLink}>Home</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
         <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
         <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Fiscal</span>
+        <Link to="/models/fiscal" className={styles.breadcrumbLink}>Fiscal</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Daily Treasury Statement</span>
       </nav>
 
       <main className={styles.body}>

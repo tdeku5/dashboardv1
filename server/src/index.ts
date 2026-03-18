@@ -20,6 +20,8 @@ import { fiscalFlowsRouter } from './routes/fiscalFlows'
 import { syncDtsFiscalFlows } from './dtsFiscalFlows'
 import { syncDtsTaxDeposits } from './dtsTaxDeposits'
 import { censusTradeRouter, isCensusTradeStale, fetchAndStoreCensusTrade } from './routes/census-trade'
+import { mtsRouter } from './routes/mts'
+import { syncMtsFiscalBalance } from './mtsFiscalBalance'
 
 dotenv.config({ path: '../.env' })
 
@@ -38,6 +40,7 @@ app.use('/api/umich',    umichRouter)
 app.use('/api/fiscal',   fiscalRouter)
 app.use('/api/fiscal-flows', fiscalFlowsRouter)
 app.use('/api/census-trade', censusTradeRouter)
+app.use('/api/mts',          mtsRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -100,6 +103,11 @@ async function startup(): Promise<void> {
   // DTS tax deposits sync (non-blocking)
   syncDtsTaxDeposits().catch(err =>
     console.error('[startup] DTS tax deposits sync error:', err)
+  )
+
+  // MTS fiscal balance sync (non-blocking)
+  syncMtsFiscalBalance().catch(err =>
+    console.error('[startup] MTS fiscal balance sync error:', err)
   )
 
   // Census trade end-use data sync (non-blocking)
