@@ -342,7 +342,7 @@ interface BevTooltipPayload {
   payload?: { x: number; y: number; date: string }
 }
 
-function BevTooltip({ active, payload }: { active?: boolean; payload?: BevTooltipPayload[] }) {
+function BevTooltip({ active, payload }: { active?: boolean; payload?: readonly BevTooltipPayload[] }) {
   if (!active || !payload?.length) return null
   const pt = payload[0].payload
   if (!pt) return null
@@ -955,7 +955,7 @@ export function JOLTSDashboardPage() {
                     />
                     <Tooltip
                       cursor={{ strokeDasharray: '4 4', stroke: 'rgba(255,255,255,0.15)' }}
-                      content={(props: { active?: boolean; payload?: BevTooltipPayload[] }) =>
+                      content={(props: { active?: boolean; payload?: readonly BevTooltipPayload[] }) =>
                         <BevTooltip active={props.active} payload={props.payload} />
                       }
                     />

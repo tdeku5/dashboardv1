@@ -360,7 +360,7 @@ export function MtsPage() {
                     <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
                     <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtBillions} domain={['dataMin', 0]} />
                     <Tooltip
-                      formatter={(value: number) => fmtBillionsExact(Number(value))}
+                      formatter={(value: number | undefined) => fmtBillionsExact(Number(value ?? 0))}
                       labelFormatter={(label) => `FY${label}`}
                     />
                     <Bar dataKey="valueB" radius={[3, 3, 0, 0]}>
@@ -400,7 +400,7 @@ export function MtsPage() {
                     <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
                     <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtPercentWhole} domain={['dataMin', 0]} />
                     <Tooltip
-                      formatter={(value: number) => fmtPercent(Number(value))}
+                      formatter={(value: number | undefined) => fmtPercent(Number(value ?? 0))}
                       labelFormatter={(label) => `FY${label}`}
                     />
                     <Bar dataKey="pct" radius={[3, 3, 0, 0]}>

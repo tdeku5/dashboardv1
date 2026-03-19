@@ -31,6 +31,7 @@ import { RPCEDashboardPage }        from './pages/RPCEDashboardPage'
 import { GDIDashboardPage }         from './pages/GDIDashboardPage'
 import { ConsumerHealthDashboardPage } from './pages/ConsumerHealthDashboardPage'
 import { TradeDashboardPage }          from './pages/TradeDashboardPage'
+import { STIRDashboardPage } from './pages/STIRDashboardPage'
 
 function App() {
   return (
@@ -65,6 +66,7 @@ function App() {
         <Route path="/models/growth/gdi"                    element={<GDIDashboardPage />} />
         <Route path="/models/growth/consumer-health"       element={<ConsumerHealthDashboardPage />} />
         <Route path="/models/growth/trade"                element={<TradeDashboardPage />} />
+        <Route path="/stir"                         element={<STIRDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
       </Routes>
