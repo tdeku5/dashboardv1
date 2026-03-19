@@ -22,6 +22,7 @@ import { syncDtsTaxDeposits } from './dtsTaxDeposits'
 import { censusTradeRouter, isCensusTradeStale, fetchAndStoreCensusTrade } from './routes/census-trade'
 import { mtsRouter } from './routes/mts'
 import { syncMtsFiscalBalance } from './mtsFiscalBalance'
+import futuresRouter from './routes/futures'
 
 dotenv.config({ path: '../.env' })
 
@@ -41,6 +42,7 @@ app.use('/api/fiscal',   fiscalRouter)
 app.use('/api/fiscal-flows', fiscalFlowsRouter)
 app.use('/api/census-trade', censusTradeRouter)
 app.use('/api/mts',          mtsRouter)
+app.use('/api/futures',      futuresRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
