@@ -89,10 +89,6 @@
 .rightPanel {
   flex: 0 0 42%;
   min-width: 0;
-  position: sticky;
-  top: 60px;
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
 }
 
 .viewTabs {
@@ -103,7 +99,6 @@
 
 .viewTab {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #728197;
   font-family: var(--font-mono);
   font-size: 0.8rem;
@@ -121,7 +116,6 @@
 
 .viewTab:last-child {
   border-radius: 0 3px 3px 0;
-  border-left: none;
 }
 
 .viewTab:hover {
@@ -131,12 +125,7 @@
 
 .viewTabActive {
   color: #4EC9B0;
-  border-color: #4EC9B0;
   background: rgba(78, 201, 176, 0.08);
-}
-
-.viewTabActive + .viewTab {
-  border-left: none;
 }
 
 .controlsSection,
@@ -156,11 +145,10 @@
 
 .toggleGroup {
   display: inline-flex;
-  gap: 6px;
+  gap: 0;
 }
 
 .toggleButton {
-  border: 1px solid var(--border-accent);
   background: rgba(255,255,255,0.03);
   color: #8ea1b5;
   padding: 6px 10px;
@@ -170,9 +158,16 @@
   cursor: pointer;
 }
 
+.toggleButton:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.toggleButton:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
 .toggleButtonActive {
   color: #4ec9b0;
-  border-color: rgba(78, 201, 176, 0.45);
   background: rgba(78, 201, 176, 0.12);
 }
 
@@ -243,6 +238,16 @@
 .sectionHeader {
   padding: 11px 16px;
   border-bottom: 1px solid var(--border);
+}
+
+.panelTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94A3B8;
+  margin-bottom: 10px;
 }
 
 .tooltip {
@@ -416,6 +421,199 @@
   margin-top: 4px;
 }
 
+.spreadPopup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #0d1520;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  min-width: 280px;
+}
+
+.spreadPopupTitle {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #728197;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.ustSectionLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #60a5fa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 20px 0 10px;
+}
+
+.ustYieldRow {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ustYieldBox {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 12px 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.ustYieldLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+
+.ustYieldValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #60a5fa;
+}
+
+.ustYieldChange {
+  font-size: 0.75rem;
+  margin-top: 3px;
+}
+
+.ustSpreadRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.ustSpreadBox {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  padding: 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+}
+
+.ustSpreadLabel {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+
+.ustSpreadValue {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.ustSpreadChange {
+  font-size: 0.7rem;
+  margin-top: 2px;
+  color: #728197;
+}
+
+.ustBoxSelected {
+  border-color: #60a5fa !important;
+  background: rgba(96, 165, 250, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.3);
+}
+
+.ustChartTitle {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.06em;
+  padding: 20px 0 8px;
+}
+
+.ustChartControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 10px;
+}
+
+.ustRangeBar {
+  display: flex;
+  gap: 0;
+}
+
+.ustLookbackWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #728197;
+}
+
+.ustLookbackLabel {
+  white-space: nowrap;
+}
+
+.ustRegimeLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #94A3B8;
+  padding: 6px 0;
+}
+
+.ustRegimeLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ustRegimeSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.ustDashboard {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.realYieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ustBoxSelectedGreen {
+  border-color: #4ade80 !important;
+  background: rgba(74, 222, 128, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.3);
+}
+
+.ustBoxSelectedYellow {
+  border-color: #fbbf24 !important;
+  background: rgba(251, 191, 36, 0.08) !important;
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
+}
+
 /* ── Strip Table ── */
 .stripHeader {
   font-family: var(--font-mono);
@@ -537,7 +735,6 @@
 
 .fvmMeasureBtn {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #728197;
   font-family: var(--font-mono);
   font-size: 0.65rem;
@@ -555,7 +752,6 @@
 
 .fvmMeasureBtn:last-child {
   border-radius: 0 2px 2px 0;
-  border-left: none;
 }
 
 .fvmMeasureBtn:hover {
@@ -565,7 +761,6 @@
 
 .fvmMeasureBtnActive {
   color: #FFD700;
-  border-color: #FFD700;
   background: rgba(255, 215, 0, 0.08);
 }
 
@@ -578,7 +773,6 @@
 
 .fvmTab {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #728197;
   font-family: var(--font-mono);
   font-size: 0.65rem;
@@ -599,10 +793,6 @@
   border-radius: 0 2px 2px 0;
 }
 
-.fvmTab:not(:first-child) {
-  border-left: none;
-}
-
 .fvmTab:hover {
   color: #e2e8f0;
   background: rgba(255, 255, 255, 0.04);
@@ -610,7 +800,6 @@
 
 .fvmTabActive {
   color: #FFD700;
-  border-color: #FFD700;
   background: rgba(255, 215, 0, 0.08);
 }
 
@@ -630,14 +819,13 @@
 
 .fvmRangeBar {
   display: flex;
-  gap: 2px;
+  gap: 0;
   margin-bottom: 8px;
   flex-wrap: wrap;
 }
 
 .fvmRangeBtn {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #728197;
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -647,13 +835,20 @@
   border-radius: 2px;
 }
 
+.fvmRangeBtn:first-child {
+  border-radius: 2px 0 0 2px;
+}
+
+.fvmRangeBtn:last-child {
+  border-radius: 0 2px 2px 0;
+}
+
 .fvmRangeBtn:hover {
   color: #e2e8f0;
 }
 
 .fvmRangeBtnActive {
   color: #FFD700;
-  border-color: #FFD700;
   background: rgba(255, 215, 0, 0.08);
 }
 
@@ -675,6 +870,34 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding: 12px 0 6px;
+}
+
+.laborInputRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #94A3B8;
+}
+
+.laborInputLabel {
+  color: #728197;
+  white-space: nowrap;
+}
+
+.laborInput {
+  background: #0d1520;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  border-radius: 2px;
+  padding: 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  width: 50px;
+  text-align: center;
 }
 
 .comingSoon {
@@ -715,6 +938,7 @@
 
   .rightPanel {
     position: static;
+    margin-top: 0;
     max-height: none;
     overflow-y: visible;
   }

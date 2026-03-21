@@ -77,6 +77,37 @@ function getContractsForDate(db: Database.Database, rootSymbol: string, pullDate
   `).all(rootSymbol, pullDate) as StripRow[]
 }
 
+futuresRouter.get('/contract-history/:symbol', (req: Request, res: Response) => {
+  try {
+    const db = getFuturesDb()
+    const rawSymbol = decodeURIComponent(String(req.params.symbol || ''))
+    const days = Math.max(1, Number.parseInt(String(req.query.days ?? '60'), 10) || 60)
+    const symbol = rawSymbol.startsWith('/') ? rawSymbol : `/${rawSymbol}`
+
+    const rows = db.prepare(`
+      SELECT
+        pull_date AS date,
+        last_price AS lastPrice,
+        (100.0 - last_price) AS impliedRate
+      FROM futures_quotes
+      WHERE symbol = ?
+        AND last_price IS NOT NULL
+        AND last_price > 0
+      ORDER BY pull_date DESC
+      LIMIT ?
+    `).all(symbol, days) as Array<{ date: string; lastPrice: number; impliedRate: number }>
+
+    res.json({
+      symbol,
+      history: rows.reverse(),
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unexpected contract history error'
+    console.error('[futures] Contract history error:', msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
 futuresRouter.get('/strip/:rootSymbol', (req: Request, res: Response) => {
   try {
     const db = getFuturesDb()
