@@ -5,8 +5,7 @@ import styles from './NavDropdown.module.css'
 const NAV_OPTIONS = [
   { path: '/',             label: 'US Macro Snapshot'        },
   { path: '/models',       label: 'Economic Data Models'     },
-  { path: '/stir',         label: 'Rates Models'             },
-  { path: '/treasury',     label: 'Treasury Auction Monitor' },
+  { path: '/stir',         label: 'Asset Class Models'        },
   { path: '/news',         label: 'News Aggregator'          },
 ]
 

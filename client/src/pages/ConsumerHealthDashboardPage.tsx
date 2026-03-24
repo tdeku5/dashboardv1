@@ -154,7 +154,7 @@ function QuickSelectRow({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function ConsumerHealthDashboardPage() {
+export function ConsumerHealthDashboardContent() {
   // ── Data fetch ───────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<Record<string, WD[]>>({})
   const [loading, setLoading] = useState(true)
@@ -377,26 +377,7 @@ export function ConsumerHealthDashboardPage() {
   // ════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className={styles.shell}>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Consumer Health</span>
-      </nav>
-
-      <main className={styles.body}>
+    <>
         <h1 className={styles.majorHeader}>Consumer Health</h1>
 
         {loading && (
@@ -775,6 +756,30 @@ export function ConsumerHealthDashboardPage() {
               onSelect={(l, c) => handleQuickSelect('gasPrice', l, c, gasData.length)} />
           </div>
         </>)}
+    </>
+  )
+}
+
+export function ConsumerHealthDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Consumer Health</span>
+      </nav>
+      <main className={styles.body}>
+        <ConsumerHealthDashboardContent />
       </main>
     </div>
   )

@@ -1,5 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   Bar,
   BarChart,
@@ -24,7 +23,19 @@ import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import styles from './STIRDashboardPage.module.css'
 
-type ViewTab = 'strips' | 'pricing' | 'ust' | 'credit' | 'regimes'
+const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
+
+type ViewTab = 'strips' | 'pricing' | 'ust' | 'credit' | 'money' | 'auctions'
+
+type AssetClass = 'macro' | 'rates' | 'equities' | 'fx' | 'commodities'
+
+const ASSET_CLASSES: Array<{ key: AssetClass; label: string }> = [
+  { key: 'macro', label: 'MACRO' },
+  { key: 'rates', label: 'RATES' },
+  { key: 'equities', label: 'EQUITIES' },
+  { key: 'fx', label: 'FX' },
+  { key: 'commodities', label: 'COMMODITIES' },
+]
 
 type ProductKey = 'fedfunds' | 'sofr'
 
@@ -37,6 +48,7 @@ const FVM_TABS = [
   { key: 'cpi', label: 'CPI' },
   { key: 'pce', label: 'PCE' },
   { key: 'labor', label: 'LABOR' },
+  { key: 'growth', label: 'GROWTH' },
 ] as const
 
 const VIEW_TABS: Array<{ key: ViewTab; label: string }> = [
@@ -44,7 +56,8 @@ const VIEW_TABS: Array<{ key: ViewTab; label: string }> = [
   { key: 'pricing', label: 'FORWARD PRICING' },
   { key: 'ust', label: 'UST CURVE' },
   { key: 'credit', label: 'CREDIT' },
-  { key: 'regimes', label: 'REGIMES' },
+  { key: 'money', label: 'MONEY MARKETS' },
+  { key: 'auctions', label: 'TREASURY AUCTIONS' },
 ] as const
 
 const FVM_RANGES = [
@@ -149,6 +162,28 @@ interface PayrollMomPoint {
   mom: number
   ma3: number | null
   ma6: number | null
+}
+
+interface GDPNowPoint {
+  forecastDate: string
+  value: number
+}
+
+interface GDPNowQuarter {
+  quarter: string
+  forecasts: GDPNowPoint[]
+}
+
+interface ContributionPoint {
+  forecast_date: string
+  gdp: number | null
+  pce: number | null
+  equipment: number | null
+  intell_prop: number | null
+  nonres_struct: number | null
+  resid_invest: number | null
+  govt: number | null
+  net_exports: number | null
 }
 
 interface ContractHistoryPoint {
@@ -307,6 +342,26 @@ function fmtBpsValue(v: number | null): string {
   if (v == null) return '—'
   const sign = v > 0 ? '+' : ''
   return `${sign}${v.toFixed(1)}bp`
+}
+
+const CONTRIB_COMPONENTS = [
+  { key: 'pce', label: 'PCE', color: '#42a5f5' },
+  { key: 'equipment', label: 'Equipment', color: '#66bb6a' },
+  { key: 'intell_prop', label: 'Intell. Prop.', color: '#ab47bc' },
+  { key: 'nonres_struct', label: 'Nonres. Struct.', color: '#ffa726' },
+  { key: 'resid_invest', label: 'Resid. Invest.', color: '#ef5350' },
+  { key: 'govt', label: 'Govt.', color: '#26c6da' },
+  { key: 'net_exports', label: 'Net Exports', color: '#ffee58' },
+] as const
+
+function getQuarterColor(idx: number): string {
+  const colors = [
+    '#90CAF9', '#F48FB1', '#CE93D8', '#80CBC4', '#FFE082',
+    '#81C784', '#FFCC80', '#9FA8DA', '#ef9a9a', '#4FC3F7',
+    '#A1887F', '#B39DDB', '#FF8A65', '#4DD0E1', '#AED581',
+    '#DCE775', '#FFB74D', '#4DB6AC', '#81D4FA', '#C5E1A5',
+  ]
+  return colors[idx % colors.length]
 }
 
 function monthsForward(contract: StripContract, now = new Date()): number {
@@ -626,6 +681,7 @@ function useContractHistory(symbol: string | null, days = 60) {
 }
 
 export function STIRDashboardPage() {
+  const [assetClass, setAssetClass] = useState<AssetClass>('rates')
   const [activeView, setActiveView] = useState<ViewTab>('pricing')
   const [product, setProduct] = useState<ProductKey>('fedfunds')
   const [fvmTab, setFvmTab] = useState<string>('cpi')
@@ -662,6 +718,12 @@ export function STIRDashboardPage() {
   })
   const [laborLoading, setLaborLoading] = useState(true)
   const [laborError, setLaborError] = useState<string | null>(null)
+  const [gdpnowData, setGdpnowData] = useState<GDPNowQuarter[]>([])
+  const [gdpnowLoading, setGdpnowLoading] = useState(true)
+  const [gdpnowError, setGdpnowError] = useState<string | null>(null)
+  const [gdpnowRange, setGdpnowRange] = useState<string>('2y')
+  const [gdpnowSyncing, setGdpnowSyncing] = useState(false)
+  const [gdpnowContribs, setGdpnowContribs] = useState<ContributionPoint[]>([])
   const [payrollScenarios, setPayrollScenarios] = useState([50, 100, 150, 200])
   const [clfGrowthRate, setClfGrowthRate] = useState(0.05)
   const [hoveredBox, setHoveredBox] = useState<'mtg' | 'term6m' | 'term12m' | null>(null)
@@ -1023,6 +1085,61 @@ export function STIRDashboardPage() {
     }
   }, [])
 
+  useEffect(() => {
+    let cancelled = false
+    setGdpnowLoading(true)
+    setGdpnowError(null)
+
+    fetch('/api/gdpnow')
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => null) as { error?: string } | null
+          throw new Error(body?.error ?? `HTTP ${res.status}`)
+        }
+        return await res.json() as unknown
+      })
+      .then((data) => {
+        if (cancelled) return
+        setGdpnowData(Array.isArray(data) ? data as GDPNowQuarter[] : [])
+        setGdpnowLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setGdpnowError(err instanceof Error ? err.message : String(err))
+        setGdpnowLoading(false)
+      })
+
+    fetch('/api/gdpnow/contributions')
+      .then((r) => r.json() as Promise<unknown>)
+      .then((data) => {
+        if (cancelled) return
+        if (Array.isArray(data)) setGdpnowContribs(data as ContributionPoint[])
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function handleGdpnowRefresh() {
+    setGdpnowSyncing(true)
+    try {
+      await fetch('/api/gdpnow/sync', { method: 'POST' })
+      const [res, contribRes] = await Promise.all([
+        fetch('/api/gdpnow'),
+        fetch('/api/gdpnow/contributions'),
+      ])
+      const data = await res.json() as unknown
+      if (Array.isArray(data)) setGdpnowData(data as GDPNowQuarter[])
+      const contribData = await contribRes.json() as unknown
+      if (Array.isArray(contribData)) setGdpnowContribs(contribData as ContributionPoint[])
+    } catch (err) {
+      console.error('GDPNow sync failed:', err)
+    }
+    setGdpnowSyncing(false)
+  }
+
   const activeCpiSeries = useMemo(
     () => (fvmMeasure === 'headline' ? cpiData.headline : cpiData.core),
     [cpiData, fvmMeasure],
@@ -1225,6 +1342,88 @@ export function STIRDashboardPage() {
     const padding = (max - min) * 0.1 || 0.05
     return [min - padding, max + padding]
   }, [filteredPayrollMoM])
+
+  const gdpnowChartData = useMemo(() => {
+    if (gdpnowData.length === 0) {
+      return { merged: [] as Array<Record<string, string | number | null>>, quarters: [] as string[] }
+    }
+
+    // Compute date cutoff based on range
+    let cutoffDate = ''
+    if (gdpnowRange !== 'all') {
+      const now = new Date()
+      const monthsBack: Record<string, number> = { '6m': 6, '1y': 12, '2y': 24, '5y': 60 }
+      const months = monthsBack[gdpnowRange] ?? 24
+      now.setMonth(now.getMonth() - months)
+      cutoffDate = now.toISOString().slice(0, 10)
+    }
+
+    // Sort quarters chronologically ("Q1 2024" < "Q2 2024" < "Q1 2025")
+    const parseQ = (s: string) => {
+      const m = s.match(/Q(\d)\s+(\d{4})/)
+      return m ? parseInt(m[2]) * 10 + parseInt(m[1]) : 0
+    }
+    const sortedQuarters = [...gdpnowData].sort((a, b) => parseQ(a.quarter) - parseQ(b.quarter))
+
+    const allDates = new Set<string>()
+    for (const quarter of sortedQuarters) {
+      for (const forecast of quarter.forecasts) {
+        if (cutoffDate && forecast.forecastDate < cutoffDate) continue
+        allDates.add(forecast.forecastDate)
+      }
+    }
+
+    const sortedDates = [...allDates].sort()
+
+    // Only include quarters that have data in the visible range
+    const activeQuarters = sortedQuarters.filter((q) =>
+      q.forecasts.some((f) => !cutoffDate || f.forecastDate >= cutoffDate)
+    )
+
+    const merged = sortedDates.map<Record<string, string | number | null>>((date) => {
+      const point: Record<string, string | number | null> = { date }
+      for (const quarter of activeQuarters) {
+        const match = quarter.forecasts.find((forecast) => forecast.forecastDate === date)
+        point[quarter.quarter] = match ? match.value : null
+      }
+      return point
+    })
+
+    return {
+      merged,
+      quarters: activeQuarters.map((quarter) => quarter.quarter),
+    }
+  }, [gdpnowData, gdpnowRange])
+
+  const gdpnowLatest = useMemo(() => {
+    let latest: { quarter: string; forecastDate: string; value: number } | null = null
+    for (const quarter of gdpnowData) {
+      for (const forecast of quarter.forecasts) {
+        if (!latest || forecast.forecastDate > latest.forecastDate) {
+          latest = {
+            quarter: quarter.quarter,
+            forecastDate: forecast.forecastDate,
+            value: forecast.value,
+          }
+        }
+      }
+    }
+    return latest
+  }, [gdpnowData])
+
+  const contribChartData = useMemo(() => {
+    return gdpnowContribs.map((row) => ({
+      date: row.forecast_date,
+      gdp: row.gdp,
+      pce: row.pce ?? 0,
+      equipment: row.equipment ?? 0,
+      intell_prop: row.intell_prop ?? 0,
+      nonres_struct: row.nonres_struct ?? 0,
+      resid_invest: row.resid_invest ?? 0,
+      govt: row.govt ?? 0,
+      net_exports: row.net_exports ?? 0,
+    }))
+  }, [gdpnowContribs])
 
   const currentYields = useMemo(() => {
     return UST_TENORS.map((tenor) => {
@@ -1514,12 +1713,59 @@ export function STIRDashboardPage() {
       </header>
 
       <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Rates Models</span>
+        <span className={styles.breadcrumbCurrent}>Asset Class Models</span>
       </nav>
 
       <main className={styles.body}>
+        {/* ═══ Asset Class Selector ═══ */}
+        <div className={styles.assetClassBar}>
+          {ASSET_CLASSES.map((ac, idx) => (
+            <button
+              key={ac.key}
+              className={`${styles.assetClassBtn} ${assetClass === ac.key ? styles.assetClassBtnActive : ''}`}
+              onClick={() => setAssetClass(ac.key)}
+              style={{
+                border: `1px solid ${assetClass === ac.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {ac.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ═══ Macro View ═══ */}
+        {assetClass === 'macro' && (
+          <>
+            <div className={styles.viewTabs}>
+              <button
+                className={`${styles.viewTab} ${styles.viewTabActive}`}
+                style={{ border: '1px solid #4EC9B0' }}
+              >
+                REGIMES
+              </button>
+            </div>
+            <div className={styles.comingSoon}>Regimes coming soon</div>
+          </>
+        )}
+
+        {/* ═══ Equities View ═══ */}
+        {assetClass === 'equities' && (
+          <div className={styles.comingSoon}>Equities coming soon</div>
+        )}
+
+        {/* ═══ FX View ═══ */}
+        {assetClass === 'fx' && (
+          <div className={styles.comingSoon}>FX coming soon</div>
+        )}
+
+        {/* ═══ Commodities View ═══ */}
+        {assetClass === 'commodities' && (
+          <div className={styles.comingSoon}>Commodities coming soon</div>
+        )}
+
+        {/* ═══ Rates View (existing content) ═══ */}
+        {assetClass === 'rates' && (<>
         <div className={styles.viewTabs}>
           {VIEW_TABS.map((tab, idx) => (
             <button
@@ -2501,38 +2747,47 @@ export function STIRDashboardPage() {
           </section>
         )}
 
-        {activeView === 'regimes' && (
+        {activeView === 'money' && (
           <section className={styles.section}>
-            <div className={styles.comingSoon}>Regimes coming soon</div>
+            <div className={styles.comingSoon}>Money Markets coming soon</div>
           </section>
         )}
+
+        {activeView === 'auctions' && (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <TreasuryAuctionContent />
+          </Suspense>
+        )}
+
           </div>
 
           <div className={styles.rightPanel}>
             <div className={styles.fvmPanel}>
               <div className={styles.fvmHeader}>
                 <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
-                <div className={styles.fvmMeasureToggle}>
-                  <button
-                    className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'headline' ? styles.fvmMeasureBtnActive : ''}`}
-                    onClick={() => setFvmMeasure('headline')}
-                    style={{
-                      border: `1px solid ${fvmMeasure === 'headline' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
-                    }}
-                  >
-                    HEADLINE
-                  </button>
-                  <button
-                    className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'core' ? styles.fvmMeasureBtnActive : ''}`}
-                    onClick={() => setFvmMeasure('core')}
-                    style={{
-                      border: `1px solid ${fvmMeasure === 'core' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
-                      borderLeft: 'none',
-                    }}
-                  >
-                    CORE
-                  </button>
-                </div>
+                {(fvmTab === 'cpi' || fvmTab === 'pce') && (
+                  <div className={styles.fvmMeasureToggle}>
+                    <button
+                      className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'headline' ? styles.fvmMeasureBtnActive : ''}`}
+                      onClick={() => setFvmMeasure('headline')}
+                      style={{
+                        border: `1px solid ${fvmMeasure === 'headline' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                      }}
+                    >
+                      HEADLINE
+                    </button>
+                    <button
+                      className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'core' ? styles.fvmMeasureBtnActive : ''}`}
+                      onClick={() => setFvmMeasure('core')}
+                      style={{
+                        border: `1px solid ${fvmMeasure === 'core' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                        borderLeft: 'none',
+                      }}
+                    >
+                      CORE
+                    </button>
+                  </div>
+                )}
               </div>
               <div className={styles.fvmTabs}>
                 {FVM_TABS.map((tab, idx) => (
@@ -2542,6 +2797,7 @@ export function STIRDashboardPage() {
                     onClick={() => {
                       setFvmTab(tab.key)
                       if (tab.key === 'labor') setFvmRange('2y')
+                      if (tab.key === 'growth') setFvmRange('all')
                     }}
                     style={{
                       border: `1px solid ${fvmTab === tab.key ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
@@ -2797,6 +3053,198 @@ export function STIRDashboardPage() {
                       </ResponsiveContainer>
                     </>
                   )
+                ) : fvmTab === 'growth' ? (
+                  gdpnowError ? (
+                    <div className={styles.comingSoon}>{gdpnowError}</div>
+                  ) : gdpnowLoading ? (
+                    <div className={styles.comingSoon}>Loading GDPNow data…</div>
+                  ) : gdpnowData.length === 0 ? (
+                    <div className={styles.comingSoon}>No GDPNow data available</div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className={styles.fvmSectionLabel}>GDPNow — Atlanta Fed Nowcast</div>
+                        <button
+                          onClick={handleGdpnowRefresh}
+                          disabled={gdpnowSyncing}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255, 255, 255, 0.12)',
+                            color: gdpnowSyncing ? '#4a5568' : '#94A3B8',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.6rem',
+                            padding: '3px 8px',
+                            cursor: gdpnowSyncing ? 'not-allowed' : 'pointer',
+                            borderRadius: '2px',
+                          }}
+                        >
+                          {gdpnowSyncing ? 'SYNCING...' : '↻ REFRESH'}
+                        </button>
+                      </div>
+
+                      <div className={styles.fvmStatsLine}>
+                        {gdpnowLatest
+                          ? `LATEST: ${gdpnowLatest.quarter} | ${gdpnowLatest.value.toFixed(1)}% | Updated: ${gdpnowLatest.forecastDate}`
+                          : 'LATEST: —'}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                        {['6m', '1y', '2y', '5y', 'all'].map((r) => (
+                          <button
+                            key={r}
+                            onClick={() => setGdpnowRange(r)}
+                            style={{
+                              background: gdpnowRange === r ? 'rgba(255,215,0,0.15)' : 'transparent',
+                              border: `1px solid ${gdpnowRange === r ? '#FFD700' : 'rgba(255,255,255,0.12)'}`,
+                              color: gdpnowRange === r ? '#FFD700' : '#94A3B8',
+                              borderRadius: '3px',
+                              padding: '2px 8px',
+                              fontSize: '0.65rem',
+                              fontFamily: 'var(--font-mono)',
+                              cursor: 'pointer',
+                              textTransform: 'uppercase',
+                            }}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className={styles.fvmLegend}>
+                        {gdpnowChartData.quarters.slice(-6).map((quarter) => {
+                          const globalIdx = gdpnowChartData.quarters.indexOf(quarter)
+                          return (
+                            <span key={quarter} style={{ color: getQuarterColor(globalIdx) }}>
+                              ― {quarter}
+                            </span>
+                          )
+                        })}
+                      </div>
+
+                      <ResponsiveContainer width="100%" height={400}>
+                        <LineChart data={gdpnowChartData.merged} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                          <XAxis
+                            dataKey="date"
+                            stroke="#728197"
+                            tick={FVM_TICK}
+                            tickFormatter={(date: string) => {
+                              const d = new Date(date)
+                              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                              return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+                            }}
+                            interval="preserveStartEnd"
+                            minTickGap={50}
+                          />
+                          <YAxis
+                            stroke="#728197"
+                            tick={FVM_TICK}
+                            tickFormatter={(value: number) => `${value.toFixed(1)}%`}
+                            domain={['auto', 'auto']}
+                          />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
+                          <Tooltip
+                            contentStyle={{
+                              background: '#0d1520',
+                              border: '1px solid rgba(255,255,255,0.12)',
+                              borderRadius: '3px',
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '0.7rem',
+                            }}
+                            labelFormatter={(label: unknown) => {
+                              if (typeof label !== 'string') return ''
+                              const date = label
+                              const d = new Date(date)
+                              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            }}
+                            formatter={(value: unknown, name: string | undefined) => [
+                              typeof value === 'number' ? `${value.toFixed(1)}%` : '—',
+                              name ?? '',
+                            ]}
+                          />
+                          {gdpnowChartData.quarters.map((quarter, idx) => (
+                            <Line
+                              key={quarter}
+                              type="stepAfter"
+                              dataKey={quarter}
+                              stroke={getQuarterColor(idx)}
+                              strokeWidth={1.5}
+                              dot={false}
+                              connectNulls={false}
+                            />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+
+                      {contribChartData.length > 0 && (
+                        <>
+                          <div className={styles.fvmSectionLabel} style={{ marginTop: '16px' }}>GDPNOW SUBCOMPONENT CONTRIBUTIONS</div>
+
+                          <div className={styles.fvmLegend}>
+                            {CONTRIB_COMPONENTS.map((c) => (
+                              <span key={c.key} style={{ color: c.color }}>{'\u25A0'} {c.label}</span>
+                            ))}
+                            <span style={{ color: '#ffffff' }}>― GDP</span>
+                          </div>
+
+                          <ResponsiveContainer width="100%" height={350}>
+                            <ComposedChart data={contribChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }} stackOffset="sign">
+                              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                              <XAxis
+                                dataKey="date"
+                                stroke="#728197"
+                                tick={{ fontSize: 9, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                                tickFormatter={(date: string) => {
+                                  const d = new Date(date)
+                                  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                                  return `${months[d.getMonth()]} ${d.getDate()}`
+                                }}
+                                interval="preserveStartEnd"
+                                minTickGap={40}
+                              />
+                              <YAxis
+                                stroke="#728197"
+                                tick={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                                tickFormatter={(v: number) => `${v.toFixed(1)}%`}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  background: '#0d1520',
+                                  border: '1px solid rgba(255,255,255,0.12)',
+                                  borderRadius: '3px',
+                                  fontFamily: 'var(--font-mono)',
+                                  fontSize: '0.65rem',
+                                }}
+                                formatter={(value: unknown, name: string | undefined) => [
+                                  typeof value === 'number' ? `${value.toFixed(2)}pp` : '—',
+                                  name ?? '',
+                                ]}
+                                labelFormatter={(label: unknown) => {
+                                  if (typeof label !== 'string') return ''
+                                  const d = new Date(label)
+                                  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                }}
+                              />
+                              <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+
+                              {CONTRIB_COMPONENTS.map((c) => (
+                                <Bar key={c.key} dataKey={c.key} stackId="contrib" fill={c.color} name={c.label} />
+                              ))}
+
+                              <Line
+                                type="stepAfter"
+                                dataKey="gdp"
+                                stroke="#ffffff"
+                                strokeWidth={2}
+                                dot={false}
+                                name="GDP"
+                              />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </>
+                      )}
+                    </>
+                  )
                 ) : (
                   <div className={styles.comingSoon}>
                     {FVM_TABS.find((tab) => tab.key === fvmTab)?.label} — coming soon
@@ -2806,6 +3254,7 @@ export function STIRDashboardPage() {
             </div>
           </div>
         </div>
+        </>)}
       </main>
     </div>
   )

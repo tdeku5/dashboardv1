@@ -1160,7 +1160,7 @@ function SubDecompSection({
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function CESDashboardPage() {
+export function CESDashboardContent() {
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
   const [allData,  setAllData]  = useState<AllData>({})
@@ -1736,25 +1736,7 @@ export function CESDashboardPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.shell}>
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>CES Dashboard</span>
-      </nav>
-
-      <main className={styles.body}>
+    <>
         <div>
           <div className={styles.pageTitle}>CES Dashboard</div>
           <div className={styles.pageSub}>
@@ -3348,6 +3330,32 @@ export function CESDashboardPage() {
           </div>
 
         </>)}
+    </>
+  )
+}
+
+export function CESDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>CES Dashboard</span>
+      </nav>
+
+      <main className={styles.body}>
+        <CESDashboardContent />
       </main>
     </div>
   )

@@ -1090,7 +1090,7 @@ function PpiTrendChart({ title, data }: { title: string; data: WD[] }) {
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function PPIDashboardPage() {
+export function PPIDashboardContent() {
   // ── Core state ──────────────────────────────────────────────────────────────
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -1413,28 +1413,7 @@ export function PPIDashboardPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.shell}>
-      {/* ── Top bar ────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      {/* ── Breadcrumb ─────────────────────────────────────────────────────── */}
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/inflation" className={styles.breadcrumbLink}>Inflation</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>PPI</span>
-      </nav>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className={styles.body}>
+    <>
 
         {/* ── PPI Contribution Decomposition ──────────────────────────────── */}
         <div className={styles.explorerHeader}>
@@ -2196,6 +2175,32 @@ export function PPIDashboardPage() {
             </div>
           </>
         )}
+    </>
+  )
+}
+
+export function PPIDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/inflation" className={styles.breadcrumbLink}>Inflation</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>PPI</span>
+      </nav>
+
+      <div className={styles.body}>
+        <PPIDashboardContent />
       </div>
     </div>
   )

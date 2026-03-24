@@ -100,8 +100,8 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-/* ── Component ──────────────────────────────────────────────── */
-export function MtsPage() {
+/* ── Content component (all hooks/state/effects live here) ──── */
+export function MtsContent() {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [gdp, setGdp] = useState<FredObservation[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -216,6 +216,200 @@ export function MtsPage() {
   }
 
   return (
+    <>
+      {error && <p style={{ color: '#ef4444' }}>Error: {error}</p>}
+
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <div className={styles.sectionTitle}>CUMULATIVE FISCAL BALANCE</div>
+            <div className={styles.sectionSub}>$ billions · Monthly Surplus/Deficit</div>
+          </div>
+        </div>
+
+        {stats && (
+          <div className={styles.statsRow}>
+            <div className={styles.stat}>
+              <span className={styles.statLabel}>FY{stats.currentFY} YTD (Month {stats.monthIndex})</span>
+              <span className={styles.statValue} style={{ color: stats.ytdB >= 0 ? '#22c55e' : '#ef4444' }}>
+                {fmtBillionsExact(stats.ytdB)}
+              </span>
+            </div>
+            {stats.delta !== null && (
+              <div className={styles.stat}>
+                <span className={styles.statLabel}>vs FY2025</span>
+                <span className={styles.statValue} style={{ color: stats.delta >= 0 ? '#22c55e' : '#ef4444' }}>
+                  {stats.delta > 0 ? '+' : ''}{fmtBillionsExact(stats.delta)}
+                  {stats.deltaPct !== null && (
+                    <span className={styles.statPct}> ({stats.deltaPct >= 0 ? '+' : ''}{stats.deltaPct.toFixed(1)}%)</span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className={styles.legendRow}>
+          <div className={styles.legend}>
+            {fiscalYears.map(fy => {
+              const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
+              const hidden = hiddenFYs.has(fy)
+              return (
+                <div
+                  key={fy}
+                  className={styles.legendItem}
+                  style={{ opacity: hidden ? 0.35 : 1 }}
+                  onClick={() => toggleFY(fy)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') toggleFY(fy)
+                  }}
+                >
+                  <span
+                    className={styles.legendLine}
+                    style={{
+                      background: s.color,
+                      opacity: s.opacity,
+                      height: fy === CURRENT_FY ? 3 : 2,
+                    }}
+                  />
+                  FY{fy}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={520}>
+            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis
+                dataKey="month_index"
+                tickFormatter={(v: number) => MONTH_LABELS[v - 1] ?? ''}
+                stroke="var(--text-primary)"
+                fontSize={12}
+              />
+              <YAxis
+                stroke="var(--text-primary)"
+                fontSize={12}
+                tickFormatter={fmtBillions}
+              />
+              <Tooltip content={<CustomTooltip />} />
+              {fiscalYears.map(fy => {
+                if (hiddenFYs.has(fy)) return null
+                const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
+                return (
+                  <Line
+                    key={fy}
+                    type="monotone"
+                    dataKey={fy}
+                    name={fy}
+                    stroke={s.color}
+                    strokeWidth={s.width}
+                    strokeOpacity={s.opacity}
+                    dot={false}
+                    connectNulls
+                  />
+                )
+              })}
+            </LineChart>
+          </ResponsiveContainer>
+        ) : !error && (
+          <div className={styles.loading} style={{ height: 520 }}>Loading…</div>
+        )}
+
+        {data?.lastUpdated && (
+          <p className={styles.lastUpdated}>Last updated: {data.lastUpdated}</p>
+        )}
+      </section>
+
+      <section className={styles.gridSection}>
+        <div className={styles.gridCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionTitle}>FYTD SURPLUS/DEFICIT</div>
+              <div className={styles.sectionSub}>$ billions</div>
+            </div>
+          </div>
+
+          {fytdBars.length > 0 ? (
+            <div className={styles.miniChartWrap}>
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={fytdBars} margin={{ top: 28, right: 16, left: 8, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
+                  <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtBillions} domain={['dataMin', 0]} />
+                  <Tooltip
+                    formatter={(value: number | undefined) => fmtBillionsExact(Number(value ?? 0))}
+                    labelFormatter={(label) => `FY${label}`}
+                  />
+                  <Bar dataKey="valueB" radius={[3, 3, 0, 0]}>
+                    {fytdBars.map((row) => (
+                      <Cell
+                        key={row.fy}
+                        fill={row.fy === CURRENT_FY ? '#60a5fa' : '#3b82f6'}
+                        fillOpacity={row.fy === CURRENT_FY ? 1 : 0.82}
+                      />
+                    ))}
+                    <LabelList content={renderBarValueLabel((value) => {
+                      if (Math.abs(value) >= 1000) return `${value.toFixed(1)}T`
+                      return `${value.toFixed(0)}B`
+                    })} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className={styles.loading} style={{ height: 340 }}>Loading…</div>
+          )}
+        </div>
+
+        <div className={styles.gridCard}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <div className={styles.sectionTitle}>FYTD SURPLUS/DEFICIT</div>
+              <div className={styles.sectionSub}>% of GDP</div>
+            </div>
+          </div>
+
+          {fytdPctBars.length > 0 ? (
+            <div className={styles.miniChartWrap}>
+              <ResponsiveContainer width="100%" height={340}>
+                <BarChart data={fytdPctBars} margin={{ top: 28, right: 16, left: 8, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
+                  <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtPercentWhole} domain={['dataMin', 0]} />
+                  <Tooltip
+                    formatter={(value: number | undefined) => fmtPercent(Number(value ?? 0))}
+                    labelFormatter={(label) => `FY${label}`}
+                  />
+                  <Bar dataKey="pct" radius={[3, 3, 0, 0]}>
+                    {fytdPctBars.map((row) => (
+                      <Cell
+                        key={row.fy}
+                        fill={row.fy === CURRENT_FY ? '#4ade80' : '#22c55e'}
+                        fillOpacity={row.fy === CURRENT_FY ? 1 : 0.82}
+                      />
+                    ))}
+                    <LabelList content={renderBarValueLabel((value) => fmtPercent(value))} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className={styles.loading} style={{ height: 340 }}>Loading…</div>
+          )}
+        </div>
+      </section>
+    </>
+  )
+}
+
+/* ── Page shell wrapper ──────────────────────────────────────── */
+export function MtsPage() {
+  return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
@@ -235,192 +429,7 @@ export function MtsPage() {
       </nav>
 
       <main className={styles.body}>
-        {error && <p style={{ color: '#ef4444' }}>Error: {error}</p>}
-
-        <section className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <div className={styles.sectionTitle}>CUMULATIVE FISCAL BALANCE</div>
-              <div className={styles.sectionSub}>$ billions · Monthly Surplus/Deficit</div>
-            </div>
-          </div>
-
-          {stats && (
-            <div className={styles.statsRow}>
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>FY{stats.currentFY} YTD (Month {stats.monthIndex})</span>
-                <span className={styles.statValue} style={{ color: stats.ytdB >= 0 ? '#22c55e' : '#ef4444' }}>
-                  {fmtBillionsExact(stats.ytdB)}
-                </span>
-              </div>
-              {stats.delta !== null && (
-                <div className={styles.stat}>
-                  <span className={styles.statLabel}>vs FY2025</span>
-                  <span className={styles.statValue} style={{ color: stats.delta >= 0 ? '#22c55e' : '#ef4444' }}>
-                    {stats.delta > 0 ? '+' : ''}{fmtBillionsExact(stats.delta)}
-                    {stats.deltaPct !== null && (
-                      <span className={styles.statPct}> ({stats.deltaPct >= 0 ? '+' : ''}{stats.deltaPct.toFixed(1)}%)</span>
-                    )}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className={styles.legendRow}>
-            <div className={styles.legend}>
-              {fiscalYears.map(fy => {
-                const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
-                const hidden = hiddenFYs.has(fy)
-                return (
-                  <div
-                    key={fy}
-                    className={styles.legendItem}
-                    style={{ opacity: hidden ? 0.35 : 1 }}
-                    onClick={() => toggleFY(fy)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') toggleFY(fy)
-                    }}
-                  >
-                    <span
-                      className={styles.legendLine}
-                      style={{
-                        background: s.color,
-                        opacity: s.opacity,
-                        height: fy === CURRENT_FY ? 3 : 2,
-                      }}
-                    />
-                    FY{fy}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={520}>
-              <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis
-                  dataKey="month_index"
-                  tickFormatter={(v: number) => MONTH_LABELS[v - 1] ?? ''}
-                  stroke="var(--text-primary)"
-                  fontSize={12}
-                />
-                <YAxis
-                  stroke="var(--text-primary)"
-                  fontSize={12}
-                  tickFormatter={fmtBillions}
-                />
-                <Tooltip content={<CustomTooltip />} />
-                {fiscalYears.map(fy => {
-                  if (hiddenFYs.has(fy)) return null
-                  const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
-                  return (
-                    <Line
-                      key={fy}
-                      type="monotone"
-                      dataKey={fy}
-                      name={fy}
-                      stroke={s.color}
-                      strokeWidth={s.width}
-                      strokeOpacity={s.opacity}
-                      dot={false}
-                      connectNulls
-                    />
-                  )
-                })}
-              </LineChart>
-            </ResponsiveContainer>
-          ) : !error && (
-            <div className={styles.loading} style={{ height: 520 }}>Loading…</div>
-          )}
-
-          {data?.lastUpdated && (
-            <p className={styles.lastUpdated}>Last updated: {data.lastUpdated}</p>
-          )}
-        </section>
-
-        <section className={styles.gridSection}>
-          <div className={styles.gridCard}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <div className={styles.sectionTitle}>FYTD SURPLUS/DEFICIT</div>
-                <div className={styles.sectionSub}>$ billions</div>
-              </div>
-            </div>
-
-            {fytdBars.length > 0 ? (
-              <div className={styles.miniChartWrap}>
-                <ResponsiveContainer width="100%" height={340}>
-                  <BarChart data={fytdBars} margin={{ top: 28, right: 16, left: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
-                    <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtBillions} domain={['dataMin', 0]} />
-                    <Tooltip
-                      formatter={(value: number | undefined) => fmtBillionsExact(Number(value ?? 0))}
-                      labelFormatter={(label) => `FY${label}`}
-                    />
-                    <Bar dataKey="valueB" radius={[3, 3, 0, 0]}>
-                      {fytdBars.map((row) => (
-                        <Cell
-                          key={row.fy}
-                          fill={row.fy === CURRENT_FY ? '#60a5fa' : '#3b82f6'}
-                          fillOpacity={row.fy === CURRENT_FY ? 1 : 0.82}
-                        />
-                      ))}
-                      <LabelList content={renderBarValueLabel((value) => {
-                        if (Math.abs(value) >= 1000) return `${value.toFixed(1)}T`
-                        return `${value.toFixed(0)}B`
-                      })} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className={styles.loading} style={{ height: 340 }}>Loading…</div>
-            )}
-          </div>
-
-          <div className={styles.gridCard}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <div className={styles.sectionTitle}>FYTD SURPLUS/DEFICIT</div>
-                <div className={styles.sectionSub}>% of GDP</div>
-              </div>
-            </div>
-
-            {fytdPctBars.length > 0 ? (
-              <div className={styles.miniChartWrap}>
-                <ResponsiveContainer width="100%" height={340}>
-                  <BarChart data={fytdPctBars} margin={{ top: 28, right: 16, left: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="fy" stroke="var(--text-primary)" fontSize={11} />
-                    <YAxis stroke="var(--text-primary)" fontSize={11} tickFormatter={fmtPercentWhole} domain={['dataMin', 0]} />
-                    <Tooltip
-                      formatter={(value: number | undefined) => fmtPercent(Number(value ?? 0))}
-                      labelFormatter={(label) => `FY${label}`}
-                    />
-                    <Bar dataKey="pct" radius={[3, 3, 0, 0]}>
-                      {fytdPctBars.map((row) => (
-                        <Cell
-                          key={row.fy}
-                          fill={row.fy === CURRENT_FY ? '#4ade80' : '#22c55e'}
-                          fillOpacity={row.fy === CURRENT_FY ? 1 : 0.82}
-                        />
-                      ))}
-                      <LabelList content={renderBarValueLabel((value) => fmtPercent(value))} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className={styles.loading} style={{ height: 340 }}>Loading…</div>
-            )}
-          </div>
-        </section>
+        <MtsContent />
       </main>
     </div>
   )

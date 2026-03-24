@@ -217,7 +217,7 @@ const ADDENDA_START_INDEX = RPCE_SERIES.findIndex(s => s.lineNumber === 25)
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function RPCEDashboardPage() {
+export function RPCEDashboardContent() {
   // ── BEA data fetch ────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<AllData>({})
   const [loading, setLoading] = useState(true)
@@ -498,27 +498,7 @@ export function RPCEDashboardPage() {
   // ════════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className={styles.shell}>
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Real PCE</span>
-      </nav>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className={styles.body}>
+    <>
         <div className={styles.majorHeader}>Real PCE Dashboard</div>
         <div className={styles.sectionSubtitle} style={{ padding: '0 2px', marginTop: -8 }}>
           Bureau of Economic Analysis &mdash; BEA Table 2.8.3 &mdash; monthly, quantity indexes, 2017=100
@@ -1095,6 +1075,30 @@ export function RPCEDashboardPage() {
             </div>
           </>
         )}
+    </>
+  )
+}
+
+export function RPCEDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Real PCE</span>
+      </nav>
+      <div className={styles.body}>
+        <RPCEDashboardContent />
       </div>
     </div>
   )

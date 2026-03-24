@@ -1,74 +1,36 @@
-import { Link } from 'react-router-dom'
+import { useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
-import styles from './GrowthPage.module.css'
+import { COUNTRIES, CATEGORIES } from './modelNav'
+import styles from './ModelsPage.module.css'
 
-const GROWTH_MODELS = [
-  {
-    path:        '/models/growth/ngdp',
-    title:       'Nominal GDP Dashboard',
-    description: 'Full NIPA Table 1.1.5 expenditure hierarchy — contribution decompositions, trend charts, regime detection, and component-level explorer.',
-    accent:      '#3b82f6',
-    tag:         'GDP · PCEC · GPDI · NETEXP · GCE · +44 more',
-  },
-  {
-    path:        '/models/growth/rgdp',
-    title:       'Real GDP Dashboard',
-    description: 'Full NIPA Table 1.1.6 expenditure hierarchy in chained 2017 dollars — component-level explorer with trend charts, regime detection, and growth analytics.',
-    accent:      '#8b5cf6',
-    tag:         'GDPC1 · PCECC96 · GPDIC1 · NETEXC · GCEC · +44 more',
-  },
-  {
-    path:        '/models/growth/pio',
-    title:       'Personal Income & Outlays',
-    description: 'Personal income components, disposable income, outlays, PCE, and saving rate — BEA Table 2.6, monthly, SAAR.',
-    accent:      '#14b8a6',
-    tag:         'PI · DSPI · PCE · PMSAVE · PSAVERT · +38 more',
-  },
-  {
-    path:        '/models/growth/retail',
-    title:       'Retail Sales',
-    description: 'Total retail trade and food services with category breakdowns — Census Bureau, monthly, seasonally adjusted.',
-    accent:      '#f59e0b',
-    tag:         'RSAFS · RSFSXMV · RSMVPD · RSGASS · RSFSDP · +12 more',
-  },
-  {
-    path:        '/models/growth/npce',
-    title:       'Nominal PCE',
-    description: 'Personal consumption expenditures by major type of product — BEA Table 2.8.5, monthly, SAAR.',
-    accent:      '#ec4899',
-    tag:         'BEA Table 2.8.5 · Monthly · SAAR',
-  },
-  {
-    path:        '/models/growth/rpce',
-    title:       'Real PCE',
-    description: 'Real personal consumption expenditures by major type of product, 2017=100.',
-    accent:      '#a78bfa',
-    tag:         'BEA Table 2.8.3 · Monthly · Quantity Indexes',
-  },
-  {
-    path:        '/models/growth/gdi',
-    title:       'Gross Domestic Income',
-    description: 'GDI income-side decomposition — compensation, net operating surplus, corporate profits, fixed capital consumption, and Real GDI.',
-    accent:      '#f97316',
-    tag:         'GDI · GDICOMP · PROPINC · COFC · A261RX1Q020SBEA · +19 more',
-  },
-  {
-    path:        '/models/growth/consumer-health',
-    title:       'Consumer Health',
-    description: 'UMich Consumer Sentiment, Current Conditions, and Consumer Expectations — University of Michigan Surveys of Consumers, monthly.',
-    accent:      '#ef4444',
-    tag:         'UMCSENT · UMCSI · UMICSE',
-  },
-  {
-    path:        '/models/growth/trade',
-    title:       'Trade',
-    description: 'U.S. international trade in goods and services — exports, imports, and balances.',
-    accent:      '#06b6d4',
-    tag:         'Census Bureau / BEA · Monthly · SA',
-  },
-]
+const NGDPDashboardContent = lazy(() => import('./NGDPDashboardPage').then(m => ({ default: m.NGDPDashboardContent })))
+const RGDPDashboardContent = lazy(() => import('./RGDPDashboardPage').then(m => ({ default: m.RGDPDashboardContent })))
+const PIODashboardContent = lazy(() => import('./PIODashboardPage').then(m => ({ default: m.PIODashboardContent })))
+const RetailSalesDashboardContent = lazy(() => import('./RetailSalesDashboardPage').then(m => ({ default: m.RetailSalesDashboardContent })))
+const NPCEDashboardContent = lazy(() => import('./NPCEDashboardPage').then(m => ({ default: m.NPCEDashboardContent })))
+const RPCEDashboardContent = lazy(() => import('./RPCEDashboardPage').then(m => ({ default: m.RPCEDashboardContent })))
+const GDIDashboardContent = lazy(() => import('./GDIDashboardPage').then(m => ({ default: m.GDIDashboardContent })))
+const ConsumerHealthDashboardContent = lazy(() => import('./ConsumerHealthDashboardPage').then(m => ({ default: m.ConsumerHealthDashboardContent })))
+const TradeDashboardContent = lazy(() => import('./TradeDashboardPage').then(m => ({ default: m.TradeDashboardContent })))
+
+const GROWTH_SECTIONS = [
+  { key: 'ngdp', label: 'NOMINAL GDP' },
+  { key: 'rgdp', label: 'REAL GDP' },
+  { key: 'pio', label: 'PIO' },
+  { key: 'retail', label: 'RETAIL' },
+  { key: 'npce', label: 'NOMINAL PCE' },
+  { key: 'rpce', label: 'REAL PCE' },
+  { key: 'gdi', label: 'GDI' },
+  { key: 'consumer', label: 'CONSUMER HEALTH' },
+  { key: 'trade', label: 'TRADE' },
+] as const
 
 export function GrowthPage() {
+  const [country, setCountry] = useState('us')
+  const [section, setSection] = useState<string>('ngdp')
+  const navigate = useNavigate()
+
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
@@ -80,35 +42,72 @@ export function GrowthPage() {
         <div className={styles.barRight} />
       </header>
 
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>Growth</span>
-      </nav>
-
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Growth</div>
-          <div className={styles.pageSub}>Gross Domestic Product, Income, and Investment models</div>
-        </div>
-
-        <div className={styles.cardGrid}>
-          {GROWTH_MODELS.map(model => (
-            <Link
-              key={model.path}
-              to={model.path}
-              className={styles.card}
-              style={{ '--accent': model.accent } as React.CSSProperties}
+        <div className={styles.countryBar}>
+          {COUNTRIES.map((c, idx) => (
+            <button
+              key={c.key}
+              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
+              onClick={() => setCountry(c.key)}
+              style={{
+                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
             >
-              <div className={styles.cardAccent} />
-              <div className={styles.cardInner}>
-                <div className={styles.cardTitle}>{model.title}</div>
-                <div className={styles.cardDesc}>{model.description}</div>
-                <div className={styles.cardTag}>{model.tag}</div>
-              </div>
-            </Link>
+              {c.label}
+            </button>
           ))}
         </div>
+
+        <div className={styles.categoryBar}>
+          {CATEGORIES.map((cat, idx) => (
+            <button
+              key={cat.key}
+              className={`${styles.categoryBtn} ${cat.key === 'growth' ? styles.categoryBtnActive : ''}`}
+              onClick={() => { if (cat.key !== 'growth') navigate(cat.path) }}
+              style={{
+                border: `1px solid ${cat.key === 'growth' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.sectionBar}>
+          {GROWTH_SECTIONS.map((sec, idx) => (
+            <button
+              key={sec.key}
+              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+              onClick={() => setSection(sec.key)}
+              style={{
+                border: `1px solid ${section === sec.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </div>
+
+        {country === 'us' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'ngdp' && <NGDPDashboardContent />}
+            {section === 'rgdp' && <RGDPDashboardContent />}
+            {section === 'pio' && <PIODashboardContent />}
+            {section === 'retail' && <RetailSalesDashboardContent />}
+            {section === 'npce' && <NPCEDashboardContent />}
+            {section === 'rpce' && <RPCEDashboardContent />}
+            {section === 'gdi' && <GDIDashboardContent />}
+            {section === 'consumer' && <ConsumerHealthDashboardContent />}
+            {section === 'trade' && <TradeDashboardContent />}
+          </Suspense>
+        ) : (
+          <div className={styles.comingSoon}>
+            {COUNTRIES.find(c => c.key === country)?.label} growth models coming soon
+          </div>
+        )}
       </main>
     </div>
   )

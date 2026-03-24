@@ -175,9 +175,9 @@ function CustomTooltip({ active, payload, label }: any) {
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Content component (all hooks/state/effects live here) ────────────────────
 
-export function FiscalFlowsPage() {
+export function FiscalFlowsContent() {
   const [rawData, setRawData] = useState<FiscalFlowsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -291,6 +291,262 @@ export function FiscalFlowsPage() {
   }, [rawData])
 
   return (
+    <>
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <div className={styles.sectionTitle}>Cumulative Daily Net Fiscal Flows</div>
+            <div className={styles.sectionSub}>$ billions · (ΔTGA − ΔDebt)</div>
+          </div>
+        </div>
+
+        {/* Legend */}
+        <div className={styles.legendRow}>
+          <div className={styles.legend}>
+            {fyLines.map(l => (
+              <span
+                key={l.fy}
+                className={styles.legendItem}
+                onClick={() => toggleFY(l.fy)}
+                style={{
+                  cursor: 'pointer',
+                  opacity: hiddenFYs.has(l.fy) ? 0.3 : 1,
+                }}
+              >
+                <span
+                  className={styles.legendLine}
+                  style={{
+                    background: l.color,
+                    height: l.fy === CURRENT_FY ? 3 : 2,
+                    opacity: hiddenFYs.has(l.fy) ? 0.3 : l.opacity,
+                  }}
+                />
+                FY{l.fy}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Chart or loading */}
+        {loading ? (
+          <div className={styles.loading}>
+            <div className={styles.spinner} />
+            Syncing DTS fiscal data...
+          </div>
+        ) : error ? (
+          <div className={styles.error}>Error: {error}</div>
+        ) : fyLines.length === 0 ? (
+          <div className={styles.loading}>
+            Treasury API unavailable — data will populate when service is restored
+          </div>
+        ) : (
+          <>
+            <div className={styles.chartWrap}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 16, right: 24, bottom: 8, left: 16 }}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.04)" />
+                  <XAxis
+                    dataKey="dayIndex"
+                    type="number"
+                    domain={[1, 366]}
+                    ticks={MONTH_TICKS.map(t => t.day)}
+                    tickFormatter={dayIndexToMonth}
+                    tick={TICK}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+                    tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                  />
+                  <YAxis
+                    tickFormatter={fmtBillions}
+                    tick={TICK}
+                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
+                    tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                    width={60}
+                  />
+                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
+                  <Tooltip content={<CustomTooltip />} />
+                  {fyLines.flatMap(l => {
+                    const hidden = hiddenFYs.has(l.fy)
+                    return [
+                      <Line
+                        key={`${l.fy}_raw`}
+                        dataKey={`FY${l.fy}`}
+                        stroke={l.color}
+                        strokeOpacity={hidden ? 0 : l.opacity * 0.6}
+                        strokeWidth={0.8}
+                        strokeDasharray="2 3"
+                        dot={false}
+                        connectNulls={false}
+                        isAnimationActive={false}
+                      />,
+                      <Line
+                        key={`${l.fy}_ma`}
+                        dataKey={`FY${l.fy}_ma`}
+                        stroke={l.color}
+                        strokeOpacity={hidden ? 0 : l.opacity}
+                        strokeWidth={l.width}
+                        dot={false}
+                        connectNulls={false}
+                        isAnimationActive={false}
+                      />,
+                    ]
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Summary stats */}
+            {stats && (
+              <div className={styles.statsRow}>
+                <div className={styles.stat}>
+                  <div className={styles.statLabel}>FY{CURRENT_FY} YTD</div>
+                  <div className={styles.statValue}>
+                    {fmtBillionsExact(stats.currentYtd)}
+                  </div>
+                </div>
+                <div className={styles.stat}>
+                  <div className={styles.statLabel}>vs FY2025 YTD</div>
+                  <div
+                    className={styles.statValue}
+                    style={{
+                      color: stats.delta != null
+                        ? stats.delta > 0 ? '#22c55e' : '#ef4444'
+                        : undefined,
+                    }}
+                  >
+                    {stats.delta != null
+                      ? `${stats.delta > 0 ? '+' : ''}${fmtBillionsExact(stats.delta)}${stats.pctDelta != null ? ` (${stats.pctDelta > 0 ? '+' : ''}${stats.pctDelta.toFixed(1)}%)` : ''}`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
+            )}
+            {rawData?.lastUpdated && (
+              <div className={styles.lastUpdated}>Last updated: {rawData.lastUpdated}</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Tax Receipts Table */}
+      <div className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <div className={styles.sectionTitle}>
+              US Treasury — Federal Employment Tax Receipts (in millions)
+            </div>
+            <div className={styles.sectionSub}>
+              Withheld Income &amp; Employment Taxes · 12-period rolling cycle
+            </div>
+          </div>
+        </div>
+
+        {taxLoading ? (
+          <div className={styles.taxLoadingSmall}>
+            <div className={styles.spinner} />
+            Loading tax receipts...
+          </div>
+        ) : !taxData ? (
+          <div className={styles.taxLoadingSmall}>
+            Treasury API unavailable — tax receipt data will populate when service is restored
+          </div>
+        ) : (
+          <div className={styles.taxGrid}>
+            {/* Current Cycle */}
+            <div className={styles.taxHalf}>
+              <div className={styles.taxCycleLabel}>{taxData.currentCycle.label}</div>
+              <table className={styles.taxTable}>
+                <thead>
+                  <tr>
+                    <th>Period End</th>
+                    <th>Employment Taxes</th>
+                    <th>Days</th>
+                    <th>Daily Avg</th>
+                    <th>vs LY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {taxData.currentCycle.periods.map((p, i) => {
+                    const isLast = i === taxData.currentCycle.periods.length - 1
+                    const growthClass =
+                      p.growth_vs_ly != null
+                        ? p.growth_vs_ly >= 0
+                          ? styles.taxGreen
+                          : styles.taxRed
+                        : ''
+                    return (
+                      <tr key={p.period_end} className={isLast ? styles.taxHighlight : ''}>
+                        <td>{fmtDateShort(p.period_end)}</td>
+                        <td>{fmtDollars(p.total)}</td>
+                        <td>{p.days}</td>
+                        <td>{fmtDollars(p.daily_avg)}</td>
+                        <td className={growthClass}>{fmtGrowth(p.growth_vs_ly)}</td>
+                      </tr>
+                    )
+                  })}
+                  {taxData.currentCycle.totals && (
+                    <tr className={styles.taxSummaryRow}>
+                      <td>DAILY AVG</td>
+                      <td>{fmtDollars(taxData.currentCycle.totals.total)}</td>
+                      <td>{taxData.currentCycle.totals.days}</td>
+                      <td>{fmtDollars(taxData.currentCycle.totals.daily_avg)}</td>
+                      <td className={
+                        taxData.currentCycle.totals.growth_vs_ly != null
+                          ? taxData.currentCycle.totals.growth_vs_ly >= 0
+                            ? styles.taxGreen
+                            : styles.taxRed
+                          : ''
+                      }>
+                        {fmtGrowth(taxData.currentCycle.totals.growth_vs_ly)}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Prior Cycle */}
+            <div className={styles.taxHalf}>
+              <div className={styles.taxCycleLabel}>{taxData.priorCycle.label}</div>
+              <table className={styles.taxTable}>
+                <thead>
+                  <tr>
+                    <th>Period End</th>
+                    <th>Employment Taxes</th>
+                    <th>Days</th>
+                    <th>Daily Avg</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {taxData.priorCycle.periods.map((p) => (
+                    <tr key={p.period_end}>
+                      <td>{fmtDateShort(p.period_end)}</td>
+                      <td>{fmtDollars(p.total)}</td>
+                      <td>{p.days}</td>
+                      <td>{fmtDollars(p.daily_avg)}</td>
+                    </tr>
+                  ))}
+                  {taxData.priorCycle.totals && (
+                    <tr className={styles.taxSummaryRow}>
+                      <td>DAILY AVG</td>
+                      <td>{fmtDollars(taxData.priorCycle.totals.total)}</td>
+                      <td>{taxData.priorCycle.totals.days}</td>
+                      <td>{fmtDollars(taxData.priorCycle.totals.daily_avg)}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ── Page shell wrapper ───────────────────────────────────────────────────────
+
+export function FiscalFlowsPage() {
+  return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
@@ -310,253 +566,7 @@ export function FiscalFlowsPage() {
       </nav>
 
       <main className={styles.body}>
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <div className={styles.sectionTitle}>Cumulative Daily Net Fiscal Flows</div>
-              <div className={styles.sectionSub}>$ billions · (ΔTGA − ΔDebt)</div>
-            </div>
-          </div>
-
-          {/* Legend */}
-          <div className={styles.legendRow}>
-            <div className={styles.legend}>
-              {fyLines.map(l => (
-                <span
-                  key={l.fy}
-                  className={styles.legendItem}
-                  onClick={() => toggleFY(l.fy)}
-                  style={{
-                    cursor: 'pointer',
-                    opacity: hiddenFYs.has(l.fy) ? 0.3 : 1,
-                  }}
-                >
-                  <span
-                    className={styles.legendLine}
-                    style={{
-                      background: l.color,
-                      height: l.fy === CURRENT_FY ? 3 : 2,
-                      opacity: hiddenFYs.has(l.fy) ? 0.3 : l.opacity,
-                    }}
-                  />
-                  FY{l.fy}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Chart or loading */}
-          {loading ? (
-            <div className={styles.loading}>
-              <div className={styles.spinner} />
-              Syncing DTS fiscal data...
-            </div>
-          ) : error ? (
-            <div className={styles.error}>Error: {error}</div>
-          ) : fyLines.length === 0 ? (
-            <div className={styles.loading}>
-              Treasury API unavailable — data will populate when service is restored
-            </div>
-          ) : (
-            <>
-              <div className={styles.chartWrap}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData} margin={{ top: 16, right: 24, bottom: 8, left: 16 }}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.04)" />
-                    <XAxis
-                      dataKey="dayIndex"
-                      type="number"
-                      domain={[1, 366]}
-                      ticks={MONTH_TICKS.map(t => t.day)}
-                      tickFormatter={dayIndexToMonth}
-                      tick={TICK}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                      tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                    />
-                    <YAxis
-                      tickFormatter={fmtBillions}
-                      tick={TICK}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                      tickLine={{ stroke: 'rgba(255,255,255,0.06)' }}
-                      width={60}
-                    />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" strokeDasharray="3 3" />
-                    <Tooltip content={<CustomTooltip />} />
-                    {fyLines.flatMap(l => {
-                      const hidden = hiddenFYs.has(l.fy)
-                      return [
-                        <Line
-                          key={`${l.fy}_raw`}
-                          dataKey={`FY${l.fy}`}
-                          stroke={l.color}
-                          strokeOpacity={hidden ? 0 : l.opacity * 0.6}
-                          strokeWidth={0.8}
-                          strokeDasharray="2 3"
-                          dot={false}
-                          connectNulls={false}
-                          isAnimationActive={false}
-                        />,
-                        <Line
-                          key={`${l.fy}_ma`}
-                          dataKey={`FY${l.fy}_ma`}
-                          stroke={l.color}
-                          strokeOpacity={hidden ? 0 : l.opacity}
-                          strokeWidth={l.width}
-                          dot={false}
-                          connectNulls={false}
-                          isAnimationActive={false}
-                        />,
-                      ]
-                    })}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Summary stats */}
-              {stats && (
-                <div className={styles.statsRow}>
-                  <div className={styles.stat}>
-                    <div className={styles.statLabel}>FY{CURRENT_FY} YTD</div>
-                    <div className={styles.statValue}>
-                      {fmtBillionsExact(stats.currentYtd)}
-                    </div>
-                  </div>
-                  <div className={styles.stat}>
-                    <div className={styles.statLabel}>vs FY2025 YTD</div>
-                    <div
-                      className={styles.statValue}
-                      style={{
-                        color: stats.delta != null
-                          ? stats.delta > 0 ? '#22c55e' : '#ef4444'
-                          : undefined,
-                      }}
-                    >
-                      {stats.delta != null
-                        ? `${stats.delta > 0 ? '+' : ''}${fmtBillionsExact(stats.delta)}${stats.pctDelta != null ? ` (${stats.pctDelta > 0 ? '+' : ''}${stats.pctDelta.toFixed(1)}%)` : ''}`
-                        : '—'}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {rawData?.lastUpdated && (
-                <div className={styles.lastUpdated}>Last updated: {rawData.lastUpdated}</div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Tax Receipts Table */}
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <div className={styles.sectionTitle}>
-                US Treasury — Federal Employment Tax Receipts (in millions)
-              </div>
-              <div className={styles.sectionSub}>
-                Withheld Income &amp; Employment Taxes · 12-period rolling cycle
-              </div>
-            </div>
-          </div>
-
-          {taxLoading ? (
-            <div className={styles.taxLoadingSmall}>
-              <div className={styles.spinner} />
-              Loading tax receipts...
-            </div>
-          ) : !taxData ? (
-            <div className={styles.taxLoadingSmall}>
-              Treasury API unavailable — tax receipt data will populate when service is restored
-            </div>
-          ) : (
-            <div className={styles.taxGrid}>
-              {/* Current Cycle */}
-              <div className={styles.taxHalf}>
-                <div className={styles.taxCycleLabel}>{taxData.currentCycle.label}</div>
-                <table className={styles.taxTable}>
-                  <thead>
-                    <tr>
-                      <th>Period End</th>
-                      <th>Employment Taxes</th>
-                      <th>Days</th>
-                      <th>Daily Avg</th>
-                      <th>vs LY</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxData.currentCycle.periods.map((p, i) => {
-                      const isLast = i === taxData.currentCycle.periods.length - 1
-                      const growthClass =
-                        p.growth_vs_ly != null
-                          ? p.growth_vs_ly >= 0
-                            ? styles.taxGreen
-                            : styles.taxRed
-                          : ''
-                      return (
-                        <tr key={p.period_end} className={isLast ? styles.taxHighlight : ''}>
-                          <td>{fmtDateShort(p.period_end)}</td>
-                          <td>{fmtDollars(p.total)}</td>
-                          <td>{p.days}</td>
-                          <td>{fmtDollars(p.daily_avg)}</td>
-                          <td className={growthClass}>{fmtGrowth(p.growth_vs_ly)}</td>
-                        </tr>
-                      )
-                    })}
-                    {taxData.currentCycle.totals && (
-                      <tr className={styles.taxSummaryRow}>
-                        <td>DAILY AVG</td>
-                        <td>{fmtDollars(taxData.currentCycle.totals.total)}</td>
-                        <td>{taxData.currentCycle.totals.days}</td>
-                        <td>{fmtDollars(taxData.currentCycle.totals.daily_avg)}</td>
-                        <td className={
-                          taxData.currentCycle.totals.growth_vs_ly != null
-                            ? taxData.currentCycle.totals.growth_vs_ly >= 0
-                              ? styles.taxGreen
-                              : styles.taxRed
-                            : ''
-                        }>
-                          {fmtGrowth(taxData.currentCycle.totals.growth_vs_ly)}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Prior Cycle */}
-              <div className={styles.taxHalf}>
-                <div className={styles.taxCycleLabel}>{taxData.priorCycle.label}</div>
-                <table className={styles.taxTable}>
-                  <thead>
-                    <tr>
-                      <th>Period End</th>
-                      <th>Employment Taxes</th>
-                      <th>Days</th>
-                      <th>Daily Avg</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxData.priorCycle.periods.map((p) => (
-                      <tr key={p.period_end}>
-                        <td>{fmtDateShort(p.period_end)}</td>
-                        <td>{fmtDollars(p.total)}</td>
-                        <td>{p.days}</td>
-                        <td>{fmtDollars(p.daily_avg)}</td>
-                      </tr>
-                    ))}
-                    {taxData.priorCycle.totals && (
-                      <tr className={styles.taxSummaryRow}>
-                        <td>DAILY AVG</td>
-                        <td>{fmtDollars(taxData.priorCycle.totals.total)}</td>
-                        <td>{taxData.priorCycle.totals.days}</td>
-                        <td>{fmtDollars(taxData.priorCycle.totals.daily_avg)}</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+        <FiscalFlowsContent />
       </main>
     </div>
   )

@@ -808,7 +808,7 @@ function GdpContribChart({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function RGDPDashboardPage() {
+export function RGDPDashboardContent() {
   // ── FRED data fetch ────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<AllData>({})
   const [loading, setLoading] = useState(true)
@@ -1107,27 +1107,7 @@ export function RGDPDashboardPage() {
   // ════════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className={styles.shell}>
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Real GDP Dashboard</span>
-      </nav>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className={styles.body}>
+    <>
         <div className={styles.majorHeader}>Real GDP Dashboard</div>
         <div className={styles.sectionSubtitle} style={{ padding: '0 2px', marginTop: -8 }}>
           BEA National Income &amp; Product Accounts &mdash; quarterly, chained 2017 dollars
@@ -1581,6 +1561,30 @@ export function RGDPDashboardPage() {
             )}
           </>
         )}
+    </>
+  )
+}
+
+export function RGDPDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Real GDP Dashboard</span>
+      </nav>
+      <div className={styles.body}>
+        <RGDPDashboardContent />
       </div>
     </div>
   )

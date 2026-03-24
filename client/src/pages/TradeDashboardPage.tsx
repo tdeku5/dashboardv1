@@ -564,7 +564,7 @@ function QuickSelectRow({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function TradeDashboardPage() {
+export function TradeDashboardContent() {
   // ── Data fetch ───────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<Record<string, WD[]>>({})
   const [loading, setLoading] = useState(true)
@@ -977,26 +977,7 @@ export function TradeDashboardPage() {
   // ════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className={styles.shell}>
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Trade</span>
-      </nav>
-
-      <main className={styles.body}>
+    <>
         <div className={styles.majorHeader}>US Trade Balances</div>
 
         {loading && (
@@ -1784,6 +1765,30 @@ export function TradeDashboardPage() {
               onSelect={(l, c) => handleQuickSelect('svcImports', l, c, chartSvcImportsData.length)} />
           </div>
         </>)}
+    </>
+  )
+}
+
+export function TradeDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Trade</span>
+      </nav>
+      <main className={styles.body}>
+        <TradeDashboardContent />
       </main>
     </div>
   )

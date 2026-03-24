@@ -910,6 +910,45 @@
   letter-spacing: 0.08em;
 }
 
+/* ── Asset Class Selector ── */
+.assetClassBar {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+}
+
+.assetClassBtn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #728197;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 28px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.assetClassBtn:first-child {
+  border-radius: 3px 0 0 3px;
+}
+
+.assetClassBtn:last-child {
+  border-radius: 0 3px 3px 0;
+}
+
+.assetClassBtn:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.assetClassBtnActive {
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.08);
+}
+
 .loading { color: #94a3b8; }
 .error { color: #ef5350; }
 

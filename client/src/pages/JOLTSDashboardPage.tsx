@@ -370,7 +370,7 @@ function BevTooltip({ active, payload }: { active?: boolean; payload?: readonly 
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function JOLTSDashboardPage() {
+export function JOLTSDashboardContent() {
   // ── State ──────────────────────────────────────────────────────────────────
 
   const [allData, setAllData] = useState<AllData>({})
@@ -657,28 +657,7 @@ export function JOLTSDashboardPage() {
   // ── JSX ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.shell}>
-      {/* Top bar */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      {/* Breadcrumb */}
-      <nav className={styles.breadcrumb}>
-        <Link to="/models"        className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <Link to="/models/labor"  className={styles.breadcrumbLink}>Labor Market</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>JOLTS Dashboard</span>
-      </nav>
-
-      {/* Body */}
-      <main className={styles.body}>
+    <>
         {loading && <div className={styles.statusBlock}>Loading JOLTS data…</div>}
         {error   && <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>}
 
@@ -1028,6 +1007,35 @@ export function JOLTSDashboardPage() {
             </div>
           </>
         )}
+    </>
+  )
+}
+
+export function JOLTSDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      {/* Top bar */}
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      {/* Breadcrumb */}
+      <nav className={styles.breadcrumb}>
+        <Link to="/models"        className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <Link to="/models/labor"  className={styles.breadcrumbLink}>Labor Market</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>JOLTS Dashboard</span>
+      </nav>
+
+      {/* Body */}
+      <main className={styles.body}>
+        <JOLTSDashboardContent />
       </main>
     </div>
   )

@@ -160,9 +160,9 @@ function ChartTooltip({ active, payload, label }: {
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Content component ────────────────────────────────────────────────────────
 
-export function LaborModelsPage() {
+export function LaborModelsContent() {
   const [loading, setLoading]   = useState(true)
   const [error,   setError]     = useState<string | null>(null)
 
@@ -244,30 +244,7 @@ export function LaborModelsPage() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className={styles.shell}>
-
-      {/* Top bar */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      {/* Breadcrumb */}
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>U-3 Payroll Based Projection</span>
-      </nav>
-
-      {/* Body */}
-      <main className={styles.body}>
-
+    <>
         {/* Page title */}
         <div>
           <div className={styles.pageTitle}>U-3 Payroll Based Projection</div>
@@ -506,6 +483,36 @@ export function LaborModelsPage() {
           </div>
 
         </>)}
+    </>
+  )
+}
+
+export function LaborModelsPage() {
+  return (
+    <div className={styles.shell}>
+
+      {/* Top bar */}
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      {/* Breadcrumb */}
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>U-3 Payroll Based Projection</span>
+      </nav>
+
+      {/* Body */}
+      <main className={styles.body}>
+        <LaborModelsContent />
       </main>
     </div>
   )

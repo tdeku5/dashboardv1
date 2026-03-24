@@ -1,53 +1,30 @@
-import { Link } from 'react-router-dom'
+import { useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
-import styles from './LaborMarketPage.module.css'
+import { COUNTRIES, CATEGORIES } from './modelNav'
+import styles from './ModelsPage.module.css'
 
-const LABOR_MODELS = [
-  {
-    path:        '/models/labor/projection',
-    title:       'U-3 Payroll Based Projection',
-    description: 'Forward-project the U-3 unemployment rate under four payroll growth scenarios using CE16OV and CLF16OV.',
-    accent:      '#22c55e',
-    tag:         'UNRATE · CE16OV · CLF16OV',
-  },
-  {
-    path:        '/models/labor/cps',
-    title:       'CPS Dashboard',
-    description: 'U-3 unemployment rate with 3-month and 6-month moving averages. Full FRED history with interactive brush range selector.',
-    accent:      '#3b82f6',
-    tag:         'UNRATE',
-  },
-  {
-    path:        '/models/labor/claims',
-    title:       'Claims Dashboard',
-    description: 'Initial and continuing claims with seasonal adjustment comparison, year-over-year trends, and seasonal cycle analysis.',
-    accent:      '#f97316',
-    tag:         'ICNSA · ICSA · CCNSA · CCSA',
-  },
-  {
-    path:        '/models/labor/ces',
-    title:       'CES Dashboard',
-    description: 'Monthly payroll employment decomposition by sector with adjustable lookback, sector/category grouping, and total nonfarm overlay.',
-    accent:      '#10b981',
-    tag:         'PAYEMS · MANEMP · USPBS · USEHS · USLAH · +10 more',
-  },
-  {
-    path:        '/models/labor/jolts',
-    title:       'JOLTS Dashboard',
-    description: 'Job openings, hires, quits and separations — rate charts, implied NFP decomposition, and Beveridge curve scatter.',
-    accent:      '#818cf8',
-    tag:         'JTSJOL · JTSHIL · JTSQUL · JTSLDL · JTSOSL · JTSTSL',
-  },
-  {
-    path:        '/models/labor/productivity',
-    title:       'Productivity & Unit Labor Costs',
-    description: 'Nonfarm business sector labor productivity and unit labor costs — levels, q/q annualized growth, y/y changes, and pre-Covid trend comparison.',
-    accent:      '#7FB3D3',
-    tag:         'OPHNFB · ULCNFB',
-  },
-]
+const LaborModelsContent = lazy(() => import('./LaborModelsPage').then(m => ({ default: m.LaborModelsContent })))
+const CPSDashboardContent = lazy(() => import('./CPSDashboardPage').then(m => ({ default: m.CPSDashboardContent })))
+const CESDashboardContent = lazy(() => import('./CESDashboardPage').then(m => ({ default: m.CESDashboardContent })))
+const JOLTSDashboardContent = lazy(() => import('./JOLTSDashboardPage').then(m => ({ default: m.JOLTSDashboardContent })))
+const ClaimsDashboardContent = lazy(() => import('./ClaimsDashboardPage').then(m => ({ default: m.ClaimsDashboardContent })))
+const ProductivityContent = lazy(() => import('./ProductivityPage').then(m => ({ default: m.ProductivityContent })))
+
+const LABOR_SECTIONS = [
+  { key: 'projection', label: 'U-3 PROJECTION' },
+  { key: 'cps', label: 'CPS' },
+  { key: 'ces', label: 'CES' },
+  { key: 'jolts', label: 'JOLTS' },
+  { key: 'claims', label: 'CLAIMS' },
+  { key: 'productivity', label: 'PRODUCTIVITY' },
+] as const
 
 export function LaborMarketPage() {
+  const [country, setCountry] = useState('us')
+  const [section, setSection] = useState<string>('cps')
+  const navigate = useNavigate()
+
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
@@ -59,35 +36,69 @@ export function LaborMarketPage() {
         <div className={styles.barRight} />
       </header>
 
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>Labor Market</span>
-      </nav>
-
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Labor Market</div>
-          <div className={styles.pageSub}>Unemployment and employment models based on CPS and payroll survey data</div>
-        </div>
-
-        <div className={styles.cardGrid}>
-          {LABOR_MODELS.map(model => (
-            <Link
-              key={model.path}
-              to={model.path}
-              className={styles.card}
-              style={{ '--accent': model.accent } as React.CSSProperties}
+        <div className={styles.countryBar}>
+          {COUNTRIES.map((c, idx) => (
+            <button
+              key={c.key}
+              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
+              onClick={() => setCountry(c.key)}
+              style={{
+                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
             >
-              <div className={styles.cardAccent} />
-              <div className={styles.cardInner}>
-                <div className={styles.cardTitle}>{model.title}</div>
-                <div className={styles.cardDesc}>{model.description}</div>
-                <div className={styles.cardTag}>{model.tag}</div>
-              </div>
-            </Link>
+              {c.label}
+            </button>
           ))}
         </div>
+
+        <div className={styles.categoryBar}>
+          {CATEGORIES.map((cat, idx) => (
+            <button
+              key={cat.key}
+              className={`${styles.categoryBtn} ${cat.key === 'labor' ? styles.categoryBtnActive : ''}`}
+              onClick={() => { if (cat.key !== 'labor') navigate(cat.path) }}
+              style={{
+                border: `1px solid ${cat.key === 'labor' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.sectionBar}>
+          {LABOR_SECTIONS.map((sec, idx) => (
+            <button
+              key={sec.key}
+              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+              onClick={() => setSection(sec.key)}
+              style={{
+                border: `1px solid ${section === sec.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </div>
+
+        {country === 'us' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'projection' && <LaborModelsContent />}
+            {section === 'cps' && <CPSDashboardContent />}
+            {section === 'ces' && <CESDashboardContent />}
+            {section === 'jolts' && <JOLTSDashboardContent />}
+            {section === 'claims' && <ClaimsDashboardContent />}
+            {section === 'productivity' && <ProductivityContent />}
+          </Suspense>
+        ) : (
+          <div className={styles.comingSoon}>
+            {COUNTRIES.find(c => c.key === country)?.label} labor models coming soon
+          </div>
+        )}
       </main>
     </div>
   )

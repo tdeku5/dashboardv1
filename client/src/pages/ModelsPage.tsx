@@ -1,43 +1,13 @@
-import { Link } from 'react-router-dom'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
+import { COUNTRIES, CATEGORIES } from './modelNav'
 import styles from './ModelsPage.module.css'
 
-const MODEL_CARDS = [
-  {
-    path:        '/models/labor',
-    category:    'Labor Market',
-    title:       'Labor Market',
-    description: 'Unemployment and employment models based on CPS and payroll survey data.',
-    accent:      '#22c55e',
-    tag:         'UNRATE \u00b7 CE16OV \u00b7 CLF16OV',
-  },
-  {
-    path:        '/models/inflation',
-    category:    'Inflation',
-    title:       'Inflation',
-    description: 'CPI component analysis with series explorer, regime detection, and momentum decomposition.',
-    accent:      '#f59e0b',
-    tag:         'CPIAUCSL \u00b7 CPILFESL \u00b7 CPIUFDSL \u00b7 +101 more',
-  },
-  {
-    path:        '/models/fiscal',
-    category:    'Fiscal',
-    title:       'Fiscal',
-    description: 'Cumulative daily net fiscal flows by fiscal year from the Daily Treasury Statement.',
-    accent:      '#e04040',
-    tag:         'DTS \u00b7 TGA \u00b7 Public Debt Transactions',
-  },
-  {
-    path:        '/models/growth',
-    category:    'Growth',
-    title:       'Growth',
-    description: 'Gross Domestic Product, Income, and Investment models.',
-    accent:      '#3b82f6',
-    tag:         'GDP \u00b7 PCEC \u00b7 GPDI',
-  },
-]
-
 export function ModelsPage() {
+  const [country, setCountry] = useState('us')
+  const navigate = useNavigate()
+
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
@@ -50,24 +20,45 @@ export function ModelsPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Economic Data Models</div>
-          <div className={styles.pageSub}>Analytical models built on live FRED data</div>
-        </div>
-
-        <div className={styles.cardGrid}>
-          {MODEL_CARDS.map(card => (
-            <Link key={card.path} to={card.path} className={styles.card} style={{ '--accent': card.accent } as React.CSSProperties}>
-              <div className={styles.cardAccent} />
-              <div className={styles.cardInner}>
-                <div className={styles.cardCategory}>{card.category}</div>
-                <div className={styles.cardTitle}>{card.title}</div>
-                <div className={styles.cardDesc}>{card.description}</div>
-                <div className={styles.cardTag}>{card.tag}</div>
-              </div>
-            </Link>
+        <div className={styles.countryBar}>
+          {COUNTRIES.map((c, idx) => (
+            <button
+              key={c.key}
+              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
+              onClick={() => setCountry(c.key)}
+              style={{
+                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {c.label}
+            </button>
           ))}
         </div>
+
+        {country === 'us' && (
+          <div className={styles.categoryBar}>
+            {CATEGORIES.map((cat, idx) => (
+              <button
+                key={cat.key}
+                className={styles.categoryBtn}
+                onClick={() => navigate(cat.path)}
+                style={{
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {country !== 'us' && (
+          <div className={styles.comingSoon}>
+            {COUNTRIES.find(c => c.key === country)?.label} models coming soon
+          </div>
+        )}
       </main>
     </div>
   )

@@ -564,9 +564,9 @@ function ProjectionSection({
   )
 }
 
-// ── Main Component ──────────────────────────────────────────────────────────
+// ── Content Component ──────────────────────────────────────────────────────────
 
-export function PCEProjectionsPage() {
+export function PCEProjectionsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [data, setData]       = useState<{ headline: WD[]; core: WD[] }>({ headline: [], core: [] })
@@ -600,6 +600,28 @@ export function PCEProjectionsPage() {
   const coreModel     = useMemo(() => buildModel(data.core),     [data.core])
 
   return (
+    <>
+      {loading && (
+        <div className={styles.statusBlock}>Loading PCE data...</div>
+      )}
+      {error && (
+        <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <ProjectionSection title="Headline PCEPI Projection" model={headlineModel} />
+          <ProjectionSection title="Core PCE Projection" model={coreModel} />
+        </>
+      )}
+    </>
+  )
+}
+
+// ── Main Component ──────────────────────────────────────────────────────────
+
+export function PCEProjectionsPage() {
+  return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
@@ -619,19 +641,7 @@ export function PCEProjectionsPage() {
       </nav>
 
       <main className={styles.body}>
-        {loading && (
-          <div className={styles.statusBlock}>Loading PCE data...</div>
-        )}
-        {error && (
-          <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
-        )}
-
-        {!loading && !error && (
-          <>
-            <ProjectionSection title="Headline PCEPI Projection" model={headlineModel} />
-            <ProjectionSection title="Core PCE Projection" model={coreModel} />
-          </>
-        )}
+        <PCEProjectionsContent />
       </main>
     </div>
   )

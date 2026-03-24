@@ -1,53 +1,30 @@
-import { Link } from 'react-router-dom'
+import { useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
-import styles from './InflationPage.module.css'
+import { COUNTRIES, CATEGORIES } from './modelNav'
+import styles from './ModelsPage.module.css'
 
-const INFLATION_MODELS = [
-  {
-    path:        '/models/inflation/cpi',
-    title:       'CPI Dashboard',
-    description: 'CPI series explorer with outright index, YoY regimes, YoY delta, MoM with moving averages, annualized MoM, and seasonal sequential comparison.',
-    accent:      '#f59e0b',
-    tag:         'CPIAUCSL \u00b7 CPILFESL \u00b7 +102 more',
-  },
-  {
-    path:        '/models/inflation/projections',
-    title:       'CPI Projections',
-    description: 'Forward projection of headline and core CPI YoY% under constant MoM growth scenarios with interactive heatmap tables.',
-    accent:      '#f59e0b',
-    tag:         'CPIAUCSL \u00b7 CPILFESL',
-  },
-  {
-    path:        '/models/inflation/pce',
-    title:       'PCE Dashboard',
-    description: 'PCE price index explorer with outright index, YoY regimes, YoY delta, MoM with moving averages, annualized MoM, and seasonal sequential comparison.',
-    accent:      '#8b5cf6',
-    tag:         'BEA Table 2.3.4U \u00b7 23 line items',
-  },
-  {
-    path:        '/models/inflation/pce-projections',
-    title:       'PCE Projections',
-    description: 'Forward projection of headline and core PCE YoY% under constant MoM growth scenarios with interactive charts and summary analysis.',
-    accent:      '#8b5cf6',
-    tag:         'PCEPI \u00b7 Core PCE',
-  },
-  {
-    path:        '/models/inflation/ppi',
-    title:       'PPI Dashboard',
-    description: 'PPI Final Demand series explorer with outright index, YoY regimes, YoY delta, MoM with moving averages, annualized MoM, and seasonal sequential comparison.',
-    accent:      '#34d399',
-    tag:         'PPIFIS \u00b7 PPIFES \u00b7 +12 more',
-  },
-  {
-    path:        '/models/inflation/other',
-    title:       'Other Inflation Measures',
-    description: 'Alternative inflation gauges \u2014 Michigan expectations, Dallas trimmed-mean PCE, OECD harmonized CPI, Atlanta sticky-price CPI.',
-    accent:      '#64748b',
-    tag:         'MICH \u00b7 PCETRIM \u00b7 CP0000US \u00b7 CORESTICK',
-  },
-]
+const CPIDashboardContent = lazy(() => import('./CPIDashboardPage').then(m => ({ default: m.CPIDashboardContent })))
+const CPIProjectionsContent = lazy(() => import('./CPIProjectionsPage').then(m => ({ default: m.CPIProjectionsContent })))
+const PCEDashboardContent = lazy(() => import('./PCEDashboardPage').then(m => ({ default: m.PCEDashboardContent })))
+const PCEProjectionsContent = lazy(() => import('./PCEProjectionsPage').then(m => ({ default: m.PCEProjectionsContent })))
+const PPIDashboardContent = lazy(() => import('./PPIDashboardPage').then(m => ({ default: m.PPIDashboardContent })))
+const OtherInflationContent = lazy(() => import('./OtherInflationPage').then(m => ({ default: m.OtherInflationContent })))
+
+const INFLATION_SECTIONS = [
+  { key: 'cpi', label: 'CPI' },
+  { key: 'cpi-proj', label: 'CPI PROJECTIONS' },
+  { key: 'pce', label: 'PCE' },
+  { key: 'pce-proj', label: 'PCE PROJECTIONS' },
+  { key: 'ppi', label: 'PPI' },
+  { key: 'other', label: 'OTHER' },
+] as const
 
 export function InflationPage() {
+  const [country, setCountry] = useState('us')
+  const [section, setSection] = useState<string>('cpi')
+  const navigate = useNavigate()
+
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
@@ -59,35 +36,69 @@ export function InflationPage() {
         <div className={styles.barRight} />
       </header>
 
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Inflation</span>
-      </nav>
-
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Inflation</div>
-          <div className={styles.pageSub}>CPI component analysis with series explorer, regime detection, and momentum decomposition</div>
-        </div>
-
-        <div className={styles.cardGrid}>
-          {INFLATION_MODELS.map(model => (
-            <Link
-              key={model.path}
-              to={model.path}
-              className={styles.card}
-              style={{ '--accent': model.accent } as React.CSSProperties}
+        <div className={styles.countryBar}>
+          {COUNTRIES.map((c, idx) => (
+            <button
+              key={c.key}
+              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
+              onClick={() => setCountry(c.key)}
+              style={{
+                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
             >
-              <div className={styles.cardAccent} />
-              <div className={styles.cardInner}>
-                <div className={styles.cardTitle}>{model.title}</div>
-                <div className={styles.cardDesc}>{model.description}</div>
-                <div className={styles.cardTag}>{model.tag}</div>
-              </div>
-            </Link>
+              {c.label}
+            </button>
           ))}
         </div>
+
+        <div className={styles.categoryBar}>
+          {CATEGORIES.map((cat, idx) => (
+            <button
+              key={cat.key}
+              className={`${styles.categoryBtn} ${cat.key === 'inflation' ? styles.categoryBtnActive : ''}`}
+              onClick={() => { if (cat.key !== 'inflation') navigate(cat.path) }}
+              style={{
+                border: `1px solid ${cat.key === 'inflation' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.sectionBar}>
+          {INFLATION_SECTIONS.map((sec, idx) => (
+            <button
+              key={sec.key}
+              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+              onClick={() => setSection(sec.key)}
+              style={{
+                border: `1px solid ${section === sec.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </div>
+
+        {country === 'us' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'cpi' && <CPIDashboardContent />}
+            {section === 'cpi-proj' && <CPIProjectionsContent />}
+            {section === 'pce' && <PCEDashboardContent />}
+            {section === 'pce-proj' && <PCEProjectionsContent />}
+            {section === 'ppi' && <PPIDashboardContent />}
+            {section === 'other' && <OtherInflationContent />}
+          </Suspense>
+        ) : (
+          <div className={styles.comingSoon}>
+            {COUNTRIES.find(c => c.key === country)?.label} inflation models coming soon
+          </div>
+        )}
       </main>
     </div>
   )

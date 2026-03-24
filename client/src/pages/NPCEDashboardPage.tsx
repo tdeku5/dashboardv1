@@ -674,7 +674,7 @@ function NPCEContribChart({
 // ██  Main Page Component
 // ══════════════════════════════════════════════════════════════════════════════
 
-export function NPCEDashboardPage() {
+export function NPCEDashboardContent() {
   // ── BEA data fetch ────────────────────────────────────────────────────────
   const [allData, setAllData] = useState<AllData>({})
   const [loading, setLoading] = useState(true)
@@ -1093,27 +1093,7 @@ export function NPCEDashboardPage() {
   // ════════════════════════════════════════════════════════════════════════════
 
   return (
-    <div className={styles.shell}>
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Nominal PCE</span>
-      </nav>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <div className={styles.body}>
+    <>
         <div className={styles.majorHeader}>Nominal PCE Dashboard</div>
         <div className={styles.sectionSubtitle} style={{ padding: '0 2px', marginTop: -8 }}>
           Bureau of Economic Analysis &mdash; BEA Table 2.8.5 &mdash; monthly, millions of dollars, SAAR
@@ -1888,6 +1868,30 @@ export function NPCEDashboardPage() {
             </div>
           </>
         )}
+    </>
+  )
+}
+
+export function NPCEDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/growth" className={styles.breadcrumbLink}>Growth</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Nominal PCE</span>
+      </nav>
+      <div className={styles.body}>
+        <NPCEDashboardContent />
       </div>
     </div>
   )

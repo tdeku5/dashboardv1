@@ -280,7 +280,7 @@ function QuickSelectRow({ brushState, onSelect }: {
 // ── Page Component ──────────────────────────────────────────────────────────
 // ═════════════════════════════════════════════════════════════════════════════
 
-export function TreasuryAuctionPage() {
+export function TreasuryAuctionContent() {
   // ── Auction state ────────────────────────────────────────────────────────
   const [selectedTerm, setSelectedTerm] = useState('10-Year')
   const [auctions, setAuctions]   = useState<AuctionRecord[]>([])
@@ -487,26 +487,7 @@ export function TreasuryAuctionPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className={styles.shell}>
-      {/* ── Top bar ────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      {/* ── Breadcrumb ─────────────────────────────────────────────────────── */}
-      <nav className={styles.breadcrumb}>
-        <Link to="/" className={styles.breadcrumbLink}>Home</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Treasury Auction Monitor</span>
-      </nav>
-
-      {/* ── Body ───────────────────────────────────────────────────────────── */}
-      <main className={styles.body}>
+    <>
         <div className={styles.pageHeader}>
           <div className={styles.headerRow}>
             <div className={styles.pageTitle}>Treasury Auction Monitor</div>
@@ -831,6 +812,28 @@ export function TreasuryAuctionPage() {
             </>
           )}
         </div>
+    </>
+  )
+}
+
+export function TreasuryAuctionPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+      <nav className={styles.breadcrumb}>
+        <Link to="/" className={styles.breadcrumbLink}>Home</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>Treasury Auction Monitor</span>
+      </nav>
+      <main className={styles.body}>
+        <TreasuryAuctionContent />
       </main>
     </div>
   )

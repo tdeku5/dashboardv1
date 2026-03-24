@@ -92,6 +92,33 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_tsy_auction_date  ON treasury_auctions(auction_date);
   CREATE INDEX IF NOT EXISTS idx_tsy_security_term ON treasury_auctions(security_term);
   CREATE INDEX IF NOT EXISTS idx_tsy_security_type ON treasury_auctions(security_type);
+
+  CREATE TABLE IF NOT EXISTS gdpnow_forecasts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    quarter TEXT NOT NULL,
+    forecast_date TEXT NOT NULL,
+    value REAL NOT NULL,
+    UNIQUE(quarter, forecast_date)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_gdpnow_quarter ON gdpnow_forecasts(quarter);
+  CREATE INDEX IF NOT EXISTS idx_gdpnow_date ON gdpnow_forecasts(forecast_date);
+
+  CREATE TABLE IF NOT EXISTS gdpnow_contributions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forecast_date TEXT NOT NULL,
+    gdp REAL,
+    pce REAL,
+    equipment REAL,
+    intell_prop REAL,
+    nonres_struct REAL,
+    resid_invest REAL,
+    govt REAL,
+    net_exports REAL,
+    UNIQUE(forecast_date)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_gdpnow_contrib_date ON gdpnow_contributions(forecast_date);
 `)
 
 // Migration: add reopening column if table existed before this field was added
@@ -160,6 +187,55 @@ export function getDbStatus(): { lastUpdated: string | null; seriesCount: number
      FROM series_metadata WHERE last_fetched IS NOT NULL`
   ).get() as { lastUpdated: string | null; seriesCount: number }
   return row
+}
+
+export interface GDPNowForecastRow {
+  quarter: string
+  forecast_date: string
+  value: number
+}
+
+export function getGDPNowForecasts(): GDPNowForecastRow[] {
+  return db.prepare(`
+    SELECT quarter, forecast_date, value
+    FROM gdpnow_forecasts
+    ORDER BY quarter ASC, forecast_date ASC
+  `).all() as GDPNowForecastRow[]
+}
+
+export function getGDPNowLatestDate(): string | null {
+  const row = db.prepare(
+    'SELECT MAX(forecast_date) AS latest FROM gdpnow_forecasts'
+  ).get() as { latest: string | null } | undefined
+  return row?.latest ?? null
+}
+
+export interface GDPNowContributionRow {
+  forecast_date: string
+  gdp: number | null
+  pce: number | null
+  equipment: number | null
+  intell_prop: number | null
+  nonres_struct: number | null
+  resid_invest: number | null
+  govt: number | null
+  net_exports: number | null
+}
+
+export function getGDPNowContributions(): GDPNowContributionRow[] {
+  return db.prepare(`
+    SELECT forecast_date, gdp, pce, equipment, intell_prop, nonres_struct, resid_invest, govt, net_exports
+    FROM gdpnow_contributions
+    ORDER BY forecast_date ASC
+  `).all() as GDPNowContributionRow[]
+}
+
+export function upsertGDPNowForecast(quarter: string, forecastDate: string, value: number): void {
+  db.prepare(`
+    INSERT INTO gdpnow_forecasts (quarter, forecast_date, value)
+    VALUES (?, ?, ?)
+    ON CONFLICT(quarter, forecast_date) DO UPDATE SET value = excluded.value
+  `).run(quarter, forecastDate, value)
 }
 
 // Returns series from knownSeries that are stale (missing or older than maxAgeHours)

@@ -535,7 +535,7 @@ function HeatmapSection({ title, subtitle, data }: {
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
-export function ClaimsDashboardPage() {
+export function ClaimsDashboardContent() {
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
   const [allData, setAllData] = useState<AllData>({})
@@ -682,25 +682,7 @@ export function ClaimsDashboardPage() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.shell}>
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
-        <span className={styles.breadcrumbSep}>›</span>
-        <span className={styles.breadcrumbCurrent}>Claims Dashboard</span>
-      </nav>
-
-      <main className={styles.body}>
+    <>
         <div>
           <div className={styles.pageTitle}>Claims Dashboard</div>
           <div className={styles.pageSub}>
@@ -898,6 +880,32 @@ export function ClaimsDashboardPage() {
 
           </>
         )}
+    </>
+  )
+}
+
+export function ClaimsDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <Link to="/models/labor" className={styles.breadcrumbLink}>Labor Market</Link>
+        <span className={styles.breadcrumbSep}>›</span>
+        <span className={styles.breadcrumbCurrent}>Claims Dashboard</span>
+      </nav>
+
+      <main className={styles.body}>
+        <ClaimsDashboardContent />
       </main>
     </div>
   )

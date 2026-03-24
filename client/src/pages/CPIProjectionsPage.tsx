@@ -585,9 +585,9 @@ function ProjectionSection({
   )
 }
 
-// ── Main Component ──────────────────────────────────────────────────────────
+// ── Content Component ──────────────────────────────────────────────────────────
 
-export function CPIProjectionsPage() {
+export function CPIProjectionsContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
   const [data, setData]       = useState<{ headline: WD[]; core: WD[] }>({ headline: [], core: [] })
@@ -621,6 +621,28 @@ export function CPIProjectionsPage() {
   const coreModel     = useMemo(() => buildModel(data.core),     [data.core])
 
   return (
+    <>
+      {loading && (
+        <div className={styles.statusBlock}>Loading CPI data...</div>
+      )}
+      {error && (
+        <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <ProjectionSection title="Headline CPI Projection" model={headlineModel} />
+          <ProjectionSection title="Core CPI Projection" model={coreModel} />
+        </>
+      )}
+    </>
+  )
+}
+
+// ── Main Component ──────────────────────────────────────────────────────────
+
+export function CPIProjectionsPage() {
+  return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
@@ -640,19 +662,7 @@ export function CPIProjectionsPage() {
       </nav>
 
       <main className={styles.body}>
-        {loading && (
-          <div className={styles.statusBlock}>Loading CPI data...</div>
-        )}
-        {error && (
-          <div className={`${styles.statusBlock} ${styles.statusError}`}>{error}</div>
-        )}
-
-        {!loading && !error && (
-          <>
-            <ProjectionSection title="Headline CPI Projection" model={headlineModel} />
-            <ProjectionSection title="Core CPI Projection" model={coreModel} />
-          </>
-        )}
+        <CPIProjectionsContent />
       </main>
     </div>
   )

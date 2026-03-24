@@ -435,6 +435,24 @@ function InflationMetricsChart() {
   )
 }
 
+// ── Content Component ────────────────────────────────────────────────────────
+
+export function OtherInflationContent() {
+  return (
+    <>
+      <div className={styles.pageHeader}>
+        <div className={styles.pageTitle}>Other Inflation Measures</div>
+        <div className={styles.pageSub}>
+          Alternative inflation gauges — Michigan expectations, Dallas trimmed-mean PCE, OECD harmonized CPI, Atlanta sticky-price CPI
+        </div>
+      </div>
+
+      <ExpectationsChart />
+      <InflationMetricsChart />
+    </>
+  )
+}
+
 // ── Main page ────────────────────────────────────────────────────────────────
 
 export function OtherInflationPage() {
@@ -458,15 +476,7 @@ export function OtherInflationPage() {
       </nav>
 
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Other Inflation Measures</div>
-          <div className={styles.pageSub}>
-            Alternative inflation gauges — Michigan expectations, Dallas trimmed-mean PCE, OECD harmonized CPI, Atlanta sticky-price CPI
-          </div>
-        </div>
-
-        <ExpectationsChart />
-        <InflationMetricsChart />
+        <OtherInflationContent />
       </main>
     </div>
   )

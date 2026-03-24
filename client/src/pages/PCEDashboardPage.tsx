@@ -680,7 +680,7 @@ function QuickSelectRow({
 
 // ── Main Component ──────────────────────────────────────────────────────────
 
-export function PCEDashboardPage() {
+export function PCEDashboardContent() {
   // ── Core explorer state ───────────────────────────────────────────────────
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -1115,28 +1115,7 @@ export function PCEDashboardPage() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className={styles.shell}>
-      {/* ── Top bar ────────────────────────────────────────────────────────── */}
-      <header className={styles.topBar}>
-        <div className={styles.barLeft}>
-          <NavDropdown />
-          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
-        </div>
-        <div className={styles.barCenter} />
-        <div className={styles.barRight} />
-      </header>
-
-      {/* ── Breadcrumb ─────────────────────────────────────────────────────── */}
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <Link to="/models/inflation" className={styles.breadcrumbLink}>Inflation</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>PCE Dashboard</span>
-      </nav>
-
-      {/* ── Body ─────────────────────────────────────────────────────────── */}
-      <div className={styles.body}>
+    <>
 
         {/* ══════════════════════════════════════════════════════════════════
             PCE Contribution Decomposition
@@ -2196,6 +2175,32 @@ export function PCEDashboardPage() {
             </div>
           </>
         )}
+    </>
+  )
+}
+
+export function PCEDashboardPage() {
+  return (
+    <div className={styles.shell}>
+      <header className={styles.topBar}>
+        <div className={styles.barLeft}>
+          <NavDropdown />
+          <span className={styles.logo}>TND RESEARCH TERMINAL</span>
+        </div>
+        <div className={styles.barCenter} />
+        <div className={styles.barRight} />
+      </header>
+
+      <nav className={styles.breadcrumb}>
+        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <Link to="/models/inflation" className={styles.breadcrumbLink}>Inflation</Link>
+        <span className={styles.breadcrumbSep}>&rsaquo;</span>
+        <span className={styles.breadcrumbCurrent}>PCE Dashboard</span>
+      </nav>
+
+      <div className={styles.body}>
+        <PCEDashboardContent />
       </div>
     </div>
   )

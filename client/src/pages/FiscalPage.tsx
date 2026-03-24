@@ -1,25 +1,22 @@
-import { Link } from 'react-router-dom'
+import { useState, lazy, Suspense } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
-import styles from './FiscalPage.module.css'
+import { COUNTRIES, CATEGORIES } from './modelNav'
+import styles from './ModelsPage.module.css'
 
-const FISCAL_MODELS = [
-  {
-    path:        '/models/fiscal/dts',
-    title:       'Daily Treasury Statement',
-    description: 'Cumulative net fiscal flows (ΔTGA − ΔDebt), withheld income & employment tax receipts with 12-period rolling cycle analysis.',
-    accent:      '#ef4444',
-    tag:         'DTS Table I · Table II · Table III-A',
-  },
-  {
-    path:        '/models/fiscal/mts',
-    title:       'Monthly Treasury Statement',
-    description: 'Monthly federal receipts and outlays with category breakdowns and year-over-year comparisons.',
-    accent:      '#3b82f6',
-    tag:         'MTS Receipts · Outlays · Surplus/Deficit',
-  },
-]
+const FiscalFlowsContent = lazy(() => import('./FiscalFlowsPage').then(m => ({ default: m.FiscalFlowsContent })))
+const MtsContent = lazy(() => import('./MtsPage').then(m => ({ default: m.MtsContent })))
+
+const FISCAL_SECTIONS = [
+  { key: 'dts', label: 'DTS FLOWS' },
+  { key: 'mts', label: 'MTS BALANCE' },
+] as const
 
 export function FiscalPage() {
+  const [country, setCountry] = useState('us')
+  const [section, setSection] = useState<string>('dts')
+  const navigate = useNavigate()
+
   return (
     <div className={styles.shell}>
       <header className={styles.topBar}>
@@ -31,35 +28,65 @@ export function FiscalPage() {
         <div className={styles.barRight} />
       </header>
 
-      <nav className={styles.breadcrumb}>
-        <Link to="/models" className={styles.breadcrumbLink}>Models</Link>
-        <span className={styles.breadcrumbSep}>&rsaquo;</span>
-        <span className={styles.breadcrumbCurrent}>Fiscal</span>
-      </nav>
-
       <main className={styles.body}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>Fiscal</div>
-          <div className={styles.pageSub}>Federal fiscal flow analysis via Daily and Monthly Treasury Statements</div>
-        </div>
-
-        <div className={styles.cardGrid}>
-          {FISCAL_MODELS.map(model => (
-            <Link
-              key={model.path}
-              to={model.path}
-              className={styles.card}
-              style={{ '--accent': model.accent } as React.CSSProperties}
+        <div className={styles.countryBar}>
+          {COUNTRIES.map((c, idx) => (
+            <button
+              key={c.key}
+              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
+              onClick={() => setCountry(c.key)}
+              style={{
+                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
             >
-              <div className={styles.cardAccent} />
-              <div className={styles.cardInner}>
-                <div className={styles.cardTitle}>{model.title}</div>
-                <div className={styles.cardDesc}>{model.description}</div>
-                <div className={styles.cardTag}>{model.tag}</div>
-              </div>
-            </Link>
+              {c.label}
+            </button>
           ))}
         </div>
+
+        <div className={styles.categoryBar}>
+          {CATEGORIES.map((cat, idx) => (
+            <button
+              key={cat.key}
+              className={`${styles.categoryBtn} ${cat.key === 'fiscal' ? styles.categoryBtnActive : ''}`}
+              onClick={() => { if (cat.key !== 'fiscal') navigate(cat.path) }}
+              style={{
+                border: `1px solid ${cat.key === 'fiscal' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className={styles.sectionBar}>
+          {FISCAL_SECTIONS.map((sec, idx) => (
+            <button
+              key={sec.key}
+              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+              onClick={() => setSection(sec.key)}
+              style={{
+                border: `1px solid ${section === sec.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {sec.label}
+            </button>
+          ))}
+        </div>
+
+        {country === 'us' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'dts' && <FiscalFlowsContent />}
+            {section === 'mts' && <MtsContent />}
+          </Suspense>
+        ) : (
+          <div className={styles.comingSoon}>
+            {COUNTRIES.find(c => c.key === country)?.label} fiscal models coming soon
+          </div>
+        )}
       </main>
     </div>
   )
