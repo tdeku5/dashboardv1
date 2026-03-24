@@ -25,7 +25,7 @@ import styles from './STIRDashboardPage.module.css'
 
 const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
 
-type ViewTab = 'strips' | 'pricing' | 'ust' | 'credit' | 'money' | 'auctions'
+type ViewTab = 'strips' | 'pricing' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions'
 
 type AssetClass = 'macro' | 'rates' | 'equities' | 'fx' | 'commodities'
 
@@ -55,6 +55,7 @@ const VIEW_TABS: Array<{ key: ViewTab; label: string }> = [
   { key: 'strips', label: 'STIR STRIPS' },
   { key: 'pricing', label: 'FORWARD PRICING' },
   { key: 'ust', label: 'UST CURVE' },
+  { key: 'attribution', label: 'YIELD ATTRIBUTION' },
   { key: 'credit', label: 'CREDIT' },
   { key: 'money', label: 'MONEY MARKETS' },
   { key: 'auctions', label: 'TREASURY AUCTIONS' },
@@ -200,6 +201,7 @@ interface YieldData {
 type UstSelection =
   | { type: 'yield'; key: string; label: string }
   | { type: 'spread'; label: string; longKey: string; shortKey: string }
+  | { type: 'butterfly'; label: string; lowKey: string; middleKey: string; highKey: string }
   | null
 
 type RealSelection =
@@ -249,8 +251,44 @@ const UST_TENORS = [
   { key: 'DGS1', label: '1Y' },
   { key: 'DGS2', label: '2Y' },
   { key: 'DGS5', label: '5Y' },
+  { key: 'DGS7', label: '7Y' },
   { key: 'DGS10', label: '10Y' },
   { key: 'DGS30', label: '30Y' },
+] as const
+const UST_EXTRA = [
+  { key: 'DGS1MO' },
+  { key: 'DGS6MO' },
+  { key: 'DGS20' },
+  { key: 'BAMLH0A0HYM2' },
+  { key: 'BAMLC0A1CAAA' },
+  { key: 'BAMLC0A4CBBB' },
+  { key: 'BAMLH0A3HYC' },
+] as const
+const CREDIT_SPREADS = [
+  { key: 'BAMLC0A1CAAA', label: 'AAA' },
+  { key: 'BAMLC0A4CBBB', label: 'BBB' },
+  { key: 'BAMLH0A0HYM2', label: 'HY' },
+  { key: 'BAMLH0A3HYC', label: 'CCC' },
+  { key: 'TRASH', label: 'Trash' },
+] as const
+const CREDIT_SERIES_CONFIG = [
+  { key: 'BAMLC0A1CAAA', label: 'AAA', color: '#4ade80' },
+  { key: 'BAMLC0A4CBBB', label: 'BBB', color: '#60a5fa' },
+  { key: 'BAMLH0A0HYM2', label: 'HY', color: '#fbbf24' },
+  { key: 'BAMLH0A3HYC', label: 'CCC', color: '#ef5350' },
+  { key: 'TRASH', label: 'Trash', color: '#a78bfa' },
+] as const
+const YC_TENORS = [
+  { key: 'DGS1MO', label: '1M', years: 1 / 12 },
+  { key: 'DGS3MO', label: '3M', years: 0.25 },
+  { key: 'DGS6MO', label: '6M', years: 0.5 },
+  { key: 'DGS1', label: '1Y', years: 1 },
+  { key: 'DGS2', label: '2Y', years: 2 },
+  { key: 'DGS5', label: '5Y', years: 5 },
+  { key: 'DGS7', label: '7Y', years: 7 },
+  { key: 'DGS10', label: '10Y', years: 10 },
+  { key: 'DGS20', label: '20Y', years: 20 },
+  { key: 'DGS30', label: '30Y', years: 30 },
 ] as const
 const UST_SPREADS = [
   { label: '3m2s', long: 'DGS2', short: 'DGS3MO' },
@@ -259,8 +297,14 @@ const UST_SPREADS = [
   { label: '2s10s', long: 'DGS10', short: 'DGS2' },
   { label: '2s30s', long: 'DGS30', short: 'DGS2' },
   { label: '5s10s', long: 'DGS10', short: 'DGS5' },
+  { label: '7s10s', long: 'DGS10', short: 'DGS7' },
   { label: '5s30s', long: 'DGS30', short: 'DGS5' },
   { label: '10s30s', long: 'DGS30', short: 'DGS10' },
+] as const
+const BUTTERFLIES = [
+  { label: '2s5s10s', low: 'DGS2', middle: 'DGS5', high: 'DGS10' },
+  { label: '2s10s30s', low: 'DGS2', middle: 'DGS10', high: 'DGS30' },
+  { label: '5s10s30s', low: 'DGS5', middle: 'DGS10', high: 'DGS30' },
 ] as const
 const UST_BREAKEVENS = [
   { key: 'T5YIE', label: '5Y Breakeven' },
@@ -683,7 +727,7 @@ function useContractHistory(symbol: string | null, days = 60) {
 export function STIRDashboardPage() {
   const [assetClass, setAssetClass] = useState<AssetClass>('rates')
   const [activeView, setActiveView] = useState<ViewTab>('pricing')
-  const [product, setProduct] = useState<ProductKey>('fedfunds')
+  const [product, setProduct] = useState<ProductKey>('sofr')
   const [fvmTab, setFvmTab] = useState<string>('cpi')
   const [fvmMeasure, setFvmMeasure] = useState<'headline' | 'core'>('headline')
   const [fvmRange, setFvmRange] = useState<string>('1y')
@@ -710,6 +754,17 @@ export function STIRDashboardPage() {
   const [beSelection, setBeSelection] = useState<BeSelection>({ type: 'beYield', key: '10y', label: '10Y BE' })
   const [beChartRange, setBeChartRange] = useState<string>('1y')
   const [beRegimeLookback, setBeRegimeLookback] = useState(20)
+  const [creditChartRange, setCreditChartRange] = useState<string>('1y')
+  const [creditRegimeLookback, setCreditRegimeLookback] = useState(20)
+  const [creditRocLookback, setCreditRocLookback] = useState(20)
+  const [creditVisibleSeries, setCreditVisibleSeries] = useState<Record<string, boolean>>({
+    'BAMLC0A1CAAA': true, 'BAMLC0A4CBBB': true, 'BAMLH0A0HYM2': true, 'BAMLH0A3HYC': true, 'TRASH': true,
+  })
+  const [creditOverviewRange, setCreditOverviewRange] = useState<string>('1y')
+  const [attrLookback, setAttrLookback] = useState(20)
+  const [attrChartRange, setAttrChartRange] = useState<string>('1y')
+  const [ycLookback, setYcLookback] = useState(1)
+  const [ycCompressed, setYcCompressed] = useState(false)
   const [laborData, setLaborData] = useState<{ unrate: WD[]; employment: WD[]; clf: WD[]; payems: WD[] }>({
     unrate: [],
     employment: [],
@@ -724,6 +779,8 @@ export function STIRDashboardPage() {
   const [gdpnowRange, setGdpnowRange] = useState<string>('2y')
   const [gdpnowSyncing, setGdpnowSyncing] = useState(false)
   const [gdpnowContribs, setGdpnowContribs] = useState<ContributionPoint[]>([])
+  const [fedFundsHistory, setFedFundsHistory] = useState<Array<{ date: string; value: number }>>([])
+  const [showFedFunds, setShowFedFunds] = useState(false)
   const [payrollScenarios, setPayrollScenarios] = useState([50, 100, 150, 200])
   const [clfGrowthRate, setClfGrowthRate] = useState(0.05)
   const [hoveredBox, setHoveredBox] = useState<'mtg' | 'term6m' | 'term12m' | null>(null)
@@ -1031,7 +1088,7 @@ export function STIRDashboardPage() {
     setUstLoading(true)
     setUstError(null)
 
-    const ustSeries = [...UST_TENORS, ...UST_BREAKEVENS]
+    const ustSeries = [...UST_TENORS, ...UST_BREAKEVENS, ...UST_EXTRA]
     Promise.all(ustSeries.map((series) => fetchFredSeries(series.key)))
       .then((seriesList) => {
         if (cancelled) return
@@ -1051,6 +1108,12 @@ export function STIRDashboardPage() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    fetchFredSeries('DFF')
+      .then((data) => setFedFundsHistory(data.map((d: FredObservation) => ({ date: d.date, value: Number(d.value) })).filter((d: { value: number }) => !isNaN(d.value))))
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -1189,6 +1252,21 @@ export function STIRDashboardPage() {
 
   const fvmRangeCutoff = useMemo(() => getRangeCutoff(fvmRange, activeFvmModel.currentDate), [fvmRange, activeFvmModel.currentDate])
 
+  const fedFundsMonthly = useMemo(() => {
+    if (fedFundsHistory.length === 0) return new Map<string, number>()
+    const monthMap = new Map<string, number[]>()
+    for (const p of fedFundsHistory) {
+      const mk = p.date.slice(0, 7) + '-01'
+      if (!monthMap.has(mk)) monthMap.set(mk, [])
+      monthMap.get(mk)!.push(p.value)
+    }
+    const result = new Map<string, number>()
+    for (const [date, values] of monthMap) {
+      result.set(date, values.reduce((a, b) => a + b, 0) / values.length)
+    }
+    return result
+  }, [fedFundsHistory])
+
   const fvmFilteredYoYData = useMemo(
     () => activeFvmYoYData.filter((row) => !fvmRangeCutoff || row.date >= fvmRangeCutoff || row.date > activeFvmModel.currentDate),
     [activeFvmYoYData, fvmRangeCutoff, activeFvmModel.currentDate],
@@ -1199,16 +1277,24 @@ export function STIRDashboardPage() {
     [activeFvmMomData, fvmRangeCutoff],
   )
 
+  const fvmYoYDataWithFF = useMemo(() => {
+    if (!showFedFunds) return fvmFilteredYoYData
+    return fvmFilteredYoYData.map((row) => ({
+      ...row,
+      fedFunds: fedFundsMonthly.get(row.date) ?? null,
+    }))
+  }, [fvmFilteredYoYData, fedFundsMonthly, showFedFunds])
+
   const fvmYoYDomain = useMemo<[number, number]>(() => {
-    const yoyValues = fvmFilteredYoYData
-      .flatMap((d) => [d.yoy, d.pace1m, d.pace3m, d.pace6m])
+    const yoyValues = fvmYoYDataWithFF
+      .flatMap((d) => [d.yoy, d.pace1m, d.pace3m, d.pace6m, ...(showFedFunds ? [(d as unknown as { fedFunds?: number | null }).fedFunds ?? null] : [])])
       .filter((v): v is number => v != null)
     const allValues = [...yoyValues, 2]
     const min = Math.min(...allValues)
     const max = Math.max(...allValues)
     const padding = (max - min) * 0.1 || 0.2
     return [min - padding, max + padding]
-  }, [fvmFilteredYoYData])
+  }, [fvmYoYDataWithFF, showFedFunds])
 
   const fvmMomDomain = useMemo<[number, number]>(() => {
     const momValues = fvmFilteredMomData.map((d) => d.mom).filter((v): v is number => v != null)
@@ -1261,16 +1347,24 @@ export function STIRDashboardPage() {
     return rows.sort((a, b) => a.date.localeCompare(b.date))
   }, [laborData.unrate, laborProjection, laborRangeCutoff])
 
+  const laborChartDataWithFF = useMemo(() => {
+    if (!showFedFunds) return laborChartData
+    return laborChartData.map((row) => ({
+      ...row,
+      fedFunds: fedFundsMonthly.get(row.date) ?? null,
+    }))
+  }, [laborChartData, fedFundsMonthly, showFedFunds])
+
   const laborDomain = useMemo<[number, number]>(() => {
-    const values = laborChartData
-      .flatMap((row) => [row.historical, row.scenario0, row.scenario1, row.scenario2, row.scenario3])
+    const values = laborChartDataWithFF
+      .flatMap((row) => [row.historical, row.scenario0, row.scenario1, row.scenario2, row.scenario3, ...(showFedFunds ? [(row as unknown as { fedFunds?: number | null }).fedFunds ?? null] : [])])
       .filter((value): value is number => value != null)
     if (!values.length) return [0, 10]
     const min = Math.min(...values)
     const max = Math.max(...values)
     const padding = (max - min) * 0.1 || 0.2
     return [min - padding, max + padding]
-  }, [laborChartData])
+  }, [laborChartDataWithFF, showFedFunds])
 
   const payrollYoY = useMemo<PayrollYoYPoint[]>(() => {
     const data = laborData.payems
@@ -1425,6 +1519,40 @@ export function STIRDashboardPage() {
     }))
   }, [gdpnowContribs])
 
+  const ycCurveData = useMemo(() => {
+    return YC_TENORS.map((tenor) => {
+      const series = ustData[tenor.key] || []
+      if (series.length < 2) return { ...tenor, latest: null as number | null, offset: null as number | null, delta: null as number | null }
+      const latest = series[series.length - 1]
+      const offsetIdx = Math.max(0, series.length - 1 - ycLookback)
+      const offset = series[offsetIdx]
+      const latestVal = latest?.value ?? null
+      const offsetVal = offset?.value ?? null
+      const delta = latestVal != null && offsetVal != null ? (latestVal - offsetVal) * 100 : null
+      return { ...tenor, latest: latestVal, offset: offsetVal, delta }
+    })
+  }, [ustData, ycLookback])
+
+  const ycLatestDate = useMemo(() => {
+    const series = ustData['DGS10'] || []
+    return series.length > 0 ? series[series.length - 1].date : '—'
+  }, [ustData])
+
+  const ycOffsetDate = useMemo(() => {
+    const series = ustData['DGS10'] || []
+    const idx = Math.max(0, series.length - 1 - ycLookback)
+    return series.length > 0 ? series[idx].date : '—'
+  }, [ustData, ycLookback])
+
+  const ycYDomain = useMemo((): [number, number] => {
+    const vals = ycCurveData.flatMap((d) => [d.latest, d.offset]).filter((v): v is number => v != null)
+    if (vals.length === 0) return [0, 5]
+    const min = Math.min(...vals)
+    const max = Math.max(...vals)
+    const pad = (max - min) * 0.15 || 0.2
+    return [min - pad, max + pad]
+  }, [ycCurveData])
+
   const currentYields = useMemo(() => {
     return UST_TENORS.map((tenor) => {
       const series = ustData[tenor.key] || []
@@ -1502,6 +1630,68 @@ export function STIRDashboardPage() {
 
     return { real5y, real10y, realSpread }
   }, [ustData])
+
+  const attrChartData = useMemo(() => {
+    const nominal = ustData['DGS5'] || []
+    const breakeven = ustData['T5YIE'] || []
+    const real5y = realYieldData.real5y || []
+    if (nominal.length === 0 || breakeven.length === 0 || real5y.length === 0) return []
+
+    const beMap = new Map(breakeven.map((p) => [p.date, p.value]))
+    const realMap = new Map(real5y.map((p) => [p.date, p.value]))
+
+    const aligned = nominal
+      .filter((p) => beMap.has(p.date) && realMap.has(p.date))
+      .map((p) => ({ date: p.date, nominal: p.value, breakeven: beMap.get(p.date)!, real: realMap.get(p.date)! }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoff = getDateCutoff(attrChartRange)
+    const filtered = cutoff ? aligned.filter((p) => p.date >= cutoff) : aligned
+
+    return filtered.map((point) => {
+      const fullIdx = aligned.findIndex((c) => c.date === point.date)
+      const lookbackIdx = fullIdx - attrLookback
+      if (lookbackIdx < 0) return { date: point.date, nominalChg: null as number | null, beChg: null as number | null, realChg: null as number | null }
+      const prior = aligned[lookbackIdx]
+      return {
+        date: point.date,
+        nominalChg: (point.nominal - prior.nominal) * 100,
+        beChg: (point.breakeven - prior.breakeven) * 100,
+        realChg: (point.real - prior.real) * 100,
+      }
+    })
+  }, [ustData, realYieldData, attrLookback, attrChartRange])
+
+  const attr10yChartData = useMemo(() => {
+    const nominal = ustData['DGS10'] || []
+    const breakeven = ustData['T10YIE'] || []
+    const real10y = realYieldData.real10y || []
+    if (nominal.length === 0 || breakeven.length === 0 || real10y.length === 0) return []
+
+    const beMap = new Map(breakeven.map((p) => [p.date, p.value]))
+    const realMap = new Map(real10y.map((p) => [p.date, p.value]))
+
+    const aligned = nominal
+      .filter((p) => beMap.has(p.date) && realMap.has(p.date))
+      .map((p) => ({ date: p.date, nominal: p.value, breakeven: beMap.get(p.date)!, real: realMap.get(p.date)! }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoff = getDateCutoff(attrChartRange)
+    const filtered = cutoff ? aligned.filter((p) => p.date >= cutoff) : aligned
+
+    return filtered.map((point) => {
+      const fullIdx = aligned.findIndex((c) => c.date === point.date)
+      const lookbackIdx = fullIdx - attrLookback
+      if (lookbackIdx < 0) return { date: point.date, nominalChg: null as number | null, beChg: null as number | null, realChg: null as number | null }
+      const prior = aligned[lookbackIdx]
+      return {
+        date: point.date,
+        nominalChg: (point.nominal - prior.nominal) * 100,
+        beChg: (point.breakeven - prior.breakeven) * 100,
+        realChg: (point.real - prior.real) * 100,
+      }
+    })
+  }, [ustData, realYieldData, attrLookback, attrChartRange])
 
   const realYields = useMemo(() => {
     function getLatest(series: Array<{ date: string; value: number }>) {
@@ -1617,6 +1807,237 @@ export function STIRDashboardPage() {
       return { ...point, regime }
     })
   }, [ustSelection, ustData, ustChartRange, regimeLookback])
+
+  const currentButterflies = useMemo(() => {
+    return BUTTERFLIES.map((fly) => {
+      const lowS = ustData[fly.low] || []
+      const midS = ustData[fly.middle] || []
+      const highS = ustData[fly.high] || []
+      if (lowS.length < 2 || midS.length < 2 || highS.length < 2) return { ...fly, current: null as number | null, prior: null as number | null, change: null as number | null }
+      const cur = (2 * midS[midS.length - 1].value - highS[highS.length - 1].value - lowS[lowS.length - 1].value) * 100
+      const pri = (2 * midS[midS.length - 2].value - highS[highS.length - 2].value - lowS[lowS.length - 2].value) * 100
+      return { ...fly, current: cur, prior: pri, change: cur - pri }
+    })
+  }, [ustData])
+
+  const butterflyChartData = useMemo(() => {
+    if (!ustSelection || ustSelection.type !== 'butterfly') return []
+    const lowS = ustData[ustSelection.lowKey] || []
+    const midS = ustData[ustSelection.middleKey] || []
+    const highS = ustData[ustSelection.highKey] || []
+    const midMap = new Map(midS.map((p) => [p.date, p.value]))
+    const highMap = new Map(highS.map((p) => [p.date, p.value]))
+    const cutoff = getDateCutoff(ustChartRange)
+    return lowS
+      .filter((p) => midMap.has(p.date) && highMap.has(p.date))
+      .filter((p) => !cutoff || p.date >= cutoff)
+      .map((p) => ({
+        date: p.date,
+        value: (2 * midMap.get(p.date)! - highMap.get(p.date)! - p.value) * 100,
+      }))
+  }, [ustSelection, ustData, ustChartRange])
+
+  const creditChartData = useMemo(() => {
+    const hyOas = ustData['BAMLH0A0HYM2'] || []
+    const dgs2 = ustData['DGS2'] || []
+    const dgs10 = ustData['DGS10'] || []
+    if (hyOas.length === 0 || dgs2.length === 0 || dgs10.length === 0) return []
+
+    const map2 = new Map(dgs2.map((p) => [p.date, p.value]))
+    const map10 = new Map(dgs10.map((p) => [p.date, p.value]))
+
+    const aligned = hyOas
+      .filter((p) => map2.has(p.date) && map10.has(p.date))
+      .map((p) => ({
+        date: p.date,
+        oas: p.value,
+        yield2y: map2.get(p.date)!,
+        yield10y: map10.get(p.date)!,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoff = getDateCutoff(creditChartRange)
+    const filtered = cutoff ? aligned.filter((p) => p.date >= cutoff) : aligned
+
+    return filtered.map((point) => {
+      const fullIdx = aligned.findIndex((c) => c.date === point.date)
+      const lookbackIdx = fullIdx - creditRegimeLookback
+      if (lookbackIdx < 0) return { ...point, regime: null as string | null }
+
+      const prior = aligned[lookbackIdx]
+      const shortChange = point.yield2y - prior.yield2y
+      const longChange = point.yield10y - prior.yield10y
+      const spreadNow = (point.yield10y - point.yield2y) * 100
+      const spreadThen = (prior.yield10y - prior.yield2y) * 100
+      const spreadChange = spreadNow - spreadThen
+
+      let regime: string
+      if (spreadChange > 0) {
+        if (shortChange < 0 && longChange < 0) regime = 'Bull Steepener'
+        else if (shortChange > 0 && longChange > 0) regime = 'Bear Steepener'
+        else regime = 'Steepener Twist'
+      } else if (spreadChange < 0) {
+        if (shortChange < 0 && longChange < 0) regime = 'Bull Flattener'
+        else if (shortChange > 0 && longChange > 0) regime = 'Bear Flattener'
+        else regime = 'Flattener Twist'
+      } else {
+        regime = 'Neutral'
+      }
+      return { ...point, regime }
+    })
+  }, [ustData, creditChartRange, creditRegimeLookback])
+
+  const creditSpreadDashboard = useMemo(() => {
+    const lookbacks = [
+      { label: '1D', offset: 1 },
+      { label: '5D', offset: 5 },
+      { label: '20D', offset: 20 },
+      { label: '60D', offset: 60 },
+      { label: '120D', offset: 120 },
+      { label: 'YTD', offset: -1 },
+    ]
+
+    function getValueAtOffset(series: Array<{ date: string; value: number }>, offset: number): number | null {
+      if (offset === -1) {
+        if (series.length === 0) return null
+        const latestYear = parseInt(series[series.length - 1].date.slice(0, 4))
+        const prevYearEnd = `${latestYear - 1}-12-31`
+        for (let i = series.length - 1; i >= 0; i--) {
+          if (series[i].date <= prevYearEnd) return series[i].value
+        }
+        return null
+      }
+      const idx = series.length - 1 - offset
+      return idx < 0 ? null : series[idx].value
+    }
+
+    const cccSeries = ustData['BAMLH0A3HYC'] || []
+    const hySeries = ustData['BAMLH0A0HYM2'] || []
+    const hyMap = new Map(hySeries.map((p) => [p.date, p.value]))
+    const trashSeries = cccSeries
+      .filter((p) => hyMap.has(p.date))
+      .map((p) => ({ date: p.date, value: (p.value - hyMap.get(p.date)!) * 100 }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    return CREDIT_SPREADS.map((spread) => {
+      let series: Array<{ date: string; value: number }>
+      let isBps = false
+      if (spread.key === 'TRASH') {
+        series = trashSeries
+        isBps = true
+      } else {
+        series = (ustData[spread.key] || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+      }
+      if (series.length === 0) return { ...spread, current: null as number | null, changes: lookbacks.map(() => null as number | null) }
+
+      const current = series[series.length - 1].value
+      const currentBps = isBps ? current : current * 100
+
+      const changes = lookbacks.map((lb) => {
+        const priorVal = getValueAtOffset(series, lb.offset)
+        if (priorVal == null) return null
+        return isBps ? current - priorVal : (current - priorVal) * 100
+      })
+
+      return { ...spread, current: currentBps, changes }
+    })
+  }, [ustData])
+
+  const creditColumnShading = useMemo(() => {
+    return Array.from({ length: 6 }, (_, col) => {
+      const absVals = creditSpreadDashboard.map((r) => r.changes[col]).filter((v): v is number => v != null).map(Math.abs)
+      const max = absVals.length > 0 ? Math.max(...absVals) : 0
+      return max
+    })
+  }, [creditSpreadDashboard])
+
+  function getCreditCellBg(value: number | null, colIdx: number): string {
+    if (value == null || value === 0) return 'transparent'
+    const max = creditColumnShading[colIdx]
+    if (!max) return 'transparent'
+    const alpha = 0.05 + (Math.abs(value) / max) * 0.2
+    return value > 0
+      ? `rgba(239, 83, 80, ${alpha.toFixed(3)})`
+      : `rgba(78, 201, 176, ${alpha.toFixed(3)})`
+  }
+
+  const creditOverviewChartData = useMemo(() => {
+    const cccSeries = ustData['BAMLH0A3HYC'] || []
+    const hySeries = ustData['BAMLH0A0HYM2'] || []
+    const hyMap = new Map(hySeries.map((p) => [p.date, p.value]))
+    const trashMap = new Map<string, number>()
+    cccSeries.forEach((p) => { const hv = hyMap.get(p.date); if (hv != null) trashMap.set(p.date, (p.value - hv) * 100) })
+
+    const allDates = new Set<string>()
+    CREDIT_SERIES_CONFIG.forEach((s) => {
+      if (s.key === 'TRASH') { trashMap.forEach((_, d) => allDates.add(d)) }
+      else { (ustData[s.key] || []).forEach((p) => allDates.add(p.date)) }
+    })
+
+    const cutoff = getDateCutoff(creditOverviewRange)
+    const sortedDates = [...allDates].sort().filter((d) => !cutoff || d >= cutoff)
+
+    const maps: Record<string, Map<string, number>> = {}
+    CREDIT_SERIES_CONFIG.forEach((s) => {
+      if (s.key === 'TRASH') maps[s.key] = trashMap
+      else maps[s.key] = new Map((ustData[s.key] || []).map((p) => [p.date, p.value * 100]))
+    })
+
+    return sortedDates.map((date) => {
+      const point: Record<string, string | number | null> = { date }
+      CREDIT_SERIES_CONFIG.forEach((s) => { point[s.key] = maps[s.key]?.get(date) ?? null })
+      return point
+    })
+  }, [ustData, creditOverviewRange])
+
+  function toggleCreditSeries(key: string) {
+    setCreditVisibleSeries((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const creditRocChartData = useMemo(() => {
+    const hyOas = ustData['BAMLH0A0HYM2'] || []
+    const dgs2 = ustData['DGS2'] || []
+    const dgs10 = ustData['DGS10'] || []
+    if (hyOas.length === 0 || dgs2.length === 0 || dgs10.length === 0) return []
+
+    const map2 = new Map(dgs2.map((p) => [p.date, p.value]))
+    const map10 = new Map(dgs10.map((p) => [p.date, p.value]))
+
+    const aligned = hyOas
+      .filter((p) => map2.has(p.date) && map10.has(p.date))
+      .map((p) => ({ date: p.date, oas: p.value, yield2y: map2.get(p.date)!, yield10y: map10.get(p.date)! }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoff = getDateCutoff(creditChartRange)
+    const filtered = cutoff ? aligned.filter((p) => p.date >= cutoff) : aligned
+
+    return filtered.map((point) => {
+      const fullIdx = aligned.findIndex((c) => c.date === point.date)
+
+      let roc: number | null = null
+      const rocIdx = fullIdx - creditRocLookback
+      if (rocIdx >= 0) roc = (point.oas - aligned[rocIdx].oas) * 100
+
+      let regime: string | null = null
+      const regimeIdx = fullIdx - creditRegimeLookback
+      if (regimeIdx >= 0) {
+        const prior = aligned[regimeIdx]
+        const shortChange = point.yield2y - prior.yield2y
+        const longChange = point.yield10y - prior.yield10y
+        const spreadChange = (point.yield10y - point.yield2y) * 100 - (prior.yield10y - prior.yield2y) * 100
+        if (spreadChange > 0) {
+          if (shortChange < 0 && longChange < 0) regime = 'Bull Steepener'
+          else if (shortChange > 0 && longChange > 0) regime = 'Bear Steepener'
+          else regime = 'Steepener Twist'
+        } else if (spreadChange < 0) {
+          if (shortChange < 0 && longChange < 0) regime = 'Bull Flattener'
+          else if (shortChange > 0 && longChange > 0) regime = 'Bear Flattener'
+          else regime = 'Flattener Twist'
+        }
+      }
+      return { ...point, roc, regime }
+    })
+  }, [ustData, creditChartRange, creditRocLookback, creditRegimeLookback])
 
   const realChartData = useMemo(() => {
     if (realSelection.type !== 'realYield') return []
@@ -1800,8 +2221,8 @@ export function STIRDashboardPage() {
           </div>
         )}
 
-        <div className={styles.twoPanel}>
-          <div className={styles.leftPanel}>
+        <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.twoPanel : styles.fullPanel}>
+          <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.leftPanel : undefined}>
         {activeView === 'pricing' && (
           <>
             <section className={styles.controlsSection}>
@@ -2157,6 +2578,120 @@ export function STIRDashboardPage() {
 
         {activeView === 'ust' && (
           <section className={styles.section}>
+            {/* ═══ Yield Curve Chart ═══ */}
+            <div className={styles.ustDashboard}>
+              <div className={styles.ustYcHeader}>
+                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>US TREASURY YIELD CURVE</div>
+                <div className={styles.ustYcControls}>
+                  <label className={styles.ustLookbackWrap}>
+                    <span className={styles.ustLookbackLabel}>t −</span>
+                    <input
+                      className={styles.laborInput}
+                      type="number"
+                      min="0"
+                      value={ycLookback}
+                      onChange={(e) => setYcLookback(Math.max(0, parseInt(e.target.value) || 1))}
+                      style={{ width: '40px' }}
+                    />
+                  </label>
+                  <button
+                    onClick={() => setYcCompressed((v) => !v)}
+                    style={{
+                      background: ycCompressed ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
+                      border: `1px solid ${ycCompressed ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
+                      color: ycCompressed ? '#60a5fa' : '#728197',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '0.65rem',
+                      fontWeight: 600,
+                      padding: '3px 10px',
+                      cursor: 'pointer',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    COMPRESSED
+                  </button>
+                </div>
+              </div>
+              <div className={styles.ustYcDates}>
+                {'\u25CF'} LATEST: {ycLatestDate} &nbsp;&nbsp; {'\u25CF'} OFFSET: {ycOffsetDate} ({ycLookback} {ycLookback === 1 ? 'day' : 'days'})
+              </div>
+              {ustLoading ? (
+                <div className={styles.loading}>Loading…</div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={450}>
+                    <LineChart data={ycCurveData.map((d, idx) => ({ ...d, xVal: ycCompressed ? d.years : idx }))} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
+                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey={ycCompressed ? 'years' : 'label'}
+                        type={ycCompressed ? 'number' : 'category'}
+                        stroke="#728197"
+                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        {...(ycCompressed ? { domain: [0, 30] as [number, number], ticks: [1 / 12, 0.25, 0.5, 1, 2, 5, 7, 10, 20, 30], tickFormatter: (v: number) => (v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`) } : {})}
+                      />
+                      <YAxis
+                        stroke="#728197"
+                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        tickFormatter={(v: number) => `${v.toFixed(2)}%`}
+                        domain={ycYDomain}
+                        allowDataOverflow
+                      />
+                      <Tooltip
+                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
+                        formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
+                        labelFormatter={(label: unknown) => {
+                          const point = ycCurveData.find((d) => (ycCompressed ? d.years === label : d.label === label))
+                          return point?.label || String(label)
+                        }}
+                      />
+                      <Line type="monotone" dataKey="latest" name="Latest" stroke="#60a5fa" strokeWidth={2.5} dot={{ r: 3, fill: '#60a5fa' }} connectNulls />
+                      <Line type="monotone" dataKey="offset" name="Offset" stroke="#888888" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#888888' }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={ycCurveData} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
+                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="label" stroke="#728197" tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} />
+                      <YAxis
+                        stroke="#728197"
+                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        tickFormatter={(v: number) => `${v.toFixed(0)}`}
+                        label={{ value: 'bps', position: 'top', offset: 10, style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' } }}
+                      />
+                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                      <Bar dataKey="delta" radius={[2, 2, 0, 0]}>
+                        {ycCurveData.map((d, idx) => (
+                          <Cell key={idx} fill={(d.delta ?? 0) >= 0 ? '#4EC9B0' : '#EF5350'} />
+                        ))}
+                        <LabelList
+                          dataKey="delta"
+                          content={((props: { x?: number; y?: number; width?: number; height?: number; value?: number | null }) => {
+                            const { x = 0, y = 0, width = 0, height = 0, value } = props
+                            if (value == null) return null
+                            const numeric = Number(value)
+                            return (
+                              <text
+                                x={x + width / 2}
+                                y={numeric >= 0 ? y - 8 : y + height + 14}
+                                textAnchor="middle"
+                                fill="#94A3B8"
+                                fontSize={11}
+                                fontFamily="var(--font-mono)"
+                                fontWeight={700}
+                              >
+                                {numeric > 0 ? '+' : ''}{numeric.toFixed(1)}
+                              </text>
+                            )
+                          }) as never}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </>
+              )}
+            </div>
+
+            {/* ═══ Nominal Yields Dashboard ═══ */}
             <div className={styles.ustDashboard}>
               <div className={styles.ustSectionLabel}>Nominal Yields</div>
               {ustLoading ? (
@@ -2224,10 +2759,40 @@ export function STIRDashboardPage() {
                     ))}
                   </div>
 
+                  <div className={styles.ustSectionLabel}>Butterflies</div>
+                  <div className={styles.butterflyRow}>
+                    {currentButterflies.map((fly) => (
+                      <div
+                        key={fly.label}
+                        className={`${styles.ustSpreadBox} ${ustSelection?.type === 'butterfly' && ustSelection.label === fly.label ? styles.ustBoxSelected : ''}`}
+                        onClick={() => setUstSelection({ type: 'butterfly', label: fly.label, lowKey: fly.low, middleKey: fly.middle, highKey: fly.high })}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className={styles.ustSpreadLabel} style={{ color: '#60a5fa' }}>{fly.label}</div>
+                        <div className={styles.ustSpreadValue} style={{
+                          color: fly.current != null
+                            ? fly.current > 0 ? '#4EC9B0' : fly.current < 0 ? '#EF5350' : '#e2e8f0'
+                            : '#728197',
+                        }}>
+                          {fly.current != null ? `${fly.current > 0 ? '+' : ''}${fly.current.toFixed(1)}bp` : '—'}
+                        </div>
+                        <div className={styles.ustSpreadChange} style={{
+                          color: fly.change != null
+                            ? fly.change > 0 ? '#4EC9B0' : fly.change < 0 ? '#EF5350' : '#728197'
+                            : '#728197',
+                        }}>
+                          {fly.change != null ? `${fly.change > 0 ? '+' : ''}${fly.change.toFixed(1)}bp` : '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className={styles.ustChartTitle}>
                     {ustSelection?.type === 'yield'
                       ? `${ustSelection.label} Treasury Yield`
-                      : `${ustSelection?.label} yield curve regimes`}
+                      : ustSelection?.type === 'butterfly'
+                        ? `${ustSelection.label} butterfly`
+                        : `${ustSelection?.label} yield curve regimes`}
                   </div>
 
                     <div className={styles.ustChartControls}>
@@ -2278,7 +2843,37 @@ export function STIRDashboardPage() {
                     </div>
                   )}
 
-                  {ustSelection?.type === 'yield' ? (
+                  {ustSelection?.type === 'butterfly' ? (
+                    <ResponsiveContainer width="100%" height={420}>
+                      <LineChart data={butterflyChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="date"
+                          stroke="#728197"
+                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          tickFormatter={(date: string) => {
+                            const d = new Date(date)
+                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                            return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+                          }}
+                          interval="preserveStartEnd"
+                          minTickGap={60}
+                        />
+                        <YAxis
+                          stroke="#728197"
+                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
+                        />
+                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
+                        <Tooltip
+                          contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
+                          formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
+                        />
+                        <Line type="monotone" dataKey="value" stroke="#60a5fa" strokeWidth={2} dot={false} />
+                        <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : ustSelection?.type === 'yield' ? (
                     <ResponsiveContainer width="100%" height={420}>
                       <LineChart data={ustChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
                         <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
@@ -2741,10 +3336,365 @@ export function STIRDashboardPage() {
           </section>
         )}
 
+        {activeView === 'attribution' && (
+          <div>
+            <div className={styles.ustDashboard}>
+              <div className={styles.ustYcHeader}>
+                <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: 0 }}>
+                  5Y NOMINAL YIELD — CHANGE ATTRIBUTION
+                </div>
+                <div className={styles.ustYcControls}>
+                  <label className={styles.ustLookbackWrap}>
+                    <span className={styles.ustLookbackLabel}>Window:</span>
+                    <input className={styles.laborInput} type="number" min="1" value={attrLookback} onChange={(e) => setAttrLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '50px' }} />
+                    <span className={styles.ustLookbackLabel}>d</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className={styles.ustChartControls}>
+                <div className={styles.ustRangeBar}>
+                  {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
+                    <button
+                      key={range}
+                      className={styles.fvmRangeBtn}
+                      onClick={() => setAttrChartRange(range)}
+                      style={{
+                        border: `1px solid ${attrChartRange === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
+                        ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                        fontSize: '0.75rem',
+                        padding: '4px 10px',
+                        color: attrChartRange === range ? '#e2e8f0' : '#728197',
+                        background: attrChartRange === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent',
+                      }}
+                    >
+                      {range.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={styles.ustRegimeLegend}>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
+                  5Y Nominal Δ
+                </span>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#ef5350' }} />
+                  Breakeven Δ
+                </span>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />
+                  Real Yield Δ
+                </span>
+              </div>
+
+              {ustLoading ? (
+                <div className={styles.loading}>Loading attribution data…</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={500}>
+                  <ComposedChart data={attrChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }} stackOffset="sign">
+                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#728197"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                    />
+                    <YAxis
+                      stroke="#728197"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip
+                      contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
+                      labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                      formatter={(value: unknown, name: string | undefined) => {
+                        const labels: Record<string, string> = { nominalChg: '5Y Nominal Δ', beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
+                        return [typeof value === 'number' ? `${value > 0 ? '+' : ''}${value.toFixed(1)}bp` : '—', labels[name ?? ''] || (name ?? '')]
+                      }}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                    <Bar dataKey="beChg" stackId="attr" fill="#ef5350" name="beChg" barSize={3} />
+                    <Bar dataKey="realChg" stackId="attr" fill="#60a5fa" name="realChg" barSize={3} />
+                    <Line type="monotone" dataKey="nominalChg" stroke="#ffffff" strokeWidth={1.5} dot={false} name="nominalChg" />
+                    <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            <div className={styles.ustDashboard}>
+              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
+                10Y NOMINAL YIELD — CHANGE ATTRIBUTION
+              </div>
+              <div className={styles.ustRegimeLegend}>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
+                  10Y Nominal Δ
+                </span>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#ef5350' }} />
+                  Breakeven Δ
+                </span>
+                <span className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />
+                  Real Yield Δ
+                </span>
+              </div>
+              {ustLoading ? (
+                <div className={styles.loading}>Loading attribution data…</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={500}>
+                  <ComposedChart data={attr10yChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }} stackOffset="sign">
+                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#728197"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                    />
+                    <YAxis
+                      stroke="#728197"
+                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
+                      domain={['auto', 'auto']}
+                    />
+                    <Tooltip
+                      contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
+                      labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                      formatter={(value: unknown, name: string | undefined) => {
+                        const labels: Record<string, string> = { nominalChg: '10Y Nominal Δ', beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
+                        return [typeof value === 'number' ? `${value > 0 ? '+' : ''}${value.toFixed(1)}bp` : '—', labels[name ?? ''] || (name ?? '')]
+                      }}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                    <Bar dataKey="beChg" stackId="attr" fill="#ef5350" name="beChg" barSize={3} />
+                    <Bar dataKey="realChg" stackId="attr" fill="#60a5fa" name="realChg" barSize={3} />
+                    <Line type="monotone" dataKey="nominalChg" stroke="#ffffff" strokeWidth={1.5} dot={false} name="nominalChg" />
+                    <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeView === 'credit' && (
-          <section className={styles.section}>
-            <div className={styles.comingSoon}>Credit coming soon</div>
-          </section>
+          <div>
+            <div className={styles.ustDashboard} style={{ marginBottom: '12px' }}>
+              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
+                CREDIT SPREADS
+              </div>
+
+              <div className={styles.ustRangeBar} style={{ marginBottom: '6px' }}>
+                {['3m', '6m', '1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
+                  <button
+                    key={range}
+                    className={styles.fvmRangeBtn}
+                    onClick={() => setCreditOverviewRange(range)}
+                    style={{
+                      border: `1px solid ${creditOverviewRange === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
+                      ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      color: creditOverviewRange === range ? '#60a5fa' : '#728197',
+                      background: creditOverviewRange === range ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
+                    }}
+                  >
+                    {range.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+
+              <div className={styles.creditLegend}>
+                {CREDIT_SERIES_CONFIG.map((s) => (
+                  <button
+                    key={s.key}
+                    className={`${styles.creditLegendItem} ${!creditVisibleSeries[s.key] ? styles.creditLegendItemOff : ''}`}
+                    onClick={() => toggleCreditSeries(s.key)}
+                  >
+                    <span className={styles.creditLegendSwatch} style={{ background: s.color }} />
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {ustLoading ? (
+                <div className={styles.loading}>Loading credit data…</div>
+              ) : (
+                <>
+                  <ResponsiveContainer width="100%" height={350}>
+                    <LineChart data={creditOverviewChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={60} />
+                      <YAxis stroke="#728197" tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                      <Tooltip
+                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
+                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                        formatter={(value: unknown, name: string | undefined) => {
+                          const cfg = CREDIT_SERIES_CONFIG.find((s) => s.key === name)
+                          return [typeof value === 'number' ? `${value.toFixed(0)}bp` : '—', cfg?.label || (name ?? '')]
+                        }}
+                      />
+                      {CREDIT_SERIES_CONFIG.map((s) => (
+                        creditVisibleSeries[s.key] ? (
+                          <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={1.5} dot={false} connectNulls name={s.key} />
+                        ) : null
+                      ))}
+                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                    </LineChart>
+                  </ResponsiveContainer>
+
+                  <table className={styles.creditTable}>
+                    <thead>
+                      <tr>
+                        <th className={styles.creditThLeft}>Spread</th>
+                        <th>Last (bp)</th>
+                        <th>1D Δ</th>
+                        <th>1W Δ</th>
+                        <th>1M Δ</th>
+                        <th>3MO Δ</th>
+                        <th>6MO Δ</th>
+                        <th>YTD Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {creditSpreadDashboard.map((row) => (
+                        <tr key={row.label}>
+                          <td className={styles.creditSpreadName}>{row.label}</td>
+                          <td className={styles.creditSpreadLast}>{row.current != null ? row.current.toFixed(0) : '—'}</td>
+                          {row.changes.map((chg, idx) => (
+                            <td
+                              key={idx}
+                              style={{
+                                color: chg != null ? (chg > 0 ? '#EF5350' : chg < 0 ? '#4EC9B0' : '#728197') : '#728197',
+                                background: getCreditCellBg(chg, idx),
+                              }}
+                            >
+                              {chg != null ? `${chg > 0 ? '+' : ''}${chg.toFixed(0)}` : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+
+            <div className={styles.ustDashboard}>
+              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
+                HY SPREAD W UST CURVE REGIMES
+              </div>
+            <div className={styles.creditControlsRow}>
+              <div className={styles.ustRangeBar}>
+                {['3m', '6m', '1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
+                  <button
+                    key={range}
+                    className={styles.fvmRangeBtn}
+                    onClick={() => setCreditChartRange(range)}
+                    style={{
+                      border: `1px solid ${creditChartRange === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
+                      ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                      fontSize: '0.75rem',
+                      padding: '4px 10px',
+                      color: creditChartRange === range ? '#60a5fa' : '#728197',
+                      background: creditChartRange === range ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
+                    }}
+                  >
+                    {range.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <label className={styles.ustLookbackWrap}>
+                  <span className={styles.ustLookbackLabel}>Regime:</span>
+                  <input className={styles.laborInput} type="number" min="1" value={creditRegimeLookback} onChange={(e) => setCreditRegimeLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '45px' }} />
+                  <span className={styles.ustLookbackLabel}>d</span>
+                </label>
+                <label className={styles.ustLookbackWrap}>
+                  <span className={styles.ustLookbackLabel}>RoC:</span>
+                  <input className={styles.laborInput} type="number" min="1" value={creditRocLookback} onChange={(e) => setCreditRocLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '45px' }} />
+                  <span className={styles.ustLookbackLabel}>d</span>
+                </label>
+              </div>
+            </div>
+
+            <div className={styles.ustRegimeLegend}>
+              {Object.entries(REGIME_COLORS).map(([name, color]) => (
+                <span key={name} className={styles.ustRegimeLegendItem}>
+                  <span className={styles.ustRegimeSwatch} style={{ background: color }} />
+                  {name}
+                </span>
+              ))}
+            </div>
+
+            {ustLoading ? (
+              <div className={styles.loading}>Loading credit data…</div>
+            ) : (
+              <div className={styles.creditChartGrid}>
+                <div>
+                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>US HY OAS</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
+                    w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
+                  </div>
+                  <ResponsiveContainer width="100%" height={420}>
+                    <ComposedChart data={creditChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                      <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} />
+                      <Tooltip
+                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}
+                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                        formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(2)}%` : '—', name === 'oas' ? 'HY OAS' : '']}
+                      />
+                      <Bar dataKey="oas" barSize={3}>
+                        {creditChartData.map((point, idx) => (
+                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
+                        ))}
+                      </Bar>
+                      <Line type="monotone" dataKey="oas" stroke="#ffffff" strokeWidth={1.5} dot={false} />
+                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div>
+                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>US HY OAS — {creditRocLookback}D RATE OF CHANGE</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
+                    w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
+                  </div>
+                  <ResponsiveContainer width="100%" height={420}>
+                    <ComposedChart data={creditRocChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                      <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                      <Tooltip
+                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}
+                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                        formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', name === 'roc' ? `${creditRocLookback}d Δ` : '']}
+                      />
+                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                      <Bar dataKey="roc" barSize={3}>
+                        {creditRocChartData.map((point, idx) => (
+                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
+                        ))}
+                      </Bar>
+                      <Line type="monotone" dataKey="roc" stroke="#ffffff" strokeWidth={1.5} dot={false} />
+                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+            </div>
+          </div>
         )}
 
         {activeView === 'money' && (
@@ -2761,6 +3711,7 @@ export function STIRDashboardPage() {
 
           </div>
 
+          {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.rightPanel}>
             <div className={styles.fvmPanel}>
               <div className={styles.fvmHeader}>
@@ -2771,7 +3722,7 @@ export function STIRDashboardPage() {
                       className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'headline' ? styles.fvmMeasureBtnActive : ''}`}
                       onClick={() => setFvmMeasure('headline')}
                       style={{
-                        border: `1px solid ${fvmMeasure === 'headline' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                        border: `1px solid ${fvmMeasure === 'headline' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
                       }}
                     >
                       HEADLINE
@@ -2780,7 +3731,7 @@ export function STIRDashboardPage() {
                       className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'core' ? styles.fvmMeasureBtnActive : ''}`}
                       onClick={() => setFvmMeasure('core')}
                       style={{
-                        border: `1px solid ${fvmMeasure === 'core' ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                        border: `1px solid ${fvmMeasure === 'core' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
                         borderLeft: 'none',
                       }}
                     >
@@ -2800,7 +3751,7 @@ export function STIRDashboardPage() {
                       if (tab.key === 'growth') setFvmRange('all')
                     }}
                     style={{
-                      border: `1px solid ${fvmTab === tab.key ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                      border: `1px solid ${fvmTab === tab.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
                       ...(idx > 0 ? { borderLeft: 'none' } : {}),
                     }}
                   >
@@ -2827,7 +3778,7 @@ export function STIRDashboardPage() {
                             className={`${styles.fvmRangeBtn} ${fvmRange === range.key ? styles.fvmRangeBtnActive : ''}`}
                             onClick={() => setFvmRange(range.key)}
                             style={{
-                              border: `1px solid ${fvmRange === range.key ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                              border: `1px solid ${fvmRange === range.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
                               ...(idx > 0 ? { borderLeft: 'none' } : {}),
                             }}
                           >
@@ -2836,16 +3787,35 @@ export function STIRDashboardPage() {
                         ))}
                       </div>
 
+                      <button
+                        onClick={() => setShowFedFunds((v) => !v)}
+                        style={{
+                          background: showFedFunds ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
+                          border: `1px solid ${showFedFunds ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
+                          color: showFedFunds ? '#a78bfa' : '#728197',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          padding: '3px 10px',
+                          cursor: 'pointer',
+                          borderRadius: '2px',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        FED FUNDS
+                      </button>
+
                       <div className={styles.fvmLegend}>
-                        <span style={{ color: '#FFD700' }}>― YoY actual</span>
+                        <span style={{ color: '#e2e8f0' }}>― YoY actual</span>
                         <span style={{ color: '#4ade80' }}>-- 1M MoM</span>
                         <span style={{ color: '#22d3ee' }}>-- 3M MoM avg</span>
                         <span style={{ color: '#fbbf24' }}>-- 6M MoM avg</span>
                         <span style={{ color: '#EF5350' }}>-- 2% Target</span>
+                        {showFedFunds && <span style={{ color: '#a78bfa' }}>― Fed Funds</span>}
                       </div>
 
                       <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={fvmFilteredYoYData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                        <LineChart data={fvmYoYDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                           <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
                           <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
                           <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={fvmYoYDomain} allowDataOverflow />
@@ -2856,10 +3826,13 @@ export function STIRDashboardPage() {
                             labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
                           />
                           <ReferenceLine y={2} stroke="#EF5350" strokeDasharray="8 4" />
-                          <Line type="monotone" dataKey="yoy" stroke="#FFD700" strokeWidth={2} dot={false} connectNulls />
+                          <Line type="monotone" dataKey="yoy" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
                           <Line type="monotone" dataKey="pace1m" stroke="#4ade80" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
                           <Line type="monotone" dataKey="pace3m" stroke="#22d3ee" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
                           <Line type="monotone" dataKey="pace6m" stroke="#fbbf24" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
+                          {showFedFunds && (
+                            <Line type="monotone" dataKey="fedFunds" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
+                          )}
                         </LineChart>
                       </ResponsiveContainer>
 
@@ -2882,7 +3855,7 @@ export function STIRDashboardPage() {
                             dataKey="mom"
                             stroke="#4EC9B0"
                             strokeWidth={1.5}
-                            dot={{ r: 2, fill: '#4EC9B0' }}
+                            dot={false}
                             connectNulls
                           />
                         </LineChart>
@@ -2941,7 +3914,7 @@ export function STIRDashboardPage() {
                             className={`${styles.fvmRangeBtn} ${fvmRange === range.key ? styles.fvmRangeBtnActive : ''}`}
                             onClick={() => setFvmRange(range.key)}
                             style={{
-                              border: `1px solid ${fvmRange === range.key ? '#FFD700' : 'rgba(255, 255, 255, 0.12)'}`,
+                              border: `1px solid ${fvmRange === range.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
                               ...(idx > 0 ? { borderLeft: 'none' } : {}),
                             }}
                           >
@@ -2950,16 +3923,35 @@ export function STIRDashboardPage() {
                         ))}
                       </div>
 
+                      <button
+                        onClick={() => setShowFedFunds((v) => !v)}
+                        style={{
+                          background: showFedFunds ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
+                          border: `1px solid ${showFedFunds ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
+                          color: showFedFunds ? '#a78bfa' : '#728197',
+                          fontFamily: 'var(--font-mono)',
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          padding: '3px 10px',
+                          cursor: 'pointer',
+                          borderRadius: '2px',
+                          marginBottom: '6px',
+                        }}
+                      >
+                        FED FUNDS
+                      </button>
+
                       <div className={styles.fvmLegend}>
-                        <span style={{ color: '#FFD700' }}>― U-3 actual</span>
+                        <span style={{ color: '#e2e8f0' }}>― U-3 actual</span>
                         <span style={{ color: '#EF5350' }}>-- {payrollScenarios[0]}k</span>
                         <span style={{ color: '#fbbf24' }}>-- {payrollScenarios[1]}k</span>
                         <span style={{ color: '#22d3ee' }}>-- {payrollScenarios[2]}k</span>
                         <span style={{ color: '#4ade80' }}>-- {payrollScenarios[3]}k</span>
+                        {showFedFunds && <span style={{ color: '#a78bfa' }}>― Fed Funds</span>}
                       </div>
 
                       <ResponsiveContainer width="100%" height={350}>
-                        <LineChart data={laborChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                        <LineChart data={laborChartDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                           <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
                           <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={laborDomain} allowDataOverflow />
@@ -2974,11 +3966,14 @@ export function STIRDashboardPage() {
                             stroke="rgba(255,255,255,0.3)"
                             strokeDasharray="4 4"
                           />
-                          <Line type="monotone" dataKey="historical" stroke="#FFD700" strokeWidth={2} dot={{ r: 2, fill: '#FFD700' }} connectNulls />
+                          <Line type="monotone" dataKey="historical" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
                           <Line type="monotone" dataKey="scenario0" stroke={LABOR_SCENARIO_COLORS[0]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
                           <Line type="monotone" dataKey="scenario1" stroke={LABOR_SCENARIO_COLORS[1]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
                           <Line type="monotone" dataKey="scenario2" stroke={LABOR_SCENARIO_COLORS[2]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
                           <Line type="monotone" dataKey="scenario3" stroke={LABOR_SCENARIO_COLORS[3]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                          {showFedFunds && (
+                            <Line type="monotone" dataKey="fedFunds" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
+                          )}
                         </LineChart>
                       </ResponsiveContainer>
 
@@ -3001,7 +3996,7 @@ export function STIRDashboardPage() {
                             dataKey="yoy"
                             stroke="#a78bfa"
                             strokeWidth={1.5}
-                            dot={{ r: 1.5, fill: '#a78bfa' }}
+                            dot={false}
                             connectNulls
                           />
                         </LineChart>
@@ -3095,8 +4090,8 @@ export function STIRDashboardPage() {
                             onClick={() => setGdpnowRange(r)}
                             style={{
                               background: gdpnowRange === r ? 'rgba(255,215,0,0.15)' : 'transparent',
-                              border: `1px solid ${gdpnowRange === r ? '#FFD700' : 'rgba(255,255,255,0.12)'}`,
-                              color: gdpnowRange === r ? '#FFD700' : '#94A3B8',
+                              border: `1px solid ${gdpnowRange === r ? '#e2e8f0' : 'rgba(255,255,255,0.12)'}`,
+                              color: gdpnowRange === r ? '#e2e8f0' : '#94A3B8',
                               borderRadius: '3px',
                               padding: '2px 8px',
                               fontSize: '0.65rem',
@@ -3253,6 +4248,7 @@ export function STIRDashboardPage() {
               </div>
             </div>
           </div>
+          )}
         </div>
         </>)}
       </main>

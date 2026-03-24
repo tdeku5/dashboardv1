@@ -456,7 +456,7 @@
 
 .ustYieldRow {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -722,7 +722,7 @@
   font-family: var(--font-mono);
   font-size: 0.95rem;
   font-weight: 700;
-  color: #FFD700;
+  color: #e2e8f0;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin: 0;
@@ -760,8 +760,8 @@
 }
 
 .fvmMeasureBtnActive {
-  color: #FFD700;
-  background: rgba(255, 215, 0, 0.08);
+  color: #e2e8f0;
+  background: rgba(226, 232, 240, 0.08);
 }
 
 .fvmTabs {
@@ -799,8 +799,8 @@
 }
 
 .fvmTabActive {
-  color: #FFD700;
-  background: rgba(255, 215, 0, 0.08);
+  color: #e2e8f0;
+  background: rgba(226, 232, 240, 0.08);
 }
 
 .fvmBody {
@@ -848,8 +848,8 @@
 }
 
 .fvmRangeBtnActive {
-  color: #FFD700;
-  background: rgba(255, 215, 0, 0.08);
+  color: #e2e8f0;
+  background: rgba(226, 232, 240, 0.08);
 }
 
 .fvmLegend {
@@ -947,6 +947,153 @@
 .assetClassBtnActive {
   color: #FFD700;
   background: rgba(255, 215, 0, 0.08);
+}
+
+.fullPanel {
+  width: 100%;
+}
+
+.creditControlsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 0 10px;
+}
+
+.creditChartGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Credit Legend ── */
+.creditLegend {
+  display: flex;
+  gap: 12px;
+  padding: 6px 0;
+}
+
+.creditLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: opacity 0.15s;
+}
+
+.creditLegendItem:hover {
+  color: #e2e8f0;
+}
+
+.creditLegendItemOff {
+  opacity: 0.3;
+}
+
+.creditLegendSwatch {
+  width: 12px;
+  height: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+/* ── Credit Spread Table ── */
+.creditTable {
+  width: auto;
+  max-width: 1000px;
+  margin: 12px auto 0;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.creditTable th {
+  text-align: right;
+  padding: 8px 16px;
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+}
+
+.creditThLeft {
+  text-align: left !important;
+}
+
+.creditThShaded {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.creditTable td {
+  text-align: right;
+  padding: 8px 16px;
+  color: #e2e8f0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.creditTdShaded {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.creditTable tbody tr {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.creditTable tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.creditSpreadName {
+  text-align: left !important;
+  color: #60a5fa !important;
+  font-weight: 700 !important;
+  font-size: 0.8rem !important;
+  width: 80px;
+}
+
+.creditSpreadLast {
+  color: #e2e8f0 !important;
+  font-weight: 700 !important;
+  font-size: 0.85rem !important;
+}
+
+.butterflyRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ustYcHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0 4px;
+}
+
+.ustYcControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ustYcDates {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #728197;
+  padding: 0 0 8px;
 }
 
 .loading { color: #94a3b8; }
