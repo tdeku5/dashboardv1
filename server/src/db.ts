@@ -607,6 +607,36 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_mts_fy ON mts_fiscal_balance(fiscal_year);
 `)
 
+// ── RDE Estimates ────────────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS rde_estimates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    date TEXT NOT NULL,
+    median REAL,
+    p16 REAL,
+    p84 REAL,
+    p2_5 REAL,
+    p97_5 REAL,
+    UNIQUE(date)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_rde_date ON rde_estimates(date);
+`)
+
+export interface RDEEstimateRow {
+  date: string
+  median: number | null
+  p16: number | null
+  p84: number | null
+  p2_5: number | null
+  p97_5: number | null
+}
+
+export function getRDEEstimates(): RDEEstimateRow[] {
+  return db.prepare('SELECT date, median, p16, p84, p2_5, p97_5 FROM rde_estimates ORDER BY date ASC').all() as RDEEstimateRow[]
+}
+
 // Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)
 try {
   // SQLite doesn't support DROP COLUMN before 3.35.0, so just recreate if needed

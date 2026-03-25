@@ -36,7 +36,7 @@ export function FiscalPage() {
               className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
               onClick={() => setCountry(c.key)}
               style={{
-                border: `1px solid ${country === c.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
                 ...(idx > 0 ? { borderLeft: 'none' } : {}),
               }}
             >
@@ -68,7 +68,7 @@ export function FiscalPage() {
               className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
               onClick={() => setSection(sec.key)}
               style={{
-                border: `1px solid ${section === sec.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
                 ...(idx > 0 ? { borderLeft: 'none' } : {}),
               }}
             >

@@ -4,7 +4,7 @@ import { NavDropdown } from '../components/NavDropdown'
 import { COUNTRIES, CATEGORIES } from './modelNav'
 import styles from './ModelsPage.module.css'
 
-export function ModelsPage() {
+export function PlaceholderCategoryPage({ categoryKey, label }: { categoryKey: string; label: string }) {
   const [country, setCountry] = useState('us')
   const navigate = useNavigate()
 
@@ -36,30 +36,32 @@ export function ModelsPage() {
           ))}
         </div>
 
-        {country === 'us' && (
-          <div className={styles.categoryBar}>
-            {CATEGORIES.map((cat, idx) => (
-              <button
-                key={cat.key}
-                className={styles.categoryBtn}
-                onClick={() => navigate(cat.path)}
-                style={{
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className={styles.categoryBar}>
+          {CATEGORIES.map((cat, idx) => (
+            <button
+              key={cat.key}
+              className={`${styles.categoryBtn} ${cat.key === categoryKey ? styles.categoryBtnActive : ''}`}
+              onClick={() => { if (cat.key !== categoryKey) navigate(cat.path) }}
+              style={{
+                border: `1px solid ${cat.key === categoryKey ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
+                ...(idx > 0 ? { borderLeft: 'none' } : {}),
+              }}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
 
-        {country !== 'us' && (
-          <div className={styles.comingSoon}>
-            {COUNTRIES.find(c => c.key === country)?.label} models coming soon
-          </div>
-        )}
+        <div className={styles.comingSoon}>{label} coming soon</div>
       </main>
     </div>
   )
+}
+
+export function IndustrialProductionPage() {
+  return <PlaceholderCategoryPage categoryKey="industrial" label="Industrial Production" />
+}
+
+export function CreditModelsPage() {
+  return <PlaceholderCategoryPage categoryKey="credit" label="Credit" />
 }

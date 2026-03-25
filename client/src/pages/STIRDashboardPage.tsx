@@ -170,6 +170,15 @@ interface GDPNowPoint {
   value: number
 }
 
+interface RDEPoint {
+  date: string
+  median: number | null
+  p16: number | null
+  p84: number | null
+  p2_5: number | null
+  p97_5: number | null
+}
+
 interface GDPNowQuarter {
   quarter: string
   forecasts: GDPNowPoint[]
@@ -228,19 +237,19 @@ const MONTH_CODE_TO_INDEX: Record<string, number> = {
 }
 
 const YEAR_BAND_COLORS: Record<number, string> = {
-  2026: 'rgba(148, 163, 184, 0.06)',
-  2027: 'rgba(239, 83, 80, 0.08)',
-  2028: 'rgba(78, 201, 176, 0.08)',
-  2029: 'rgba(59, 130, 246, 0.15)',
-  2030: 'rgba(255, 215, 0, 0.08)',
+  2026: 'rgba(200, 210, 220, 0.08)',
+  2027: 'rgba(239, 83, 80, 0.12)',
+  2028: 'rgba(78, 201, 176, 0.12)',
+  2029: 'rgba(59, 130, 246, 0.18)',
+  2030: 'rgba(255, 215, 0, 0.12)',
 }
 
 const YEAR_CYCLE = [
-  'rgba(148, 163, 184, 0.06)',
-  'rgba(239, 83, 80, 0.08)',
-  'rgba(78, 201, 176, 0.08)',
-  'rgba(59, 130, 246, 0.15)',
-  'rgba(255, 215, 0, 0.08)',
+  'rgba(200, 210, 220, 0.08)',
+  'rgba(239, 83, 80, 0.12)',
+  'rgba(78, 201, 176, 0.12)',
+  'rgba(59, 130, 246, 0.18)',
+  'rgba(255, 215, 0, 0.12)',
 ]
 
 const INTEGER_FORMAT = new Intl.NumberFormat('en-US')
@@ -263,6 +272,9 @@ const UST_EXTRA = [
   { key: 'BAMLC0A1CAAA' },
   { key: 'BAMLC0A4CBBB' },
   { key: 'BAMLH0A3HYC' },
+  { key: 'SOFR' },
+  { key: 'IORB' },
+  { key: 'IOER' },
 ] as const
 const CREDIT_SPREADS = [
   { key: 'BAMLC0A1CAAA', label: 'AAA' },
@@ -420,8 +432,10 @@ function heatStyle(value: number | null, maxAbs: number): CSSProperties {
   if (Math.abs(value) < 1e-9 || maxAbs <= 0) return { color: '#728197' }
 
   const opacity = Math.max(0.6, Math.min(1, Math.abs(value) / maxAbs))
-  if (value > 0) return { color: `rgba(78, 201, 176, ${opacity})` }
-  return { color: `rgba(239, 83, 80, ${opacity})` }
+  const intensity = Math.abs(value) / maxAbs
+  const bgAlpha = 0.05 + intensity * 0.2
+  if (value > 0) return { color: `rgba(78, 201, 176, ${opacity})`, background: `rgba(78, 201, 176, ${bgAlpha.toFixed(3)})` }
+  return { color: `rgba(239, 83, 80, ${opacity})`, background: `rgba(239, 83, 80, ${bgAlpha.toFixed(3)})` }
 }
 
 function summaryToneStyle(tone: StripSummaryBox['tone']): CSSProperties {
@@ -763,6 +777,12 @@ export function STIRDashboardPage() {
   const [creditOverviewRange, setCreditOverviewRange] = useState<string>('1y')
   const [attrLookback, setAttrLookback] = useState(20)
   const [attrChartRange, setAttrChartRange] = useState<string>('1y')
+  const [mmRange1, setMmRange1] = useState<string>('2y')
+  const [mmRange2, setMmRange2] = useState<string>('2y')
+  const [mmRange3, setMmRange3] = useState<string>('2y')
+  const [rdeData, setRdeData] = useState<RDEPoint[]>([])
+  const [rdeSyncing, setRdeSyncing] = useState(false)
+  const [rdeRange, setRdeRange] = useState<string>('all')
   const [ycLookback, setYcLookback] = useState(1)
   const [ycCompressed, setYcCompressed] = useState(false)
   const [laborData, setLaborData] = useState<{ unrate: WD[]; employment: WD[]; clf: WD[]; payems: WD[] }>({
@@ -1184,6 +1204,26 @@ export function STIRDashboardPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    fetch('/api/rde')
+      .then((r) => r.json() as Promise<unknown>)
+      .then((data) => { if (Array.isArray(data)) setRdeData(data as RDEPoint[]) })
+      .catch(() => {})
+  }, [])
+
+  async function handleRdeRefresh() {
+    setRdeSyncing(true)
+    try {
+      await fetch('/api/rde/sync', { method: 'POST' })
+      const res = await fetch('/api/rde')
+      const data = await res.json() as unknown
+      if (Array.isArray(data)) setRdeData(data as RDEPoint[])
+    } catch (err) {
+      console.error('RDE sync failed:', err)
+    }
+    setRdeSyncing(false)
+  }
 
   async function handleGdpnowRefresh() {
     setGdpnowSyncing(true)
@@ -1692,6 +1732,54 @@ export function STIRDashboardPage() {
       }
     })
   }, [ustData, realYieldData, attrLookback, attrChartRange])
+
+  const iorbCombined = useMemo(() => {
+    const ioer = ustData['IOER'] || []
+    const iorb = ustData['IORB'] || []
+    const iorbDates = new Set(iorb.map((p) => p.date))
+    return [...ioer.filter((p) => !iorbDates.has(p.date)), ...iorb].sort((a, b) => a.date.localeCompare(b.date))
+  }, [ustData])
+
+  const moneyMarketSpreads = useMemo(() => {
+    const effr = fedFundsHistory // DFF series, already fetched
+    const sofr = ustData['SOFR'] || []
+
+    const effrMap = new Map(effr.map((p) => [p.date, p.value]))
+    const sofrMap = new Map(sofr.map((p) => [p.date, p.value]))
+    const iorbMap = new Map(iorbCombined.map((p) => [p.date, p.value]))
+
+    const allDates = new Set<string>()
+    effr.forEach((p) => allDates.add(p.date))
+    sofr.forEach((p) => allDates.add(p.date))
+    iorbCombined.forEach((p) => allDates.add(p.date))
+
+    return [...allDates].sort().map((date) => ({
+      date,
+      sofrIorb: sofrMap.has(date) && iorbMap.has(date) ? (sofrMap.get(date)! - iorbMap.get(date)!) * 100 : null,
+      effrIorb: effrMap.has(date) && iorbMap.has(date) ? (effrMap.get(date)! - iorbMap.get(date)!) * 100 : null,
+      sofrEffr: sofrMap.has(date) && effrMap.has(date) ? (sofrMap.get(date)! - effrMap.get(date)!) * 100 : null,
+    }))
+  }, [ustData, iorbCombined, fedFundsHistory])
+
+  const mmData1 = useMemo(() => {
+    const cutoff = getDateCutoff(mmRange1)
+    return (cutoff ? moneyMarketSpreads.filter((p) => p.date >= cutoff) : moneyMarketSpreads).filter((p) => p.sofrIorb != null)
+  }, [moneyMarketSpreads, mmRange1])
+
+  const mmData2 = useMemo(() => {
+    const cutoff = getDateCutoff(mmRange2)
+    return (cutoff ? moneyMarketSpreads.filter((p) => p.date >= cutoff) : moneyMarketSpreads).filter((p) => p.effrIorb != null)
+  }, [moneyMarketSpreads, mmRange2])
+
+  const mmData3 = useMemo(() => {
+    const cutoff = getDateCutoff(mmRange3)
+    return (cutoff ? moneyMarketSpreads.filter((p) => p.date >= cutoff) : moneyMarketSpreads).filter((p) => p.sofrEffr != null)
+  }, [moneyMarketSpreads, mmRange3])
+
+  const rdeChartData = useMemo(() => {
+    const cutoff = getDateCutoff(rdeRange)
+    return cutoff ? rdeData.filter((p) => p.date >= cutoff) : rdeData
+  }, [rdeData, rdeRange])
 
   const realYields = useMemo(() => {
     function getLatest(series: Array<{ date: string; value: number }>) {
@@ -2223,28 +2311,37 @@ export function STIRDashboardPage() {
 
         <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.twoPanel : styles.fullPanel}>
           <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.leftPanel : undefined}>
+        {(activeView === 'strips' || activeView === 'pricing') && (
+          <div className={styles.ffrBand}>
+            CURRENT FFR {fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'}
+          </div>
+        )}
         {activeView === 'pricing' && (
           <>
-            <section className={styles.controlsSection}>
-              <div className={styles.headerBlock}>
-                <div className={styles.pageTitle}>// UNITED STATES: {productConfig.title}</div>
-                <div className={styles.subtitleRow}>
-                  <span>● LATEST: {curve.currentDate || '—'} (0 DAYS, 0.0 WEEKS)</span>
-                  <span>● BENCHMARK: {curve.lookbackDate || '—'} ({headerTiming.days} DAYS, {headerTiming.weeks} WEEKS)</span>
+            <div className={styles.ustYcHeader}>
+              <div>
+                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>
+                  US: {productConfig.title}
                 </div>
-                <label className={styles.lookbackWrap}>
-                  <span className={styles.lookbackLabel}>t -</span>
+                <div className={styles.ustYcDates}>
+                  {'\u25CF'} LATEST: {curve.currentDate || '—'} &nbsp;&nbsp; {'\u25CF'} BENCHMARK: {curve.lookbackDate || '—'} ({headerTiming.days} DAYS, {headerTiming.weeks} WEEKS)
+                </div>
+              </div>
+              <div className={styles.ustYcControls}>
+                <label className={styles.ustLookbackWrap}>
+                  <span className={styles.ustLookbackLabel}>t −</span>
                   <input
-                    className={styles.lookbackInput}
+                    className={styles.laborInput}
                     type="number"
                     min="0"
                     step="1"
                     value={lookbackDaysInput}
                     onChange={(e) => setLookbackDaysInput(e.target.value)}
+                    style={{ width: '40px' }}
                   />
                 </label>
               </div>
-            </section>
+            </div>
 
             {error && (
               <section className={styles.section}>
@@ -2539,7 +2636,7 @@ export function STIRDashboardPage() {
                                   style={{ background: getYearBandColor(contract.year, stripYears) }}
                                 >
                                   <td>{contractTicker(contract.symbol)}</td>
-                                  <td style={{ color: '#FFD700' }}>{contract.lastPrice.toFixed(3)}</td>
+                                  <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
                                   <td>{contract.impliedRate.toFixed(3)}</td>
                                   <td style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
                                   <td style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
@@ -3698,9 +3795,131 @@ export function STIRDashboardPage() {
         )}
 
         {activeView === 'money' && (
-          <section className={styles.section}>
-            <div className={styles.comingSoon}>Money Markets coming soon</div>
-          </section>
+          <div>
+            <div className={styles.ustDashboard}>
+              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 12px' }}>
+                MONEY MARKET RATE SPREADS
+              </div>
+
+              {ustLoading ? (
+                <div className={styles.loading}>Loading money market data…</div>
+              ) : (
+                <div className={styles.mmGrid}>
+                  {/* SOFR − IORB (top left) */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − IORB</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere</div>
+                    <div style={{ marginBottom: '6px' }}>
+                      <div className={styles.ustRangeBar}>
+                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
+                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange1(range)} style={{ border: `1px solid ${mmRange1 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange1 === range ? '#e2e8f0' : '#728197', background: mmRange1 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={mmData1} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − IORB']} />
+                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
+                        <Line type="monotone" dataKey="sofrIorb" stroke="#4EC9B0" strokeWidth={1.5} dot={false} connectNulls />
+                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* EFFR − IORB (top right) */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>EFFR − IORB</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Historically a positive spread has been an indicator of reserve scarcity</div>
+                    <div style={{ marginBottom: '6px' }}>
+                      <div className={styles.ustRangeBar}>
+                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
+                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange2(range)} style={{ border: `1px solid ${mmRange2 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange2 === range ? '#e2e8f0' : '#728197', background: mmRange2 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={mmData2} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'EFFR − IORB']} />
+                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
+                        <Line type="monotone" dataKey="effrIorb" stroke="#fbbf24" strokeWidth={1.5} dot={false} connectNulls />
+                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* SOFR − EFFR (bottom left) */}
+                  <div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − EFFR</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos</div>
+                    <div style={{ marginBottom: '6px' }}>
+                      <div className={styles.ustRangeBar}>
+                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
+                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange3(range)} style={{ border: `1px solid ${mmRange3 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange3 === range ? '#e2e8f0' : '#728197', background: mmRange3 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <LineChart data={mmData3} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − EFFR']} />
+                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                        <Line type="monotone" dataKey="sofrEffr" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls />
+                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Reserve Demand Elasticity (bottom right) */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>RESERVE DEMAND ELASTICITY</div>
+                      <button onClick={handleRdeRefresh} disabled={rdeSyncing} style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.12)', color: rdeSyncing ? '#4a5568' : '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '2px 6px', cursor: rdeSyncing ? 'not-allowed' : 'pointer', borderRadius: '2px' }}>{rdeSyncing ? 'SYNCING...' : '↻ REFRESH'}</button>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Basis point/percentage point — NY Fed estimate of reserve ampleness</div>
+                    <div style={{ marginBottom: '6px' }}>
+                      <div className={styles.ustRangeBar}>
+                        {['1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
+                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setRdeRange(range)} style={{ border: `1px solid ${rdeRange === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: rdeRange === range ? '#e2e8f0' : '#728197', background: rdeRange === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className={styles.ustRegimeLegend} style={{ paddingBottom: '4px' }}>
+                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />97.5th / 2.5th</span>
+                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#94A3B8' }} />84th / 16th</span>
+                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#EF5350', height: '2px', borderRadius: '1px' }} />50th (median)</span>
+                    </div>
+                    {rdeChartData.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={220}>
+                        <LineChart data={rdeChartData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
+                          <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} domain={['auto', 'auto']} />
+                          <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} />
+                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
+                          <Line type="monotone" dataKey="p97_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="97.5th" />
+                          <Line type="monotone" dataKey="p2_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="2.5th" />
+                          <Line type="monotone" dataKey="p84" stroke="#94A3B8" strokeWidth={1} dot={false} name="84th" />
+                          <Line type="monotone" dataKey="p16" stroke="#94A3B8" strokeWidth={1} dot={false} name="16th" />
+                          <Line type="monotone" dataKey="median" stroke="#EF5350" strokeWidth={2} dot={false} name="Median" />
+                          <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#4a5568', textAlign: 'center', padding: '40px 0' }}>No RDE data — click REFRESH to sync from NY Fed</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {activeView === 'auctions' && (

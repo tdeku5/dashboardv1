@@ -32,6 +32,8 @@ import { GDIDashboardPage }         from './pages/GDIDashboardPage'
 import { ConsumerHealthDashboardPage } from './pages/ConsumerHealthDashboardPage'
 import { TradeDashboardPage }          from './pages/TradeDashboardPage'
 import { STIRDashboardPage } from './pages/STIRDashboardPage'
+import { IndustrialProductionPage, CreditModelsPage } from './pages/PlaceholderPage'
+import { HousingPage } from './pages/HousingPage'
 
 function App() {
   return (
@@ -66,6 +68,9 @@ function App() {
         <Route path="/models/growth/gdi"                    element={<GDIDashboardPage />} />
         <Route path="/models/growth/consumer-health"       element={<ConsumerHealthDashboardPage />} />
         <Route path="/models/growth/trade"                element={<TradeDashboardPage />} />
+        <Route path="/models/industrial"                     element={<IndustrialProductionPage />} />
+        <Route path="/models/housing"                        element={<HousingPage />} />
+        <Route path="/models/credit"                         element={<CreditModelsPage />} />
         <Route path="/stir"                         element={<STIRDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />

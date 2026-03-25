@@ -25,6 +25,8 @@ import { syncMtsFiscalBalance } from './mtsFiscalBalance'
 import futuresRouter from './routes/futures'
 import { gdpnowRouter } from './routes/gdpnow'
 import { syncGDPNow } from './gdpnowData'
+import { rdeRouter } from './routes/rde'
+import { syncRDE } from './rdeData'
 
 dotenv.config({ path: '../.env' })
 
@@ -46,6 +48,7 @@ app.use('/api/census-trade', censusTradeRouter)
 app.use('/api/mts',          mtsRouter)
 app.use('/api/futures',      futuresRouter)
 app.use('/api/gdpnow',       gdpnowRouter)
+app.use('/api/rde',          rdeRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -118,6 +121,11 @@ async function startup(): Promise<void> {
   // Atlanta Fed GDPNow sync (non-blocking)
   syncGDPNow().catch(err =>
     console.error('[startup] GDPNow sync error:', err)
+  )
+
+  // NY Fed Reserve Demand Elasticity sync (non-blocking)
+  syncRDE().catch(err =>
+    console.error('[startup] RDE sync error:', err)
   )
 
   // Census trade end-use data sync (non-blocking)

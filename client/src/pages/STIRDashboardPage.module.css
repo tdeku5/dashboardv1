@@ -404,7 +404,7 @@
 
 .summaryBoxLabel {
   font-size: 0.7rem;
-  color: #728197;
+  color: #e2e8f0;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin-bottom: 6px;
@@ -417,7 +417,7 @@
 
 .summaryBoxSub {
   font-size: 0.7rem;
-  color: #4a5568;
+  color: #94A3B8;
   margin-top: 4px;
 }
 
@@ -949,8 +949,28 @@
   background: rgba(255, 215, 0, 0.08);
 }
 
+.ffrBand {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #60a5fa;
+  letter-spacing: 0.06em;
+  padding: 8px 14px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.02);
+  display: inline-block;
+}
+
 .fullPanel {
   width: 100%;
+}
+
+.mmGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
 }
 
 .creditControlsRow {
