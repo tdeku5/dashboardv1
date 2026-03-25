@@ -62,6 +62,3 @@ export function IndustrialProductionPage() {
   return <PlaceholderCategoryPage categoryKey="industrial" label="Industrial Production" />
 }
 
-export function CreditModelsPage() {
-  return <PlaceholderCategoryPage categoryKey="credit" label="Credit" />
-}

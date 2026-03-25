@@ -32,7 +32,9 @@ import { GDIDashboardPage }         from './pages/GDIDashboardPage'
 import { ConsumerHealthDashboardPage } from './pages/ConsumerHealthDashboardPage'
 import { TradeDashboardPage }          from './pages/TradeDashboardPage'
 import { STIRDashboardPage } from './pages/STIRDashboardPage'
-import { IndustrialProductionPage, CreditModelsPage } from './pages/PlaceholderPage'
+import { IndustrialProductionPage } from './pages/PlaceholderPage'
+import { CreditPage } from './pages/CreditPage'
+import { BankCreditDashboardPage } from './pages/BankCreditDashboardPage'
 import { HousingPage } from './pages/HousingPage'
 
 function App() {
@@ -70,7 +72,8 @@ function App() {
         <Route path="/models/growth/trade"                element={<TradeDashboardPage />} />
         <Route path="/models/industrial"                     element={<IndustrialProductionPage />} />
         <Route path="/models/housing"                        element={<HousingPage />} />
-        <Route path="/models/credit"                         element={<CreditModelsPage />} />
+        <Route path="/models/credit"                         element={<CreditPage />} />
+        <Route path="/models/credit/bank-credit"             element={<BankCreditDashboardPage />} />
         <Route path="/stir"                         element={<STIRDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
