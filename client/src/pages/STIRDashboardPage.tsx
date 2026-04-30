@@ -51,11 +51,11 @@ const PRODUCT_CONFIG: Record<ProductKey, { label: string; root: string; title: s
 
 // Non-US countries have a single market each
 const COUNTRY_MARKET: Record<Exclude<CountryCode, 'US' | 'Global'>, { root: string; title: string; rateLabel: string }> = {
-  UK:  { root: 'SO3',  title: '3M SONIA',     rateLabel: 'CURRENT BANK RATE' },
-  EU:  { root: 'EUR',  title: '3M EURIBOR',   rateLabel: 'CURRENT ECB RATE' },
+  UK:  { root: 'SO3',  title: '3M SONIA',     rateLabel: 'CURRENT SONIA' },
+  EU:  { root: 'EUR',  title: '3M EURIBOR',   rateLabel: 'CURRENT EURIBOR' },
   CAD: { root: 'CRA',  title: '3M CORRA',     rateLabel: 'CURRENT CORRA' },
   JPY: { root: 'TOA3', title: '3M TONA',      rateLabel: 'CURRENT TONA' },
-  AUS: { root: 'AUS',  title: '90D BANK BILL', rateLabel: 'CURRENT CASH RATE' },
+  AUS: { root: 'AUS',  title: '90D BANK BILL', rateLabel: 'CURRENT IOCR' },
 }
 
 const FVM_TABS = [
@@ -951,6 +951,52 @@ export function STIRDashboardPage() {
   const fedwatch = useFedWatch(activeMarket.root)
   const strip = useFuturesStrip(activeMarket.root)
 
+  // Independent t-X lookback for the SR3 calendar-spreads dashboard.
+  const [spreadLookbackDays, setSpreadLookbackDays] = useState(1)
+  const spreadCurve = useFuturesCurve(activeMarket.root, spreadLookbackDays)
+
+  // SR3 calendar-spread history modal (front − back time series).
+  const [openSpread, setOpenSpread] = useState<{ label: string; frontSymbol: string; backSymbol: string } | null>(null)
+  const [spreadModalRange, setSpreadModalRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y')
+
+  useEffect(() => {
+    if (openSpread) setSpreadModalRange('1Y')
+  }, [openSpread])
+
+  useEffect(() => {
+    if (!openSpread) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenSpread(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [openSpread])
+
+  const spreadFrontHistory = useContractHistory(openSpread?.frontSymbol ?? null, 9999)
+  const spreadBackHistory = useContractHistory(openSpread?.backSymbol ?? null, 9999)
+
+  const spreadModalChartData = useMemo(() => {
+    if (spreadFrontHistory.history.length === 0 || spreadBackHistory.history.length === 0) return []
+    const frontMap = new Map(spreadFrontHistory.history.map((p) => [p.date, p.impliedRate]))
+    const merged = spreadBackHistory.history
+      .filter((p) => frontMap.has(p.date))
+      .map((p) => ({
+        date: p.date,
+        spread: +(((p.impliedRate - (frontMap.get(p.date) as number)) * 100).toFixed(4)),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const cutoffDays = spreadModalRange === '1M' ? 30 : spreadModalRange === '3M' ? 90 : spreadModalRange === '6M' ? 180 : spreadModalRange === '1Y' ? 365 : null
+    if (cutoffDays == null) return merged
+    const cutoffMs = Date.now() - cutoffDays * 86400000
+    return merged.filter((p) => new Date(p.date).getTime() >= cutoffMs)
+  }, [spreadFrontHistory.history, spreadBackHistory.history, spreadModalRange])
+
+  // Use the SR3-style strip rendering (pack grouping, ± OCR column, Δ in bps,
+  // clickable contract modal, Terminal/NextMove summary boxes) for every STIR
+  // market except US Fed Funds, which keeps the simpler year-grouped layout.
+  const useStirStyling = !(country === 'US' && product === 'fedfunds')
+
   const modalYDomain = useMemo<[number | string, number | string]>(() => {
     if (modalChartData.length === 0) return ['auto', 'auto']
     let min = Infinity
@@ -1104,6 +1150,59 @@ export function STIRDashboardPage() {
       .filter((p) => p.contracts.length > 0)
   }, [stripContracts])
 
+  const spreadColumns = useMemo(() => {
+    const shortLabel = (c: { monthCode: string; year: number }) => `${c.monthCode}${c.year % 10}`
+    const STRIDES = [3, 6, 9, 12] as const
+
+    // Build a per-stride map of `M6/U6` → historical spread bps from the lookback curve.
+    const lookbackBps = (months: number): Map<string, number> => {
+      const stepCount = months / 3
+      const out = new Map<string, number>()
+      const arr = spreadCurve.lookbackCurve
+      for (let i = 0; i + stepCount < arr.length; i++) {
+        const front = arr[i]
+        const back = arr[i + stepCount]
+        out.set(`${shortLabel(front)}/${shortLabel(back)}`, (back.impliedRate - front.impliedRate) * 100)
+      }
+      return out
+    }
+
+    return STRIDES.map((months) => {
+      const stepCount = months / 3 // SR3 quarterly: 1 step = 3 months
+      const lbMap = lookbackBps(months)
+      const data: Array<{
+        label: string
+        frontSymbol: string
+        backSymbol: string
+        spreadBps: number
+        lookbackBps: number | null
+        change1d: number | null
+        change5d: number | null
+        change1m: number | null
+      }> = []
+      for (let i = 0; i + stepCount < stripContracts.length; i++) {
+        const front = stripContracts[i]
+        const back = stripContracts[i + stepCount]
+        // Spread = back_rate − front_rate (positive = hike priced, negative = cut priced).
+        // ΔSpread_bps = Δback_rate_bps − Δfront_rate_bps, where Δrate_bps = -100 × Δprice.
+        const ch = (a: number | null, b: number | null) =>
+          a != null && b != null ? -100 * (a - b) : null
+        const label = `${shortLabel(front)}/${shortLabel(back)}`
+        data.push({
+          label,
+          frontSymbol: front.symbol,
+          backSymbol: back.symbol,
+          spreadBps: (back.impliedRate - front.impliedRate) * 100,
+          lookbackBps: lbMap.get(label) ?? null,
+          change1d: ch(back.pxChg1d, front.pxChg1d),
+          change5d: ch(back.pxChg5d, front.pxChg5d),
+          change1m: ch(back.pxChg1m, front.pxChg1m),
+        })
+      }
+      return { stride: months, label: `${months}MTH`, data }
+    })
+  }, [stripContracts, spreadCurve.lookbackCurve])
+
   const stripMaxAbs = useMemo(() => {
     const maxAbs = {
       pxChg1d: 0,
@@ -1121,9 +1220,9 @@ export function STIRDashboardPage() {
   }, [stripContracts])
 
   const stripSummary = useMemo(() => {
-    const isSofr = country === 'US' && product === 'sofr'
+    const isStirPack = useStirStyling
 
-    const terminal: StripContract | null = isSofr
+    const terminal: StripContract | null = isStirPack
       ? findTerminalContract(stripContracts)
       : stripContracts.reduce<StripContract | null>((lowest, contract) => {
           if (!lowest || contract.impliedRate < lowest.impliedRate) return contract
@@ -1140,7 +1239,7 @@ export function STIRDashboardPage() {
 
     const boxes: StripSummaryBox[] = []
 
-    if (isSofr && stripContracts.length >= 2) {
+    if (isStirPack && stripContracts.length >= 2) {
       const first = stripContracts[0]
       const second = stripContracts[1]
       const nextMoveBps = (first.impliedRate - second.impliedRate) * 100
@@ -1172,21 +1271,21 @@ export function STIRDashboardPage() {
         tone: 'teal',
       },
       {
-        label: isSofr ? 'Terminal - OCR' : 'MTG>TERM',
+        label: isStirPack ? 'Terminal - OCR' : 'MTG>TERM',
         value: terminal ? fmtBpsValue((terminal.impliedRate - fedwatch.currentEFFR) * 100) : '—',
-        sub: isSofr ? '' : 'terminal vs overnight cash',
+        sub: isStirPack ? '' : 'terminal vs overnight cash',
         tone: !terminal ? 'neutral' : (terminal.impliedRate - fedwatch.currentEFFR) * 100 >= 0 ? 'green' : 'red',
         hoverKey: 'mtg',
       },
       {
-        label: isSofr ? '+6m - Terminal' : 'TERM>+6M',
+        label: isStirPack ? '+6m - Terminal' : 'TERM>+6M',
         value: terminal && contract6m ? fmtBpsValue((contract6m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract6m ? contractTicker(contract6m.symbol) : '—',
         tone: 'gold',
         hoverKey: 'term6m',
       },
       {
-        label: isSofr ? '+12m - Terminal' : 'TERM>+12M',
+        label: isStirPack ? '+12m - Terminal' : 'TERM>+12M',
         value: terminal && contract12m ? fmtBpsValue((contract12m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract12m ? contractTicker(contract12m.symbol) : '—',
         tone: 'gold',
@@ -1195,7 +1294,7 @@ export function STIRDashboardPage() {
     )
 
     return { terminal, contract6m, contract12m, boxes }
-  }, [stripContracts, product, country, fedwatch.currentEFFR])
+  }, [stripContracts, product, country, fedwatch.currentEFFR, useStirStyling])
 
   const terminalHistory = useContractHistory(stripSummary.terminal?.symbol ?? null)
   const plus6mHistory = useContractHistory(stripSummary.contract6m?.symbol ?? null)
@@ -2701,7 +2800,7 @@ export function STIRDashboardPage() {
                           style={box.hoverKey ? { position: 'relative', cursor: 'pointer' } : undefined}
                         >
                           <div className={styles.summaryBoxLabel}>{box.label}</div>
-                          <div className={styles.summaryBoxValue} style={summaryToneStyle(box.tone)}>{box.value}</div>
+                          <div className={box.label === 'NEXT MOVE' ? styles.nextMoveValue : styles.summaryBoxValue} style={summaryToneStyle(box.tone)}>{box.value}</div>
                           {box.sub ? <div className={styles.summaryBoxSub}>{box.sub}</div> : null}
                           {box.hoverKey === hoveredBox && (
                             <div className={styles.spreadPopup}>
@@ -2766,12 +2865,12 @@ export function STIRDashboardPage() {
                             <th>Contract</th>
                             <th>Last Px</th>
                             <th>Imp Rate</th>
-                            {country === 'US' && product === 'sofr' && <th className={styles.ocrHeader}>± OCR</th>}
-                            {country === 'US' && product === 'sofr' ? (
+                            {useStirStyling && <th className={styles.ocrHeader}>± OCR</th>}
+                            {useStirStyling ? (
                               <>
-                                <th className={styles.changeHeader}>Implied Rate Δ 1d</th>
-                                <th className={styles.changeHeader}>Implied Rate Δ 5d</th>
-                                <th className={styles.changeHeader}>Implied Rate Δ 1m</th>
+                                <th className={styles.changeHeader}>Imp Rate Δ 1d</th>
+                                <th className={styles.changeHeader}>Imp Rate Δ 5d</th>
+                                <th className={styles.changeHeader}>Imp Rate Δ 1m</th>
                               </>
                             ) : (
                               <>
@@ -2783,7 +2882,7 @@ export function STIRDashboardPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {country === 'US' && product === 'sofr' ? (
+                          {useStirStyling ? (
                             stripPacks.map((pack) => (
                               <Fragment key={pack.name}>
                                 <tr className={styles.packHeaderRow} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
@@ -2844,6 +2943,7 @@ export function STIRDashboardPage() {
                     </div>
                   </div>
                 </section>
+
               </>
             )}
           </>
@@ -4649,15 +4749,178 @@ export function STIRDashboardPage() {
           </div>
           )}
         </div>
+        {activeView === 'strips' && country === 'US' && product === 'sofr' && stripContracts.length > 0 && (
+          <section className={styles.spreadsDashboardFullWidth}>
+            <div className={styles.spreadsDashboardHeader}>
+              <div className={styles.spreadsHeader}>SR3 CALENDAR SPREADS</div>
+              <div className={styles.spreadLookbackControl}>
+                <label htmlFor="spreadLookback">t −</label>
+                <input
+                  id="spreadLookback"
+                  type="number"
+                  min="0"
+                  max="252"
+                  value={spreadLookbackDays}
+                  onChange={(e) => setSpreadLookbackDays(Math.max(0, parseInt(e.target.value) || 0))}
+                  className={styles.spreadLookbackInput}
+                />
+              </div>
+            </div>
+            <div className={styles.spreadsDateLabels}>
+              <span>{'●'} LATEST: {spreadCurve.currentDate || '—'}</span>
+              {spreadLookbackDays > 0 && spreadCurve.lookbackDate && (
+                <span style={{ marginLeft: 16 }}>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
+              )}
+            </div>
+            <div className={styles.spreadsGrid}>
+              {spreadColumns.map((col) => (
+                <div key={col.stride} className={styles.spreadColumn}>
+                  <div className={styles.spreadColumnTitle}>{col.stride}m Spreads</div>
+                  <div className={styles.spreadChartContainer}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={col.data} margin={{ top: 12, right: 12, left: 8, bottom: 50 }}>
+                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <XAxis
+                          dataKey="label"
+                          tick={{ fontSize: 10, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          tickMargin={8}
+                          angle={-30}
+                          textAnchor="end"
+                          height={50}
+                          interval={0}
+                          stroke="#728197"
+                        />
+                        <YAxis
+                          tick={{ fontSize: 11, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          tickMargin={6}
+                          tickFormatter={(v: number) => v.toFixed(1)}
+                          label={{ value: 'bps', angle: -90, position: 'insideLeft', fill: '#cbd5e1', fontSize: 10 }}
+                          domain={['auto', 'auto']}
+                          stroke="#728197"
+                        />
+                        <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                        <Tooltip
+                          contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                          formatter={(v: number | undefined, name: string | undefined) => [
+                            v == null ? '—' : `${v.toFixed(2)}bp`,
+                            name === 'lookbackBps' ? `t − ${spreadLookbackDays}` : 'Current',
+                          ]}
+                        />
+                        <Line type="linear" dataKey="spreadBps" stroke="#22d3ee" strokeWidth={1.5} dot={{ r: 3, fill: '#22d3ee' }} isAnimationActive={false} name="Current" />
+                        {spreadLookbackDays > 0 && (
+                          <Line type="linear" dataKey="lookbackBps" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2, fill: '#94a3b8' }} isAnimationActive={false} connectNulls={false} name={`t − ${spreadLookbackDays}`} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <table className={styles.spreadTable}>
+                    <thead>
+                      <tr>
+                        <th>Spread</th>
+                        <th>Value</th>
+                        <th>1D Δ</th>
+                        <th>5D Δ</th>
+                        <th>1M Δ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {col.data.map((s) => {
+                        const valClass = s.spreadBps > 0 ? styles.ocrPositive : s.spreadBps < 0 ? styles.ocrNegative : ''
+                        const chClass = (v: number | null) =>
+                          v == null ? '' : v > 0 ? styles.changeNegative : v < 0 ? styles.changePositive : ''
+                        const fmt = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
+                        return (
+                          <tr key={s.label}>
+                            <td
+                              className={styles.spreadLabelClickable}
+                              onClick={() => setOpenSpread({ label: s.label, frontSymbol: s.frontSymbol, backSymbol: s.backSymbol })}
+                            >{s.label}</td>
+                            <td className={valClass}>{fmt(s.spreadBps)}</td>
+                            <td className={chClass(s.change1d)}>{fmt(s.change1d)}</td>
+                            <td className={chClass(s.change5d)}>{fmt(s.change5d)}</td>
+                            <td className={chClass(s.change1m)}>{fmt(s.change1m)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
         </>}
         </>)}
       </main>
+      {openSpread && (
+        <div className={styles.modalBackdrop} onClick={() => setOpenSpread(null)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <button className={styles.modalClose} onClick={() => setOpenSpread(null)} aria-label="Close">×</button>
+            <h2 className={styles.modalTitle} style={{ color: '#22d3ee' }}>{openSpread.label}</h2>
+            <p className={styles.modalSubtitle}>3M SOFR · {openSpread.frontSymbol} − {openSpread.backSymbol}</p>
+            <div className={styles.modalChartContainer}>
+              {(spreadFrontHistory.loading || spreadBackHistory.loading) ? (
+                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+              ) : spreadModalChartData.length === 0 ? (
+                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={spreadModalChartData} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
+                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(value: string) => {
+                        const d = new Date(value)
+                        return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                      }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                      tickMargin={8}
+                      stroke="#728197"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(v: number) => `${v.toFixed(1)}bp`}
+                      tickMargin={6}
+                      domain={['auto', 'auto']}
+                      stroke="#728197"
+                    />
+                    <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                    <Tooltip
+                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      formatter={(v: number | undefined) => v == null ? '' : `${v.toFixed(2)}bp`}
+                    />
+                    <Line type="monotone" dataKey="spread" stroke="#22d3ee" strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                    <Brush
+                      dataKey="date"
+                      height={28}
+                      stroke="#60a5fa"
+                      fill="#0d1520"
+                      travellerWidth={10}
+                      tickFormatter={(value: string) => {
+                        const d = new Date(value)
+                        return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className={styles.modalRangeButtons}>
+              {(['1M', '3M', '6M', '1Y', 'ALL'] as const).map((r) => (
+                <button key={r} className={spreadModalRange === r ? styles.activeRange : ''} onClick={() => setSpreadModalRange(r)}>{r}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {modalContract && (
         <div className={styles.modalBackdrop} onClick={() => setModalContract(null)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <button className={styles.modalClose} onClick={() => setModalContract(null)} aria-label="Close">×</button>
             <h2 className={styles.modalTitle} style={{ color: modalContractColor }}>{contractTicker(modalContract.symbol)}</h2>
-            <p className={styles.modalSubtitle}>3M SOFR · {modalContract.expiryLabel}</p>
+            <p className={styles.modalSubtitle}>{activeMarket.title} · {modalContract.expiryLabel}</p>
             <div className={styles.modalToggleRow}>
               <div className={styles.modalToggleGroup}>
                 <button className={modalMetric === 'rate' ? styles.activeToggle : ''} onClick={() => setModalMetric('rate')}>IMPLIED RATE</button>

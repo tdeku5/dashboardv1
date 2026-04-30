@@ -258,7 +258,15 @@
       "WebFetch(domain:www.flpartners.com.au)",
       "WebFetch(domain:cambridgecurrencies.com)",
       "Bash(npx tsx:*)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Bash(awk 'NR==2497 || NR>=4215 && NR<=4570' /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx)",
+      "Bash(awk NR>=4540 && NR<=4570 *)",
+      "Bash(awk NR>=4630 && NR<=4670 *)",
+      "Bash(awk NR>=4720 && NR<=4760 *)",
+      "Bash(awk NR>=4680 && NR<=4700 *)",
+      "Bash(awk 'NR>=2400 && NR<=2500' /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx)",
+      "Bash(awk NR>=2459 && NR<=2500 *)",
+      "Bash(awk 'NR==435,NR==445; NR==680,NR==700; NR==870,NR==910' /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.module.css)"
     ]
   },
   "sandbox": {
