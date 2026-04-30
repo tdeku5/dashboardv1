@@ -33,6 +33,7 @@
 .inputWrap { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.7rem; color: #728197; }
 .numInput { width: 45px; background: #0d1520; border: 1px solid rgba(255,255,255,0.12); color: #e2e8f0; font-family: var(--font-mono); font-size: 0.7rem; padding: 3px 6px; border-radius: 2px; text-align: center; }
 
+.summaryChartsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .topChartsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .explorerChartsGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; padding: 0 0 16px; }
 

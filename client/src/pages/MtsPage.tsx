@@ -5,6 +5,7 @@ import {
   BarChart, Bar, Cell, LabelList
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import styles from './MtsPage.module.css'
 
 const CURRENT_FY = '2026'
@@ -417,7 +418,7 @@ export function MtsPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
 
       <nav className={styles.breadcrumb}>

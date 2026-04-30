@@ -1,6 +1,12 @@
 import { useState, lazy, Suspense } from 'react'
+import { UKNominalGDPContent } from './UKNominalGDPContent'
+import { UKRealGDPContent } from './UKRealGDPContent'
+import { UKMonthlyGDPContent } from './UKMonthlyGDPContent'
+import { UKRetailContent } from './UKRetailContent'
+import { UKTradeContent } from './UKTradeContent'
 import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES, CATEGORIES } from './modelNav'
 import styles from './ModelsPage.module.css'
 
@@ -26,9 +32,18 @@ const GROWTH_SECTIONS = [
   { key: 'trade', label: 'TRADE' },
 ] as const
 
+const UK_GROWTH_SECTIONS = [
+  { key: 'ngdp', label: 'NOMINAL GDP' },
+  { key: 'rgdp', label: 'REAL GDP' },
+  { key: 'mgdp', label: 'MONTHLY GDP' },
+  { key: 'retail', label: 'RETAIL' },
+  { key: 'trade', label: 'TRADE' },
+] as const
+
 export function GrowthPage() {
   const [country, setCountry] = useState('us')
   const [section, setSection] = useState<string>('ngdp')
+  const [ukSection, setUkSection] = useState('ngdp')
   const navigate = useNavigate()
 
   return (
@@ -39,7 +54,7 @@ export function GrowthPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}>{country === 'us' && <FredRefreshButton />}</div>
       </header>
 
       <main className={styles.body}>
@@ -75,23 +90,23 @@ export function GrowthPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {GROWTH_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {GROWTH_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'ngdp' && <NGDPDashboardContent />}
             {section === 'rgdp' && <RGDPDashboardContent />}
@@ -103,6 +118,30 @@ export function GrowthPage() {
             {section === 'consumer' && <ConsumerHealthDashboardContent />}
             {section === 'trade' && <TradeDashboardContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+            <div className={styles.sectionBar}>
+              {UK_GROWTH_SECTIONS.map((sec, idx) => (
+                <button
+                  key={sec.key}
+                  className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`}
+                  onClick={() => setUkSection(sec.key)}
+                  style={{
+                    border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`,
+                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                  }}
+                >
+                  {sec.label}
+                </button>
+              ))}
+            </div>
+            {ukSection === 'ngdp' && <UKNominalGDPContent />}
+            {ukSection === 'rgdp' && <UKRealGDPContent />}
+            {ukSection === 'mgdp' && <UKMonthlyGDPContent />}
+            {ukSection === 'retail' && <UKRetailContent />}
+            {ukSection === 'trade' && <UKTradeContent />}
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} growth models coming soon

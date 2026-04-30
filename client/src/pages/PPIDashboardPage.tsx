@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import { PPI_ITEMS } from '../data/ppiSeriesConfig'
 import styles from './PPIDashboardPage.module.css'
@@ -2188,7 +2189,7 @@ export function PPIDashboardPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
 
       <nav className={styles.breadcrumb}>

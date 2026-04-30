@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchFredSeries } from '../lib/fred'
 import styles from './JOLTSDashboardPage.module.css'
 
@@ -1021,7 +1022,7 @@ export function JOLTSDashboardPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
 
       {/* Breadcrumb */}

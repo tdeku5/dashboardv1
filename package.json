@@ -13,6 +13,12 @@
     "fetch": "npm run fetch --workspace=server"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "chokidar": "^4.0.3",
+    "csv-parse": "^6.2.1"
   }
 }

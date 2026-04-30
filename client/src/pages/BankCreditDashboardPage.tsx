@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ComposedChart, LineChart, BarChart, Line, Area, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Brush, ReferenceLine, ResponsiveContainer,
+  Tooltip, Brush, ReferenceLine, ResponsiveContainer, Label,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import styles from './BankCreditDashboardPage.module.css'
 
@@ -109,6 +110,9 @@ export function BankCreditDashboardContent() {
   const [allData, setAllData] = useState<Record<string, WD[]>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [totalNgdpRange, setTotalNgdpRange] = useState('max')
+  const [creditCreationRange, setCreditCreationRange] = useState('max')
+  const [creditCreationWindow, setCreditCreationWindow] = useState(52)
   const [ngdpRange, setNgdpRange] = useState('max')
   const [changeRange, setChangeRange] = useState('5y')
   const [changeWindow, setChangeWindow] = useState(13)
@@ -147,6 +151,35 @@ export function BankCreditDashboardContent() {
     const sorted = [...(allData['GDP'] || [])].sort((a, b) => a.date.localeCompare(b.date))
     return { sorted, getGDP: (date: string): number | null => { for (let i = sorted.length - 1; i >= 0; i--) { if (sorted[i].date <= date) return sorted[i].value } return null } }
   }, [allData])
+
+  // ── Chart 1: Total Loans & Leases % of NGDP ──
+  const totalLLNgdpData = useMemo(() => {
+    const totll = allData['TOTLL'] || []
+    if (totll.length === 0 || gdpMap.sorted.length === 0) return []
+    const cutoff = getDateCutoff(totalNgdpRange)
+    return totll
+      .filter(p => !cutoff || p.date >= cutoff)
+      .map(p => {
+        const gdp = gdpMap.getGDP(p.date)
+        if (!gdp || gdp === 0) return null
+        return { date: p.date, value: (p.value / gdp) * 100 }
+      })
+      .filter((p): p is NonNullable<typeof p> => p != null)
+  }, [allData, gdpMap, totalNgdpRange])
+
+  // ── Chart 2: Bank Credit Creation (Xwk flow % GDP) ──
+  const creditCreationData = useMemo(() => {
+    const totbkcr = [...(allData['TOTBKCR'] || [])].sort((a, b) => a.date.localeCompare(b.date))
+    if (totbkcr.length <= creditCreationWindow || gdpMap.sorted.length === 0) return []
+    const cutoff = getDateCutoff(creditCreationRange)
+    return totbkcr.slice(creditCreationWindow).map((p, i) => {
+      const prior = totbkcr[i]
+      const gdp = gdpMap.getGDP(p.date)
+      if (!gdp || gdp === 0) return null
+      if (cutoff && p.date < cutoff) return null
+      return { date: p.date, value: ((p.value - prior.value) / gdp) * 100 }
+    }).filter((p): p is NonNullable<typeof p> => p != null)
+  }, [allData, gdpMap, creditCreationWindow, creditCreationRange])
 
   const ngdpChartData = useMemo(() => {
     const ci = allData['TOTCI'] || []; const rre = allData['RREACBW027SBOG'] || []; const cre = allData['CREACBW027SBOG'] || []
@@ -212,7 +245,60 @@ export function BankCreditDashboardContent() {
       <div className={styles.majorHeader}>Bank Credit Dashboard</div>
       <div className={styles.chartSubtitle}>Federal Reserve H.8 Release · Weekly · Seasonally Adjusted · All Commercial Banks</div>
 
-      {/* ═══ Top two charts side by side ═══ */}
+      {/* ═══ Row 1: Summary charts ═══ */}
+      <div className={styles.summaryChartsGrid}>
+        {/* Chart: Total Loans & Leases % of NGDP */}
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}><div><div className={styles.sectionTitle}>BANK LOANS &amp; LEASES</div><div className={styles.sectionSubtitle}>% of NGDP</div></div></div>
+          <div className={styles.controlRow}>{['5y', '10y', '20y', '50y', 'max'].map(r => (<button key={r} className={`${styles.qsBtn} ${totalNgdpRange === r ? styles.qsBtnActive : ''}`} onClick={() => setTotalNgdpRange(r)}>{r.toUpperCase()}</button>))}</div>
+          <div className={styles.chartWrap}>
+            <ResponsiveContainer width="100%" height={380}>
+              <LineChart data={totalLLNgdpData} margin={{ top: 10, right: 16, left: 8, bottom: 4 }}>
+                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="#728197" tick={TK} tickFormatter={fmtD} interval="preserveStartEnd" minTickGap={50} />
+                <YAxis stroke="#728197" tick={TK} tickFormatter={(v: number) => `${v.toFixed(0)}%`} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={TT} labelFormatter={lblFmt} formatter={(v: unknown) => [typeof v === 'number' ? `${v.toFixed(1)}%` : '—', 'Loans & Leases / NGDP']} />
+                <Line type="monotone" dataKey="value" stroke="#93c5fd" strokeWidth={2.5} dot={false} connectNulls={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className={styles.brushWrap}><ResponsiveContainer width="100%" height={40}><LineChart data={totalLLNgdpData}><Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} /></LineChart></ResponsiveContainer></div>
+        </section>
+
+        {/* Chart: Bank Credit Creation */}
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}><div><div className={styles.sectionTitle}>BANK CREDIT CREATION</div><div className={styles.sectionSubtitle}>{creditCreationWindow}wk Flow of Bank Credit Creation (%GDP)</div></div></div>
+          <div className={styles.controlRow}>
+            {['5y', '10y', '20y', '50y', 'max'].map(r => (<button key={r} className={`${styles.qsBtn} ${creditCreationRange === r ? styles.qsBtnActive : ''}`} onClick={() => setCreditCreationRange(r)}>{r.toUpperCase()}</button>))}
+            <div className={styles.inputWrap}><span>Window:</span><input className={styles.numInput} type="number" min="1" value={creditCreationWindow} onChange={(e) => setCreditCreationWindow(Math.max(1, parseInt(e.target.value) || 52))} /><span>wk</span></div>
+          </div>
+          <div className={styles.chartWrap}>
+            <ResponsiveContainer width="100%" height={380}>
+              <LineChart data={creditCreationData} margin={{ top: 10, right: 30, left: 8, bottom: 4 }}>
+                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="#728197" tick={TK} tickFormatter={fmtD} interval="preserveStartEnd" minTickGap={50} />
+                <YAxis stroke="#728197" tick={TK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} domain={['auto', 'auto']} />
+                <Tooltip contentStyle={TT} labelFormatter={lblFmt} formatter={(v: unknown) => [typeof v === 'number' ? `${v.toFixed(2)}%` : '—', 'Credit Creation / GDP']} />
+                <ReferenceLine y={0} stroke="#728197" strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="value" stroke="#4ade80" strokeWidth={2.5} dot={false} connectNulls={false}>
+                  {creditCreationData.length > 0 && (
+                    <Label
+                      value={`${creditCreationData[creditCreationData.length - 1].value.toFixed(2)}%`}
+                      position="right"
+                      fill="#4ade80"
+                      fontSize={11}
+                      fontFamily="var(--font-mono)"
+                    />
+                  )}
+                </Line>
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className={styles.brushWrap}><ResponsiveContainer width="100%" height={40}><LineChart data={creditCreationData}><Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} /></LineChart></ResponsiveContainer></div>
+        </section>
+      </div>
+
+      {/* ═══ Row 2: Category charts ═══ */}
       <div className={styles.topChartsGrid}>
         {/* Chart 1: % of NGDP */}
         <section className={styles.section}>
@@ -345,7 +431,7 @@ export function BankCreditDashboardPage() {
     <div className={styles.shell}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}><NavDropdown /><span className={styles.logo}>TND RESEARCH TERMINAL</span></div>
-        <div className={styles.barCenter} /><div className={styles.barRight} />
+        <div className={styles.barCenter} /><div className={styles.barRight}><FredRefreshButton /></div>
       </header>
       <nav className={styles.breadcrumb}>
         <Link to="/models" className={styles.breadcrumbLink}>Models</Link>

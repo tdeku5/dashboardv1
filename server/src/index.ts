@@ -22,11 +22,22 @@ import { syncDtsTaxDeposits } from './dtsTaxDeposits'
 import { censusTradeRouter, isCensusTradeStale, fetchAndStoreCensusTrade } from './routes/census-trade'
 import { mtsRouter } from './routes/mts'
 import { syncMtsFiscalBalance } from './mtsFiscalBalance'
-import futuresRouter from './routes/futures'
+import { tvFuturesRouter } from './routes/tvFutures'
 import { gdpnowRouter } from './routes/gdpnow'
 import { syncGDPNow } from './gdpnowData'
 import { rdeRouter } from './routes/rde'
 import { syncRDE } from './rdeData'
+import { onsRouter } from './routes/ons'
+import { syncAllOnsSeries } from './fetchAllOnsSeries'
+import { boeRouter } from './routes/boe'
+import { syncAllBoeSeries } from './fetchAllBoeSeries'
+import { boeYieldCurveRouter } from './routes/boeYieldCurve'
+import { syncGiltYieldCurves, backfillGiltYieldCurves } from './boeYieldCurve'
+import { syncMonthlyGDPContributions, backfillMonthlyGDPContributions } from './onsMonthlyGDPContribs'
+import { tvRouter } from './routes/tv'
+import { tvYieldCurveRouter } from './routes/tvYieldCurve'
+import { globalRouter } from './routes/global'
+import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 
 dotenv.config({ path: '../.env' })
 
@@ -46,9 +57,15 @@ app.use('/api/fiscal',   fiscalRouter)
 app.use('/api/fiscal-flows', fiscalFlowsRouter)
 app.use('/api/census-trade', censusTradeRouter)
 app.use('/api/mts',          mtsRouter)
-app.use('/api/futures',      futuresRouter)
+app.use('/api/futures',      tvFuturesRouter)
 app.use('/api/gdpnow',       gdpnowRouter)
 app.use('/api/rde',          rdeRouter)
+app.use('/api/ons',          onsRouter)
+app.use('/api/boe/yield-curve', boeYieldCurveRouter)
+app.use('/api/boe',          boeRouter)
+app.use('/api/tv/yield-curve', tvYieldCurveRouter)
+app.use('/api/tv',           tvRouter)
+app.use('/api/global',       globalRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -128,6 +145,36 @@ async function startup(): Promise<void> {
     console.error('[startup] RDE sync error:', err)
   )
 
+  // ONS UK data sync (non-blocking)
+  syncAllOnsSeries().catch(err =>
+    console.error('[startup] ONS sync error:', err)
+  )
+
+  // ONS monthly GDP contributions sync (non-blocking)
+  syncMonthlyGDPContributions().catch(err =>
+    console.error('[startup] ONS GDP contributions sync error:', err)
+  )
+
+  // ONS GDP contributions historical backfill (non-blocking, skips if >60 months exist)
+  backfillMonthlyGDPContributions().catch(err =>
+    console.error('[startup] ONS GDP contributions backfill error:', err)
+  )
+
+  // Bank of England data sync (non-blocking)
+  syncAllBoeSeries().catch(err =>
+    console.error('[startup] BoE sync error:', err)
+  )
+
+  // BoE gilt yield curve sync (non-blocking)
+  syncGiltYieldCurves().catch(err =>
+    console.error('[startup] Gilt yield curve sync error:', err)
+  )
+
+  // BoE gilt yield curve historical backfill (non-blocking, skips if data exists)
+  backfillGiltYieldCurves().catch(err =>
+    console.error('[startup] Gilt yield curve backfill error:', err)
+  )
+
   // Census trade end-use data sync (non-blocking)
   if (isCensusTradeStale()) {
     fetchAndStoreCensusTrade().catch(err =>
@@ -141,6 +188,9 @@ async function startup(): Promise<void> {
     const merged = [...new Set([...ALL_SERIES, ...known])]
     console.log(`[cron] 06:00 — refreshing ${merged.length} series…`)
     fetchAllSeries({ seriesList: merged }).catch(err => console.error('[cron] FRED error:', err))
+    syncAllOnsSeries().catch(err => console.error('[cron] ONS error:', err))
+    syncAllBoeSeries().catch(err => console.error('[cron] BoE error:', err))
+    syncGiltYieldCurves().catch(err => console.error('[cron] Gilt YC error:', err))
   })
 
   // News: refresh at 06:00 and 21:00 UTC
@@ -155,8 +205,13 @@ async function startup(): Promise<void> {
 
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`)
+    startTvCsvWatcher()
   })
 }
+
+// Graceful shutdown
+process.on('SIGTERM', () => { stopTvCsvWatcher(); process.exit(0) })
+process.on('SIGINT', () => { stopTvCsvWatcher(); process.exit(0) })
 
 startup().catch(err => {
   console.error('[startup] Fatal error:', err)

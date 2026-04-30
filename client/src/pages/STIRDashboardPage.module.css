@@ -388,13 +388,15 @@
 
 /* ── Summary Boxes ── */
 .summaryRow {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
   gap: 12px;
   margin-bottom: 20px;
+  width: 100%;
 }
 
 .summaryBox {
+  flex: 1 1 0;
+  min-width: 0;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 3px;
@@ -418,6 +420,7 @@
 .summaryBoxSub {
   font-size: 0.7rem;
   color: #94A3B8;
+  font-weight: 600;
   margin-top: 4px;
 }
 
@@ -701,6 +704,216 @@
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-align: left;
+}
+
+.packHeaderRow {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.packHeaderRow td {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.packHeaderCell {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.05em;
+  padding: 6px 12px;
+  text-transform: uppercase;
+  text-align: left;
+}
+
+.changeCell {
+  font-weight: 600;
+  text-align: right;
+  padding-right: 16px !important;
+  white-space: nowrap;
+}
+
+.changePositive {
+  color: #4ec9b0 !important;
+  font-weight: 600;
+}
+
+.changeNegative {
+  color: #ef5350 !important;
+  font-weight: 600;
+}
+
+.ocrHeader {
+  white-space: nowrap;
+}
+
+.ocrPositive {
+  color: #22c55e !important;
+  font-weight: 600;
+}
+
+.ocrNegative {
+  color: #ef4444 !important;
+  font-weight: 600;
+}
+
+.changeHeader {
+  width: 145px;
+  min-width: 145px;
+  white-space: nowrap !important;
+  text-align: right !important;
+  padding-right: 16px !important;
+  line-height: 1.2;
+}
+
+.contractClickable {
+  cursor: pointer;
+}
+
+.contractClickable:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  filter: brightness(1.15);
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modalContent {
+  background: #0a1018;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 24px;
+  width: 92%;
+  max-width: 1400px;
+  height: 85vh;
+  max-height: 900px;
+  position: relative;
+  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalChartContainer {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.modalClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.modalClose:hover {
+  color: #ffffff;
+}
+
+.modalTitle {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.4rem;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.modalSubtitle {
+  margin: 4px 0 0;
+  color: #94A3B8;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.modalToggleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 12px;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.modalToggleGroup {
+  display: flex;
+  gap: 8px;
+}
+
+.modalToggle {
+  display: flex;
+  gap: 8px;
+}
+
+.modalToggle button {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #94A3B8;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+
+.activeToggle {
+  background: #1e3a5f !important;
+  color: #60a5fa !important;
+  border-color: #60a5fa !important;
+}
+
+.activeToggleGreen {
+  background: #1e3f2a !important;
+  color: #4ade80 !important;
+  border-color: #4ade80 !important;
+}
+
+.modalToggleGroup button {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #94A3B8;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  letter-spacing: 0.05em;
+}
+
+.modalRangeButtons {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.modalRangeButtons button {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #94A3B8;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.activeRange {
+  background: #1e3a5f !important;
+  color: #60a5fa !important;
+  border-color: #60a5fa !important;
 }
 
 .fvmPanel {
@@ -1129,7 +1342,10 @@
   }
 
   .summaryRow {
-    grid-template-columns: repeat(2, 1fr);
+    flex-wrap: wrap;
+  }
+  .summaryRow .summaryBox {
+    flex: 1 1 calc(50% - 6px);
   }
 
   .twoPanel {
@@ -1151,7 +1367,7 @@
 }
 
 @media (max-width: 640px) {
-  .summaryRow {
-    grid-template-columns: 1fr;
+  .summaryRow .summaryBox {
+    flex: 1 1 100%;
   }
 }

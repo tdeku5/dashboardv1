@@ -14,6 +14,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import styles from './NGDPDashboardPage.module.css'
 
@@ -1202,7 +1203,7 @@ export function NGDPDashboardContent() {
             {selectedData.length === 0 ? (
               <div className={styles.statusBlock}>No data for {selectedGdpKey}</div>
             ) : (
-              <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 {/* E1: Level */}
                 <div className={styles.section}>
                   <div className={styles.sectionHeader}>
@@ -1511,7 +1512,7 @@ export function NGDPDashboardContent() {
                     periods={QUICK_PERIODS_Q}
                   />
                 </div>
-              </>
+              </div>
             )}
 
             {/* ═══════════════════════════════════════════════════════════════
@@ -1553,7 +1554,7 @@ export function NGDPDashboardPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
       <nav className={styles.breadcrumb}>
         <Link to="/models" className={styles.breadcrumbLink}>Models</Link>

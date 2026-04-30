@@ -16,16 +16,21 @@ import {
   YAxis,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { CountrySelector, type CountryCode } from '../components/CountrySelector'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchBEASeries } from '../lib/bea'
 import { useFedWatch } from '../hooks/useFedWatch'
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
+import { buildSpreadChartData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
 import styles from './STIRDashboardPage.module.css'
 
 const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
+import { CountryCurvePage } from './CountryCurvePage'
+import { GlobalRatesPage } from './GlobalRatesPage'
 
-type ViewTab = 'strips' | 'pricing' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions'
+type ViewTab = 'strips' | 'pricing' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
 
 type AssetClass = 'macro' | 'rates' | 'equities' | 'fx' | 'commodities'
 
@@ -40,8 +45,17 @@ const ASSET_CLASSES: Array<{ key: AssetClass; label: string }> = [
 type ProductKey = 'fedfunds' | 'sofr'
 
 const PRODUCT_CONFIG: Record<ProductKey, { label: string; root: string; title: string }> = {
-  fedfunds: { label: 'FED FUNDS', root: 'ZQ', title: 'FED FUNDS' },
+  fedfunds: { label: 'FED FUNDS', root: 'FF', title: 'FED FUNDS' },
   sofr: { label: '3M SOFR', root: 'SR3', title: '3M SOFR' },
+}
+
+// Non-US countries have a single market each
+const COUNTRY_MARKET: Record<Exclude<CountryCode, 'US' | 'Global'>, { root: string; title: string; rateLabel: string }> = {
+  UK:  { root: 'SO3',  title: '3M SONIA',     rateLabel: 'CURRENT BANK RATE' },
+  EU:  { root: 'EUR',  title: '3M EURIBOR',   rateLabel: 'CURRENT ECB RATE' },
+  CAD: { root: 'CRA',  title: '3M CORRA',     rateLabel: 'CURRENT CORRA' },
+  JPY: { root: 'TOA3', title: '3M TONA',      rateLabel: 'CURRENT TONA' },
+  AUS: { root: 'AUS',  title: '90D BANK BILL', rateLabel: 'CURRENT CASH RATE' },
 }
 
 const FVM_TABS = [
@@ -51,15 +65,40 @@ const FVM_TABS = [
   { key: 'growth', label: 'GROWTH' },
 ] as const
 
-const VIEW_TABS: Array<{ key: ViewTab; label: string }> = [
-  { key: 'strips', label: 'STIR STRIPS' },
-  { key: 'pricing', label: 'FORWARD PRICING' },
-  { key: 'ust', label: 'UST CURVE' },
-  { key: 'attribution', label: 'YIELD ATTRIBUTION' },
-  { key: 'credit', label: 'CREDIT' },
-  { key: 'money', label: 'MONEY MARKETS' },
-  { key: 'auctions', label: 'TREASURY AUCTIONS' },
-] as const
+function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string }> {
+  if (country === 'Global') return []
+  if (country === 'US') {
+    return [
+      { key: 'strips', label: 'STIR STRIPS' },
+      { key: 'pricing', label: 'FORWARD PRICING' },
+      { key: 'ust', label: 'UST CURVE' },
+      { key: 'attribution', label: 'YIELD ATTRIBUTION' },
+      { key: 'credit', label: 'CREDIT' },
+      { key: 'money', label: 'MONEY MARKETS' },
+      { key: 'auctions', label: 'TREASURY AUCTIONS' },
+    ]
+  }
+  if (country === 'EU') {
+    return [
+      { key: 'strips', label: 'STIR STRIPS' },
+      { key: 'pricing', label: 'FORWARD PRICING' },
+      { key: 'bund', label: 'BUND CURVE' },
+      { key: 'oat', label: 'OAT CURVE' },
+      { key: 'btp', label: 'BTP CURVE' },
+    ]
+  }
+  const curveTabMap: Record<Exclude<CountryCode, 'US' | 'EU' | 'Global'>, { key: ViewTab; label: string }> = {
+    UK:  { key: 'gilt', label: 'GILT CURVE' },
+    CAD: { key: 'cad', label: 'CAD YIELD CURVE' },
+    JPY: { key: 'jgb', label: 'JGB CURVE' },
+    AUS: { key: 'agb', label: 'AGB CURVE' },
+  }
+  return [
+    { key: 'strips', label: 'STIR STRIPS' },
+    { key: 'pricing', label: 'FORWARD PRICING' },
+    curveTabMap[country],
+  ]
+}
 
 const FVM_RANGES = [
   { key: '1m', label: '1M' },
@@ -252,6 +291,25 @@ const YEAR_CYCLE = [
   'rgba(255, 215, 0, 0.12)',
 ]
 
+type PackName = 'Whites' | 'Reds' | 'Greens' | 'Blues' | 'Golds'
+const PACK_NAMES: PackName[] = ['Whites', 'Reds', 'Greens', 'Blues', 'Golds']
+const PACK_COLORS: Record<PackName, string> = {
+  Whites: '#e5e7eb',
+  Reds: '#ef4444',
+  Greens: '#22c55e',
+  Blues: '#3b82f6',
+  Golds: '#facc15',
+}
+const SCENARIO_BPS: number[] = [-150, -125, -100, -75, -50, -25, 0, 25, 50, 75, 100, 125, 150]
+
+const PACK_BACKGROUNDS: Record<PackName, string> = {
+  Whites: 'rgba(229, 231, 235, 0.04)',
+  Reds: 'rgba(239, 68, 68, 0.07)',
+  Greens: 'rgba(34, 197, 94, 0.07)',
+  Blues: 'rgba(59, 130, 246, 0.07)',
+  Golds: 'rgba(250, 204, 21, 0.07)',
+}
+
 const INTEGER_FORMAT = new Intl.NumberFormat('en-US')
 const FVM_TICK = { fontSize: 10, fontFamily: 'var(--font-mono)', fill: '#94A3B8' }
 const LABOR_SCENARIO_COLORS = ['#EF5350', '#fbbf24', '#22d3ee', '#4ade80'] as const
@@ -322,15 +380,6 @@ const UST_BREAKEVENS = [
   { key: 'T5YIE', label: '5Y Breakeven' },
   { key: 'T10YIE', label: '10Y Breakeven' },
 ] as const
-const REGIME_COLORS: Record<string, string> = {
-  'Bull Steepener': '#66bb6a',
-  'Bear Steepener': '#c62828',
-  'Steepener Twist': '#ffee58',
-  'Bull Flattener': '#42a5f5',
-  'Bear Flattener': '#ab47bc',
-  'Flattener Twist': '#ff9100',
-}
-
 function fmtDaysWeeks(currentDate: string, benchmarkDate: string): { days: number; weeks: string } {
   if (!currentDate || !benchmarkDate) return { days: 0, weeks: '0.0' }
   const current = new Date(`${currentDate}T12:00:00Z`)
@@ -387,17 +436,25 @@ function fmtSignedPrice(v: number | null): string {
   return `${sign}${v.toFixed(3)}`
 }
 
-function fmtSignedInteger(v: number | null): string {
-  if (v == null) return '—'
-  if (v === 0) return '0'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${INTEGER_FORMAT.format(v)}`
-}
-
 function fmtBpsValue(v: number | null): string {
   if (v == null) return '—'
   const sign = v > 0 ? '+' : ''
   return `${sign}${v.toFixed(1)}bp`
+}
+
+// Bare numeric bps formatter — used in table cells where the column header
+// already conveys units, so the "bp" suffix would be redundant.
+function fmtBpsNumber(v: number | null): string {
+  if (v == null) return '—'
+  const sign = v >= 0 ? '+' : ''
+  return `${sign}${v.toFixed(1)}`
+}
+
+// Convert a futures price change to its implied-rate change, formatted bare.
+// Sign flips because rates and prices move inversely (1bp rate = 0.01 price).
+function fmtBpsFromPrice(priceChange: number | null): string {
+  if (priceChange == null) return '—'
+  return fmtBpsNumber(priceChange * -100)
 }
 
 const CONTRIB_COMPONENTS = [
@@ -436,6 +493,38 @@ function heatStyle(value: number | null, maxAbs: number): CSSProperties {
   const bgAlpha = 0.05 + intensity * 0.2
   if (value > 0) return { color: `rgba(78, 201, 176, ${opacity})`, background: `rgba(78, 201, 176, ${bgAlpha.toFixed(3)})` }
   return { color: `rgba(239, 83, 80, ${opacity})`, background: `rgba(239, 83, 80, ${bgAlpha.toFixed(3)})` }
+}
+
+// First inflection point on the curve — the contract where the cycle direction
+// reverses. Falls back to the last contract if the curve never reverses, or to
+// the only/last contract for very short curves.
+function findTerminalContract(contracts: StripContract[]): StripContract | null {
+  if (contracts.length === 0) return null
+  if (contracts.length < 3) return contracts[contracts.length - 1]
+
+  let baseDirection = Math.sign(contracts[1].impliedRate - contracts[0].impliedRate)
+  let baseIdx = 0
+
+  if (baseDirection === 0) {
+    for (let i = 2; i < contracts.length; i++) {
+      const dir = Math.sign(contracts[i].impliedRate - contracts[i - 1].impliedRate)
+      if (dir !== 0) {
+        baseDirection = dir
+        baseIdx = i - 1
+        break
+      }
+    }
+    if (baseDirection === 0) return contracts[contracts.length - 1]
+  }
+
+  for (let i = baseIdx + 1; i < contracts.length; i++) {
+    const dir = Math.sign(contracts[i].impliedRate - contracts[i - 1].impliedRate)
+    if (dir !== 0 && dir !== baseDirection) {
+      return contracts[i - 1]
+    }
+  }
+
+  return contracts[contracts.length - 1]
 }
 
 function summaryToneStyle(tone: StripSummaryBox['tone']): CSSProperties {
@@ -741,7 +830,47 @@ function useContractHistory(symbol: string | null, days = 60) {
 export function STIRDashboardPage() {
   const [assetClass, setAssetClass] = useState<AssetClass>('rates')
   const [activeView, setActiveView] = useState<ViewTab>('pricing')
+  const [country, setCountry] = useState<CountryCode>('US')
+  const viewTabs = useMemo(() => getViewTabs(country), [country])
+
+  // Fall back to first tab if current tab is no longer visible for this country
+  useEffect(() => {
+    const validKeys = viewTabs.map(t => t.key)
+    if (!validKeys.includes(activeView)) {
+      setActiveView(validKeys[0])
+    }
+  }, [country, viewTabs, activeView])
+
   const [product, setProduct] = useState<ProductKey>('sofr')
+
+  // SR3 contract-history modal state
+  const [modalContract, setModalContract] = useState<StripContract | null>(null)
+  const [modalContractColor, setModalContractColor] = useState<string>('#e5e7eb')
+  const [modalMetric, setModalMetric] = useState<'rate' | 'price'>('rate')
+  const [modalRange, setModalRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y')
+  const [modalShowScenarios, setModalShowScenarios] = useState(true)
+
+  useEffect(() => {
+    if (!modalContract) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setModalContract(null)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [modalContract])
+
+  const modalHistory = useContractHistory(modalContract?.symbol ?? null, 9999)
+  const modalChartData = useMemo(() => {
+    if (modalHistory.history.length === 0) return [] as { date: string; value: number }[]
+    const cutoffDays = modalRange === '1M' ? 30 : modalRange === '3M' ? 90 : modalRange === '6M' ? 180 : modalRange === '1Y' ? 365 : null
+    let points = modalHistory.history
+    if (cutoffDays != null) {
+      const cutoffMs = Date.now() - cutoffDays * 86400000
+      points = points.filter((p) => new Date(p.date).getTime() >= cutoffMs)
+    }
+    return points.map((p) => ({ date: p.date, value: modalMetric === 'rate' ? p.impliedRate : p.lastPrice }))
+  }, [modalHistory.history, modalRange, modalMetric])
+
   const [fvmTab, setFvmTab] = useState<string>('cpi')
   const [fvmMeasure, setFvmMeasure] = useState<'headline' | 'core'>('headline')
   const [fvmRange, setFvmRange] = useState<string>('1y')
@@ -810,9 +939,29 @@ export function STIRDashboardPage() {
   const productConfig = PRODUCT_CONFIG[product]
   const lookbackDays = Math.max(0, Number.parseInt(lookbackDaysInput, 10) || 0)
 
-  const curve = useFuturesCurve(productConfig.root, lookbackDays)
-  const fedwatch = useFedWatch()
-  const strip = useFuturesStrip(productConfig.root)
+  // Derive active market from country + product selection
+  const activeMarket = useMemo(() => {
+    if (country === 'US' || country === 'Global') {
+      return { root: productConfig.root, title: productConfig.title, rateLabel: 'CURRENT EFFR' }
+    }
+    return COUNTRY_MARKET[country]
+  }, [country, productConfig])
+
+  const curve = useFuturesCurve(activeMarket.root, lookbackDays)
+  const fedwatch = useFedWatch(activeMarket.root)
+  const strip = useFuturesStrip(activeMarket.root)
+
+  const modalYDomain = useMemo<[number | string, number | string]>(() => {
+    if (modalChartData.length === 0) return ['auto', 'auto']
+    let min = Infinity
+    let max = -Infinity
+    for (const p of modalChartData) {
+      if (p.value < min) min = p.value
+      if (p.value > max) max = p.value
+    }
+    const pad = (max - min) * 0.05 || 0.1
+    return [min - pad, max + pad]
+  }, [modalChartData])
 
   const loading = curve.loading || fedwatch.loading
   const error = curve.error || fedwatch.error
@@ -825,7 +974,11 @@ export function STIRDashboardPage() {
   )
 
   const curveData = useMemo(() => {
-    const latest = sortCurve(curve.currentCurve)
+    let latest = sortCurve(curve.currentCurve)
+    // For US Fed Funds, trim stale front-end contracts — show FFM26 through FFZ27
+    if (country === 'US' && product === 'fedfunds') {
+      latest = latest.filter((p) => p.expiryDate >= '2026-06-01' && p.expiryDate <= '2027-12-01')
+    }
     const benchmark = new Map(sortCurve(curve.lookbackCurve).map((row) => [row.symbol, row]))
 
     return latest.map((row, idx) => {
@@ -840,7 +993,7 @@ export function STIRDashboardPage() {
         order: idx,
       }
     })
-  }, [curve.currentCurve, curve.lookbackCurve])
+  }, [curve.currentCurve, curve.lookbackCurve, product, country])
 
   const curveDomain = useMemo<[number, number]>(() => {
     const rates = curveData.flatMap((row) => [row.latestRate, row.benchmarkRate])
@@ -852,9 +1005,10 @@ export function STIRDashboardPage() {
   }, [curveData])
 
   const summaryRows = useMemo<SummaryRow[]>(() => {
-    if (product === 'fedfunds') {
+    // Use meeting-based summary when FedWatch meetings are available
+    if (fedwatch.meetings.length > 0) {
       return fedwatch.meetings
-        .filter((meeting) => meeting.meetingDate <= '2027-03-31')
+        .filter((meeting) => meeting.meetingDate <= '2027-12-31')
         .map((meeting) => {
           const stepBps = meeting.expectedChange * 100
           const totalBps = (meeting.effrEnd - fedwatch.currentEFFR) * 100
@@ -873,6 +1027,7 @@ export function STIRDashboardPage() {
         })
     }
 
+    // Fallback: contract-based summary
     const latest = sortCurve(curve.currentCurve)
       .filter((row) => row.year <= 2029)
 
@@ -893,7 +1048,7 @@ export function STIRDashboardPage() {
         tone,
       }
     })
-  }, [product, fedwatch.meetings, fedwatch.currentEFFR, curve.currentCurve])
+  }, [fedwatch.meetings, fedwatch.currentEFFR, curve.currentCurve])
 
   const overnightRow = useMemo<SummaryRow>(() => ({
     key: 'cash',
@@ -939,37 +1094,77 @@ export function STIRDashboardPage() {
 
   const stripYears = useMemo(() => stripYearGroups.map(([year]) => year), [stripYearGroups])
 
+  const stripPacks = useMemo(() => {
+    return PACK_NAMES
+      .map((name, idx) => ({
+        name,
+        color: PACK_COLORS[name],
+        contracts: stripContracts.slice(idx * 4, idx * 4 + 4),
+      }))
+      .filter((p) => p.contracts.length > 0)
+  }, [stripContracts])
+
   const stripMaxAbs = useMemo(() => {
     const maxAbs = {
       pxChg1d: 0,
       pxChg5d: 0,
       pxChg1m: 0,
-      oiChg: 0,
     }
 
     for (const contract of stripContracts) {
       maxAbs.pxChg1d = Math.max(maxAbs.pxChg1d, Math.abs(contract.pxChg1d ?? 0))
       maxAbs.pxChg5d = Math.max(maxAbs.pxChg5d, Math.abs(contract.pxChg5d ?? 0))
       maxAbs.pxChg1m = Math.max(maxAbs.pxChg1m, Math.abs(contract.pxChg1m ?? 0))
-      maxAbs.oiChg = Math.max(maxAbs.oiChg, Math.abs(contract.oiChg ?? 0))
     }
 
     return maxAbs
   }, [stripContracts])
 
   const stripSummary = useMemo(() => {
-    const terminal = stripContracts.reduce<StripContract | null>((lowest, contract) => {
-      if (!lowest || contract.impliedRate < lowest.impliedRate) return contract
-      return lowest
-    }, null)
+    const isSofr = country === 'US' && product === 'sofr'
 
-    const step6 = product === 'sofr' ? 2 : 6
-    const step12 = product === 'sofr' ? 4 : 12
+    const terminal: StripContract | null = isSofr
+      ? findTerminalContract(stripContracts)
+      : stripContracts.reduce<StripContract | null>((lowest, contract) => {
+          if (!lowest || contract.impliedRate < lowest.impliedRate) return contract
+          return lowest
+        }, null)
+
+    // Monthly contracts (FF): 6/12 steps for 6m/12m. Quarterly (all others): 2/4 steps.
+    const isMonthly = country === 'US' && product === 'fedfunds'
+    const step6 = isMonthly ? 6 : 2
+    const step12 = isMonthly ? 12 : 4
     const terminalIndex = terminal ? stripContracts.findIndex((contract) => contract.symbol === terminal.symbol) : -1
     const contract6m = terminalIndex >= 0 ? stripContracts[terminalIndex + step6] ?? null : null
     const contract12m = terminalIndex >= 0 ? stripContracts[terminalIndex + step12] ?? null : null
 
-    const boxes: StripSummaryBox[] = [
+    const boxes: StripSummaryBox[] = []
+
+    if (isSofr && stripContracts.length >= 2) {
+      const first = stripContracts[0]
+      const second = stripContracts[1]
+      const nextMoveBps = (first.impliedRate - second.impliedRate) * 100
+      let value: string
+      let tone: StripSummaryBox['tone']
+      if (Math.abs(nextMoveBps) < 0.05) {
+        value = 'UNCH'
+        tone = 'neutral'
+      } else if (nextMoveBps > 0) {
+        value = 'CUT'
+        tone = 'green'
+      } else {
+        value = 'HIKE'
+        tone = 'red'
+      }
+      boxes.push({
+        label: 'NEXT MOVE',
+        value,
+        sub: '',
+        tone,
+      })
+    }
+
+    boxes.push(
       {
         label: 'TERMINAL',
         value: terminal ? `${fmtRate(terminal.impliedRate)}%` : '—',
@@ -977,35 +1172,30 @@ export function STIRDashboardPage() {
         tone: 'teal',
       },
       {
-        label: 'MTG>TERM',
+        label: isSofr ? 'Terminal - OCR' : 'MTG>TERM',
         value: terminal ? fmtBpsValue((terminal.impliedRate - fedwatch.currentEFFR) * 100) : '—',
-        sub: 'terminal vs overnight cash',
+        sub: isSofr ? '' : 'terminal vs overnight cash',
         tone: !terminal ? 'neutral' : (terminal.impliedRate - fedwatch.currentEFFR) * 100 >= 0 ? 'green' : 'red',
         hoverKey: 'mtg',
       },
       {
-        label: 'TERM>+6M',
+        label: isSofr ? '+6m - Terminal' : 'TERM>+6M',
         value: terminal && contract6m ? fmtBpsValue((contract6m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract6m ? contractTicker(contract6m.symbol) : '—',
         tone: 'gold',
         hoverKey: 'term6m',
       },
       {
-        label: 'TERM>+12M',
+        label: isSofr ? '+12m - Terminal' : 'TERM>+12M',
         value: terminal && contract12m ? fmtBpsValue((contract12m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract12m ? contractTicker(contract12m.symbol) : '—',
         tone: 'gold',
         hoverKey: 'term12m',
       },
-    ]
+    )
 
     return { terminal, contract6m, contract12m, boxes }
-  }, [stripContracts, product, fedwatch.currentEFFR])
-
-  const stripMaxOI = useMemo(
-    () => Math.max(...stripContracts.map((contract) => contract.openInterest || 0), 0),
-    [stripContracts],
-  )
+  }, [stripContracts, product, country, fedwatch.currentEFFR])
 
   const terminalHistory = useContractHistory(stripSummary.terminal?.symbol ?? null)
   const plus6mHistory = useContractHistory(stripSummary.contract6m?.symbol ?? null)
@@ -1837,63 +2027,14 @@ export function STIRDashboardPage() {
       .map((point) => ({ date: point.date, value: point.value }))
   }, [ustSelection, ustData, ustChartRange])
 
-  const ustSpreadChartData = useMemo(() => {
+  const ustSpreadChartData = useMemo((): SpreadChartPoint[] => {
     if (!ustSelection || ustSelection.type !== 'spread') return []
-
-    const longSeries = ustData[ustSelection.longKey] || []
     const shortSeries = ustData[ustSelection.shortKey] || []
-    if (longSeries.length === 0 || shortSeries.length === 0) return []
-
-    const shortMap = new Map(shortSeries.map((point) => [point.date, point.value]))
-    const aligned = longSeries
-      .filter((point) => shortMap.has(point.date))
-      .map((point) => ({
-        date: point.date,
-        longYield: point.value,
-        shortYield: shortMap.get(point.date)!,
-        spread: (point.value - shortMap.get(point.date)!) * 100,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date))
-
+    const longSeries = ustData[ustSelection.longKey] || []
+    if (shortSeries.length === 0 || longSeries.length === 0) return []
+    const full = buildSpreadChartData(shortSeries, longSeries, regimeLookback)
     const cutoff = getDateCutoff(ustChartRange)
-    const filtered = cutoff ? aligned.filter((point) => point.date >= cutoff) : aligned
-
-    return filtered.map((point) => {
-      const fullIdx = aligned.findIndex((candidate) => candidate.date === point.date)
-      const lookbackIdx = fullIdx - regimeLookback
-
-      if (lookbackIdx < 0) {
-        return { ...point, regime: null as string | null }
-      }
-
-      const prior = aligned[lookbackIdx]
-      const shortChange = point.shortYield - prior.shortYield
-      const longChange = point.longYield - prior.longYield
-      const spreadChange = point.spread - prior.spread
-
-      let regime: string
-      if (spreadChange > 0) {
-        if (shortChange < 0 && longChange < 0) {
-          regime = 'Bull Steepener'
-        } else if (shortChange > 0 && longChange > 0) {
-          regime = 'Bear Steepener'
-        } else {
-          regime = 'Steepener Twist'
-        }
-      } else if (spreadChange < 0) {
-        if (shortChange < 0 && longChange < 0) {
-          regime = 'Bull Flattener'
-        } else if (shortChange > 0 && longChange > 0) {
-          regime = 'Bear Flattener'
-        } else {
-          regime = 'Flattener Twist'
-        }
-      } else {
-        regime = 'Neutral'
-      }
-
-      return { ...point, regime }
-    })
+    return cutoff ? full.filter(p => p.date >= cutoff) : full
   }, [ustSelection, ustData, ustChartRange, regimeLookback])
 
   const currentButterflies = useMemo(() => {
@@ -2218,7 +2359,7 @@ export function STIRDashboardPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
 
       <nav className={styles.breadcrumb}>
@@ -2242,6 +2383,11 @@ export function STIRDashboardPage() {
             </button>
           ))}
         </div>
+
+        {/* ═══ Country Selector — visible for rates, equities, fx ═══ */}
+        {(assetClass === 'rates' || assetClass === 'equities' || assetClass === 'fx') && (
+          <CountrySelector value={country} onChange={setCountry} />
+        )}
 
         {/* ═══ Macro View ═══ */}
         {assetClass === 'macro' && (
@@ -2275,8 +2421,12 @@ export function STIRDashboardPage() {
 
         {/* ═══ Rates View (existing content) ═══ */}
         {assetClass === 'rates' && (<>
+
+        {country === 'Global' && <GlobalRatesPage />}
+
+        {country !== 'Global' && <>
         <div className={styles.viewTabs}>
-          {VIEW_TABS.map((tab, idx) => (
+          {viewTabs.map((tab, idx) => (
             <button
               key={tab.key}
               className={`${styles.viewTab} ${activeView === tab.key ? styles.viewTabActive : ''}`}
@@ -2291,7 +2441,7 @@ export function STIRDashboardPage() {
           ))}
         </div>
 
-        {(activeView === 'strips' || activeView === 'pricing') && (
+        {(activeView === 'strips' || activeView === 'pricing') && country === 'US' && (
           <div className={styles.toggleGroup}>
             {(Object.entries(PRODUCT_CONFIG) as [ProductKey, typeof PRODUCT_CONFIG[ProductKey]][]).map(([key, config], idx) => (
               <button
@@ -2309,11 +2459,11 @@ export function STIRDashboardPage() {
           </div>
         )}
 
-        <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.twoPanel : styles.fullPanel}>
-          <div className={(activeView === 'strips' || activeView === 'pricing') ? styles.leftPanel : undefined}>
+        <div className={(activeView === 'strips' || activeView === 'pricing') && country === 'US' ? styles.twoPanel : styles.fullPanel}>
+          <div className={(activeView === 'strips' || activeView === 'pricing') && country === 'US' ? styles.leftPanel : undefined}>
         {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.ffrBand}>
-            CURRENT FFR {fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'}
+            {activeMarket.rateLabel} {fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'}
           </div>
         )}
         {activeView === 'pricing' && (
@@ -2321,7 +2471,7 @@ export function STIRDashboardPage() {
             <div className={styles.ustYcHeader}>
               <div>
                 <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>
-                  US: {productConfig.title}
+                  {country}: {activeMarket.title}
                 </div>
                 <div className={styles.ustYcDates}>
                   {'\u25CF'} LATEST: {curve.currentDate || '—'} &nbsp;&nbsp; {'\u25CF'} BENCHMARK: {curve.lookbackDate || '—'} ({headerTiming.days} DAYS, {headerTiming.weeks} WEEKS)
@@ -2360,7 +2510,7 @@ export function STIRDashboardPage() {
                 <section className={styles.section}>
                   <div className={styles.chartPanel}>
                     <div className={styles.panelTitle}>
-                      US: {productConfig.title === 'FED FUNDS' ? 'Fed Funds' : '3M SOFR'}
+                      {country}: {activeMarket.title}
                     </div>
                     <ResponsiveContainer width="100%" height={320}>
                       <LineChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 4 }}>
@@ -2473,7 +2623,7 @@ export function STIRDashboardPage() {
                   </div>
                 </section>
 
-                {product === 'fedfunds' && (
+                {fedwatch.rangeColumns.length > 0 && (
                   <section className={styles.section}>
                     <button className={styles.matrixToggle} onClick={() => setShowMatrix((v) => !v)}>
                       {showMatrix ? '▼' : '▶'} Detailed Probability Matrix
@@ -2552,7 +2702,7 @@ export function STIRDashboardPage() {
                         >
                           <div className={styles.summaryBoxLabel}>{box.label}</div>
                           <div className={styles.summaryBoxValue} style={summaryToneStyle(box.tone)}>{box.value}</div>
-                          <div className={styles.summaryBoxSub}>{box.sub}</div>
+                          {box.sub ? <div className={styles.summaryBoxSub}>{box.sub}</div> : null}
                           {box.hoverKey === hoveredBox && (
                             <div className={styles.spreadPopup}>
                               <div className={styles.spreadPopupTitle}>
@@ -2607,7 +2757,7 @@ export function STIRDashboardPage() {
                 <section className={styles.section}>
                   <div className={styles.chartPanel}>
                     <div className={styles.stripHeader}>
-                      {productConfig.root} STRIP {stripContracts.length} contracts
+                      {activeMarket.root} STRIP {stripContracts.length} contracts
                     </div>
                     <div className={styles.tableWrap}>
                       <table className={styles.stripTable}>
@@ -2616,53 +2766,79 @@ export function STIRDashboardPage() {
                             <th>Contract</th>
                             <th>Last Px</th>
                             <th>Imp Rate</th>
-                            <th>Px 1D</th>
-                            <th>Px 5D</th>
-                            <th>Px 1M</th>
-                            <th>Volume</th>
-                            <th>OI</th>
-                            <th>OI Chg</th>
+                            {country === 'US' && product === 'sofr' && <th className={styles.ocrHeader}>± OCR</th>}
+                            {country === 'US' && product === 'sofr' ? (
+                              <>
+                                <th className={styles.changeHeader}>Implied Rate Δ 1d</th>
+                                <th className={styles.changeHeader}>Implied Rate Δ 5d</th>
+                                <th className={styles.changeHeader}>Implied Rate Δ 1m</th>
+                              </>
+                            ) : (
+                              <>
+                                <th>Px 1D</th>
+                                <th>Px 5D</th>
+                                <th>Px 1M</th>
+                              </>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
-                          {stripYearGroups.map(([year, contracts]) => (
-                            <Fragment key={year}>
-                              <tr className={styles.yearRow} style={{ background: getYearBandColor(year, stripYears) }}>
-                                <td colSpan={9} className={styles.yearRowLabel}>{year}</td>
-                              </tr>
-                              {contracts.map((contract) => (
-                                <tr
-                                  key={contract.symbol}
-                                  style={{ background: getYearBandColor(contract.year, stripYears) }}
-                                >
-                                  <td>{contractTicker(contract.symbol)}</td>
-                                  <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
-                                  <td>{contract.impliedRate.toFixed(3)}</td>
-                                  <td style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
-                                  <td style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
-                                  <td style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
-                                  <td>{INTEGER_FORMAT.format(contract.volume)}</td>
-                                  <td className={styles.oiCell}>
-                                    <div className={styles.oiCellInner} style={{ padding: '5px 6px' }}>
-                                      {(contract.openInterest || 0) > 0 && stripMaxOI > 0 && (
-                                        <div
-                                          className={styles.oiBar}
-                                          style={{
-                                            zIndex: 1,
-                                            width: `${((contract.openInterest || 0) / stripMaxOI) * 100}%`,
-                                            right: 0,
-                                            background: 'rgba(94, 160, 230, 0.25)',
-                                          }}
-                                        />
-                                      )}
-                                      <span className={styles.oiValue} style={{ zIndex: 0 }}>{INTEGER_FORMAT.format(contract.openInterest)}</span>
-                                    </div>
+                          {country === 'US' && product === 'sofr' ? (
+                            stripPacks.map((pack) => (
+                              <Fragment key={pack.name}>
+                                <tr className={styles.packHeaderRow} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                  <td colSpan={7} className={styles.packHeaderCell} style={{ color: pack.color }}>
+                                    {pack.name}
                                   </td>
-                                  <td style={heatStyle(contract.oiChg, stripMaxAbs.oiChg)}>{fmtSignedInteger(contract.oiChg)}</td>
                                 </tr>
-                              ))}
-                            </Fragment>
-                          ))}
+                                {pack.contracts.map((contract) => (
+                                  <tr key={contract.symbol} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                    <td
+                                      style={{ color: pack.color }}
+                                      className={styles.contractClickable}
+                                      onClick={() => {
+                                        setModalContractColor(pack.color)
+                                        setModalContract(contract)
+                                        setModalMetric('rate')
+                                        setModalRange('1Y')
+                                      }}
+                                    >{contractTicker(contract.symbol)}</td>
+                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td style={{ color: pack.color }}>{contract.impliedRate.toFixed(3)}</td>
+                                    {(() => {
+                                      const ocrBps = (contract.impliedRate - fedwatch.currentEFFR) * 100
+                                      const cls = ocrBps > 0 ? styles.ocrPositive : ocrBps < 0 ? styles.ocrNegative : ''
+                                      return <td className={cls}>{fmtBpsNumber(ocrBps)}</td>
+                                    })()}
+                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtBpsFromPrice(contract.pxChg1d)}</td>
+                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtBpsFromPrice(contract.pxChg5d)}</td>
+                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtBpsFromPrice(contract.pxChg1m)}</td>
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            ))
+                          ) : (
+                            stripYearGroups.map(([year, contracts]) => (
+                              <Fragment key={year}>
+                                <tr className={styles.yearRow} style={{ background: getYearBandColor(year, stripYears) }}>
+                                  <td colSpan={6} className={styles.yearRowLabel}>{year}</td>
+                                </tr>
+                                {contracts.map((contract) => (
+                                  <tr
+                                    key={contract.symbol}
+                                    style={{ background: getYearBandColor(contract.year, stripYears) }}
+                                  >
+                                    <td>{contractTicker(contract.symbol)}</td>
+                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td>{contract.impliedRate.toFixed(3)}</td>
+                                    <td style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
+                                    <td style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
+                                    <td style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            ))
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -3433,6 +3609,10 @@ export function STIRDashboardPage() {
           </section>
         )}
 
+        {(['gilt', 'bund', 'oat', 'btp', 'cad', 'jgb', 'agb'] as ViewTab[]).includes(activeView) && (
+          <CountryCurvePage pageKey={activeView} />
+        )}
+
         {activeView === 'attribution' && (
           <div>
             <div className={styles.ustDashboard}>
@@ -3930,7 +4110,7 @@ export function STIRDashboardPage() {
 
           </div>
 
-          {(activeView === 'strips' || activeView === 'pricing') && (
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'US' && (
           <div className={styles.rightPanel}>
             <div className={styles.fvmPanel}>
               <div className={styles.fvmHeader}>
@@ -4469,8 +4649,102 @@ export function STIRDashboardPage() {
           </div>
           )}
         </div>
+        </>}
         </>)}
       </main>
+      {modalContract && (
+        <div className={styles.modalBackdrop} onClick={() => setModalContract(null)}>
+          <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+            <button className={styles.modalClose} onClick={() => setModalContract(null)} aria-label="Close">×</button>
+            <h2 className={styles.modalTitle} style={{ color: modalContractColor }}>{contractTicker(modalContract.symbol)}</h2>
+            <p className={styles.modalSubtitle}>3M SOFR · {modalContract.expiryLabel}</p>
+            <div className={styles.modalToggleRow}>
+              <div className={styles.modalToggleGroup}>
+                <button className={modalMetric === 'rate' ? styles.activeToggle : ''} onClick={() => setModalMetric('rate')}>IMPLIED RATE</button>
+                <button className={modalMetric === 'price' ? styles.activeToggle : ''} onClick={() => setModalMetric('price')}>PRICE</button>
+              </div>
+              <div className={styles.modalToggleGroup}>
+                <button className={modalShowScenarios ? styles.activeToggleGreen : ''} onClick={() => setModalShowScenarios((v) => !v)}>
+                  CB LEVELS: {modalShowScenarios ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+            <div className={styles.modalChartContainer}>
+              {modalHistory.loading ? (
+                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+              ) : modalChartData.length === 0 ? (
+                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={modalChartData} margin={{ top: 12, right: 110, left: 8, bottom: 8 }}>
+                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(value: string) => {
+                        const d = new Date(value)
+                        return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                      }}
+                      interval="preserveStartEnd"
+                      minTickGap={60}
+                      stroke="#728197"
+                    />
+                    <YAxis
+                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      tickFormatter={(v: number) => modalMetric === 'rate' ? `${v.toFixed(2)}%` : v.toFixed(2)}
+                      domain={modalYDomain}
+                      stroke="#728197"
+                    />
+                    <Tooltip
+                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      formatter={(v: number | undefined) => v == null ? '' : modalMetric === 'rate' ? `${v.toFixed(3)}%` : v.toFixed(3)}
+                    />
+                    {modalShowScenarios && fedwatch.currentEFFR > 0 && SCENARIO_BPS.map((changeBps) => {
+                      const ratePct = fedwatch.currentEFFR + changeBps / 100
+                      const yValue = modalMetric === 'rate' ? ratePct : 100 - ratePct
+                      const isCurrent = changeBps === 0
+                      const labelText = isCurrent ? 'Current Rate' : `${Math.abs(changeBps)} bps ${changeBps < 0 ? 'cut' : 'hike'}`
+                      return (
+                        <ReferenceLine
+                          key={changeBps}
+                          y={yValue}
+                          stroke={isCurrent ? '#94a3b8' : '#a855f7'}
+                          strokeDasharray={isCurrent ? '4 4' : undefined}
+                          strokeWidth={1}
+                          label={{
+                            value: labelText,
+                            position: 'right',
+                            fill: isCurrent ? '#94a3b8' : '#a855f7',
+                            fontSize: 11,
+                            fontFamily: 'var(--font-mono)',
+                          }}
+                        />
+                      )
+                    })}
+                    <Line type="monotone" dataKey="value" stroke={modalContractColor} strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                    <Brush
+                      dataKey="date"
+                      height={28}
+                      stroke="#60a5fa"
+                      fill="#0d1520"
+                      travellerWidth={10}
+                      tickFormatter={(value: string) => {
+                        const d = new Date(value)
+                        return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+                      }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+            <div className={styles.modalRangeButtons}>
+              {(['1M', '3M', '6M', '1Y', 'ALL'] as const).map((r) => (
+                <button key={r} className={modalRange === r ? styles.activeRange : ''} onClick={() => setModalRange(r)}>{r}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

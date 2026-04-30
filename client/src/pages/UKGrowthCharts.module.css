@@ -1,0 +1,49 @@
+.statusBlock { display: flex; align-items: center; justify-content: center; padding: 64px 24px; font-size: 12px; font-family: var(--font-mono); letter-spacing: 0.06em; color: #64748B; }
+.majorHeader { font-size: 22px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-primary); padding: 4px 2px 0; flex-shrink: 0; }
+.chartSubtitle { font-family: var(--font-mono); font-size: 0.75rem; color: #728197; padding-bottom: 8px; }
+
+.twoColGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+.chartCard {
+  background: rgba(13, 17, 23, 0.6);
+  border: 1px solid #1e2a3a;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.chartLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chartSub {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #728197;
+  padding-bottom: 4px;
+}
+
+.controlRow { display: flex; align-items: center; gap: 10px; padding: 6px 0; flex-wrap: wrap; }
+.qsBtn { background: transparent; border: 1px solid rgba(255,255,255,0.12); color: #728197; font-family: var(--font-mono); font-size: 0.7rem; font-weight: 600; padding: 3px 10px; cursor: pointer; border-radius: 2px; transition: all 0.15s; }
+.qsBtn:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
+.qsBtnActive { color: #f87171; background: rgba(248, 113, 113, 0.08); border-color: #f87171; }
+
+.legend { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 4px 0 6px; }
+.legendItem { display: flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 0.6rem; color: #94A3B8; }
+.legendSwatch { width: 12px; height: 3px; border-radius: 1px; flex-shrink: 0; }
+.legendSwatchSquare { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.legendLine { width: 14px; height: 2px; flex-shrink: 0; }
+
+.threeColGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.explorerSection { background: var(--surface); border: 1px solid var(--border-accent); border-radius: 3px; padding: 16px; }
+.seriesSelect { font-family: var(--font-mono); font-size: 0.75rem; background: #0d1117; color: #e2e8f0; border: 1px solid #2a3040; border-radius: 4px; padding: 6px 10px; width: 100%; max-width: 600px; cursor: pointer; }
+.seriesSelect:focus { outline: none; border-color: #60a5fa; }
+.inputWrap { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.7rem; color: #728197; }
+.numInput { width: 45px; background: #0d1520; border: 1px solid rgba(255,255,255,0.12); color: #e2e8f0; font-family: var(--font-mono); font-size: 0.7rem; padding: 3px 6px; border-radius: 2px; text-align: center; }
+.regimeLegend { display: flex; justify-content: center; gap: 24px; padding: 4px 0; }
+.regimeLegendItem { display: flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.65rem; color: #728197; }
+.regimeSwatch { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }

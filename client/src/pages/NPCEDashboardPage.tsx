@@ -15,6 +15,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchBEANPCESeries } from '../lib/bea'
 import type { FredObservation } from '../lib/fred'
 import { NPCE_SERIES } from '../data/nPCESeriesConfig'
@@ -1881,7 +1882,7 @@ export function NPCEDashboardPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
       <nav className={styles.breadcrumb}>
         <Link to="/models" className={styles.breadcrumbLink}>Models</Link>

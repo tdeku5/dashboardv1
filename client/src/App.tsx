@@ -32,7 +32,8 @@ import { GDIDashboardPage }         from './pages/GDIDashboardPage'
 import { ConsumerHealthDashboardPage } from './pages/ConsumerHealthDashboardPage'
 import { TradeDashboardPage }          from './pages/TradeDashboardPage'
 import { STIRDashboardPage } from './pages/STIRDashboardPage'
-import { IndustrialProductionPage } from './pages/PlaceholderPage'
+import { IndustrialProductionPage } from './pages/IndustrialProductionPage'
+import { IPExplorerDashboardPage } from './pages/IPExplorerDashboardPage'
 import { CreditPage } from './pages/CreditPage'
 import { BankCreditDashboardPage } from './pages/BankCreditDashboardPage'
 import { HousingPage } from './pages/HousingPage'
@@ -71,6 +72,7 @@ function App() {
         <Route path="/models/growth/consumer-health"       element={<ConsumerHealthDashboardPage />} />
         <Route path="/models/growth/trade"                element={<TradeDashboardPage />} />
         <Route path="/models/industrial"                     element={<IndustrialProductionPage />} />
+        <Route path="/models/industrial/ip-explorer"           element={<IPExplorerDashboardPage />} />
         <Route path="/models/housing"                        element={<HousingPage />} />
         <Route path="/models/credit"                         element={<CreditPage />} />
         <Route path="/models/credit/bank-credit"             element={<BankCreditDashboardPage />} />

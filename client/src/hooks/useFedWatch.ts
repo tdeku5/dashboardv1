@@ -43,7 +43,7 @@ const EMPTY_RESULT: FedWatchResponse = {
   rangeColumns: [],
 }
 
-export function useFedWatch(date?: string): UseFedWatchResult {
+export function useFedWatch(market?: string, date?: string): UseFedWatchResult {
   const [data, setData] = useState<FedWatchResponse>(EMPTY_RESULT)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +52,7 @@ export function useFedWatch(date?: string): UseFedWatchResult {
     let cancelled = false
     const params = new URLSearchParams()
     if (date) params.set('date', date)
+    if (market) params.set('market', market)
     const url = params.size > 0 ? `/api/futures/fedwatch?${params}` : '/api/futures/fedwatch'
 
     setLoading(true)
@@ -79,7 +80,7 @@ export function useFedWatch(date?: string): UseFedWatchResult {
     return () => {
       cancelled = true
     }
-  }, [date])
+  }, [market, date])
 
   return { ...data, loading, error }
 }

@@ -12,6 +12,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { FredRefreshButton } from '../components/FredRefreshButton'
 import { fetchBEASeries } from '../lib/bea'
 import type { FredObservation } from '../lib/fred'
 import styles from './PCEProjectionsPage.module.css'
@@ -629,7 +630,7 @@ export function PCEProjectionsPage() {
           <span className={styles.logo}>TND RESEARCH TERMINAL</span>
         </div>
         <div className={styles.barCenter} />
-        <div className={styles.barRight} />
+        <div className={styles.barRight}><FredRefreshButton /></div>
       </header>
 
       <nav className={styles.breadcrumb}>

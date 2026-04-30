@@ -358,18 +358,35 @@ export function upsertAuctionsBatch(rows: ParsedAuction[]): void {
   })()
 }
 
+// Maturity-based ranges (years) for standard tenors — includes reopenings
+const AUCTION_TERM_RANGES: Record<string, [number, number]> = {
+  '2-Year':  [1.5, 2.75],
+  '3-Year':  [2.75, 4],
+  '5-Year':  [4, 6],
+  '7-Year':  [6, 8.5],
+  '10-Year': [8.5, 11.5],
+  '20-Year': [17, 23],
+  '30-Year': [27, 33],
+}
+
 export function getAuctions(opts: {
   securityTerm?: string
   securityType?: string
   startDate?: string
   endDate?: string
 }): ParsedAuction[] {
-  const params: string[] = []
+  const params: (string | number)[] = []
   const clauses: string[] = []
 
   if (opts.securityTerm) {
-    clauses.push('security_term LIKE ?')
-    params.push(`%${opts.securityTerm}%`)
+    const range = AUCTION_TERM_RANGES[opts.securityTerm]
+    if (range) {
+      clauses.push('maturity_date IS NOT NULL AND (julianday(maturity_date) - julianday(auction_date)) / 365.25 BETWEEN ? AND ?')
+      params.push(range[0], range[1])
+    } else {
+      clauses.push('security_term LIKE ?')
+      params.push(`%${opts.securityTerm}%`)
+    }
   }
   if (opts.securityType) {
     clauses.push('security_type = ?')
@@ -636,6 +653,303 @@ export interface RDEEstimateRow {
 export function getRDEEstimates(): RDEEstimateRow[] {
   return db.prepare('SELECT date, median, p16, p84, p2_5, p97_5 FROM rde_estimates ORDER BY date ASC').all() as RDEEstimateRow[]
 }
+
+// ── ONS (UK Office for National Statistics) ─────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ons_observations (
+    cdid       TEXT NOT NULL,
+    dataset_id TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    value      REAL,
+    PRIMARY KEY (cdid, dataset_id, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS ons_series_meta (
+    cdid         TEXT NOT NULL,
+    dataset_id   TEXT NOT NULL,
+    title        TEXT,
+    units        TEXT,
+    frequency    TEXT,
+    last_fetched TEXT,
+    PRIMARY KEY (cdid, dataset_id)
+  );
+`)
+
+export function storeOnsObservations(
+  cdid: string,
+  datasetId: string,
+  observations: Array<{ date: string; value: number | null }>
+): void {
+  const stmt = db.prepare(`
+    INSERT INTO ons_observations (cdid, dataset_id, date, value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(cdid, dataset_id, date) DO UPDATE SET value = excluded.value
+  `)
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value !== null && obs.value !== undefined) {
+        stmt.run(cdid.toUpperCase(), datasetId.toLowerCase(), obs.date, obs.value)
+      }
+    }
+  })
+  tx()
+}
+
+export function getOnsObservations(
+  cdid: string,
+  datasetId: string
+): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM ons_observations
+    WHERE cdid = ? AND dataset_id = ?
+    ORDER BY date ASC
+  `).all(cdid.toUpperCase(), datasetId.toLowerCase()) as Array<{ date: string; value: number }>
+}
+
+export function upsertOnsSeriesMeta(
+  cdid: string,
+  datasetId: string,
+  meta: { title?: string; units?: string; frequency?: string }
+): void {
+  db.prepare(`
+    INSERT INTO ons_series_meta (cdid, dataset_id, title, units, frequency, last_fetched)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(cdid, dataset_id) DO UPDATE SET
+      title = COALESCE(excluded.title, title),
+      units = COALESCE(excluded.units, units),
+      frequency = COALESCE(excluded.frequency, frequency),
+      last_fetched = datetime('now')
+  `).run(cdid.toUpperCase(), datasetId.toLowerCase(), meta.title || null, meta.units || null, meta.frequency || null)
+}
+
+export function isOnsSeriesStale(cdid: string, datasetId: string, maxAgeHours: number = 12): boolean {
+  const row = db.prepare(`
+    SELECT last_fetched FROM ons_series_meta
+    WHERE cdid = ? AND dataset_id = ?
+  `).get(cdid.toUpperCase(), datasetId.toLowerCase()) as { last_fetched: string } | undefined
+  if (!row) return true
+  const lastFetched = new Date(row.last_fetched + 'Z')
+  const ageMs = Date.now() - lastFetched.getTime()
+  return ageMs > maxAgeHours * 60 * 60 * 1000
+}
+
+// ── Bank of England IADB ─────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS boe_observations (
+    series_code TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    value       REAL,
+    PRIMARY KEY (series_code, date)
+  );
+
+  CREATE TABLE IF NOT EXISTS boe_series_meta (
+    series_code  TEXT NOT NULL PRIMARY KEY,
+    description  TEXT,
+    frequency    TEXT,
+    last_fetched TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS gilt_yield_curve (
+    date       TEXT NOT NULL,
+    curve_type TEXT NOT NULL,
+    maturity   REAL NOT NULL,
+    value      REAL,
+    PRIMARY KEY (date, curve_type, maturity)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_gilt_yc_type_date ON gilt_yield_curve(curve_type, date);
+  CREATE INDEX IF NOT EXISTS idx_gilt_yc_type_maturity ON gilt_yield_curve(curve_type, maturity);
+
+  CREATE TABLE IF NOT EXISTS ons_gdp_contributions (
+    date        TEXT NOT NULL,
+    period_type TEXT NOT NULL,
+    sector      TEXT NOT NULL,
+    value       REAL,
+    PRIMARY KEY (date, period_type, sector)
+  );
+`)
+
+export function storeBoeObservations(
+  seriesCode: string,
+  observations: Array<{ date: string; value: number | null }>
+): void {
+  const stmt = db.prepare(`
+    INSERT INTO boe_observations (series_code, date, value)
+    VALUES (?, ?, ?)
+    ON CONFLICT(series_code, date) DO UPDATE SET value = excluded.value
+  `)
+  db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value !== null && obs.value !== undefined) {
+        stmt.run(seriesCode.toUpperCase(), obs.date, obs.value)
+      }
+    }
+  })()
+}
+
+export function getBoeObservations(
+  seriesCode: string
+): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM boe_observations
+    WHERE series_code = ?
+    ORDER BY date ASC
+  `).all(seriesCode.toUpperCase()) as Array<{ date: string; value: number }>
+}
+
+export function upsertBoeSeriesMeta(
+  seriesCode: string,
+  meta: { description?: string; frequency?: string }
+): void {
+  db.prepare(`
+    INSERT INTO boe_series_meta (series_code, description, frequency, last_fetched)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(series_code) DO UPDATE SET
+      description = COALESCE(excluded.description, description),
+      frequency = COALESCE(excluded.frequency, frequency),
+      last_fetched = datetime('now')
+  `).run(seriesCode.toUpperCase(), meta.description || null, meta.frequency || null)
+}
+
+// ── Gilt Yield Curve helpers ─────────────────────────────────────────────────
+
+export function storeGiltCurveData(
+  rows: Array<{ date: string; curve_type: string; maturity: number; value: number | null }>
+): void {
+  const stmt = db.prepare(`
+    INSERT INTO gilt_yield_curve (date, curve_type, maturity, value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(date, curve_type, maturity) DO UPDATE SET value = excluded.value
+  `)
+  db.transaction(() => {
+    for (const row of rows) {
+      if (row.value !== null && row.value !== undefined && !isNaN(row.value)) {
+        stmt.run(row.date, row.curve_type, row.maturity, row.value)
+      }
+    }
+  })()
+}
+
+export function getGiltCurve(
+  date: string,
+  curveType: string
+): Array<{ maturity: number; value: number }> {
+  return db.prepare(`
+    SELECT maturity, value FROM gilt_yield_curve
+    WHERE date = ? AND curve_type = ?
+    ORDER BY maturity ASC
+  `).all(date, curveType) as Array<{ maturity: number; value: number }>
+}
+
+export function getGiltCurveLatestDate(curveType: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) as latest FROM gilt_yield_curve WHERE curve_type = ?
+  `).get(curveType) as { latest: string | null } | undefined
+  return row?.latest || null
+}
+
+export function getGiltCurveTimeSeries(
+  curveType: string,
+  maturity: number,
+  startDate?: string,
+  endDate?: string
+): Array<{ date: string; value: number }> {
+  let sql = `SELECT date, value FROM gilt_yield_curve WHERE curve_type = ? AND maturity = ?`
+  const params: (string | number)[] = [curveType, maturity]
+  if (startDate) { sql += ` AND date >= ?`; params.push(startDate) }
+  if (endDate) { sql += ` AND date <= ?`; params.push(endDate) }
+  sql += ` ORDER BY date ASC`
+  return db.prepare(sql).all(...params) as Array<{ date: string; value: number }>
+}
+
+export function getGiltCurveAvailableDates(curveType: string): string[] {
+  const rows = db.prepare(`
+    SELECT DISTINCT date FROM gilt_yield_curve WHERE curve_type = ? ORDER BY date DESC LIMIT 30
+  `).all(curveType) as Array<{ date: string }>
+  return rows.map(r => r.date)
+}
+
+export function isBoeSeriesStale(seriesCode: string, maxAgeHours: number = 12): boolean {
+  const row = db.prepare(`
+    SELECT last_fetched FROM boe_series_meta WHERE series_code = ?
+  `).get(seriesCode.toUpperCase()) as { last_fetched: string } | undefined
+  if (!row) return true
+  const ageMs = Date.now() - new Date(row.last_fetched + 'Z').getTime()
+  return ageMs > maxAgeHours * 60 * 60 * 1000
+}
+
+// ── ONS Monthly GDP Contributions ────────────────────────────────────────────
+
+export function storeGDPContributions(
+  rows: Array<{ date: string; period_type: string; sector: string; value: number }>
+): void {
+  const stmt = db.prepare(`
+    INSERT INTO ons_gdp_contributions (date, period_type, sector, value)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(date, period_type, sector) DO UPDATE SET value = excluded.value
+  `)
+  db.transaction(() => {
+    for (const row of rows) {
+      if (row.value !== null && row.value !== undefined && !isNaN(row.value)) {
+        stmt.run(row.date, row.period_type, row.sector, row.value)
+      }
+    }
+  })()
+}
+
+export function getGDPContributions(
+  periodType: string,
+  startDate?: string
+): Array<{ date: string; sector: string; value: number }> {
+  let sql = `SELECT date, sector, value FROM ons_gdp_contributions WHERE period_type = ?`
+  const params: (string | number)[] = [periodType]
+  if (startDate) { sql += ` AND date >= ?`; params.push(startDate) }
+  sql += ` ORDER BY date ASC, sector ASC`
+  return db.prepare(sql).all(...params) as Array<{ date: string; sector: string; value: number }>
+}
+
+// ── TradingView OHLCV ───────────────────────────────────────────────────────
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tv_ohlcv (
+    symbol    TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    time      TEXT NOT NULL,
+    open      REAL,
+    high      REAL,
+    low       REAL,
+    close     REAL,
+    volume    INTEGER,
+    ingested_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (symbol, timeframe, time)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tv_ohlcv_symbol_tf ON tv_ohlcv(symbol, timeframe);
+
+  CREATE TABLE IF NOT EXISTS tv_ingest_log (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename       TEXT NOT NULL,
+    symbol         TEXT,
+    timeframe      TEXT,
+    rows_ingested  INTEGER,
+    status         TEXT NOT NULL,
+    error_message  TEXT,
+    ingested_at    TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS tv_series (
+    symbol      TEXT NOT NULL,
+    time        TEXT NOT NULL,
+    close       REAL,
+    source_file TEXT,
+    ingested_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (symbol, time)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tv_series_symbol ON tv_series(symbol);
+`)
 
 // Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)
 try {

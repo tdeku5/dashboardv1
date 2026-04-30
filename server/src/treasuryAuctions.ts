@@ -31,6 +31,8 @@ interface TreasuryApiRecord {
   allocationPercentage: string
   offeringAmount: string
   reopening: string
+  refCpiOnIssueDate: string
+  floatingRate: string
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -47,11 +49,17 @@ function parseDate(s: string | undefined | null): string | null {
   return s.slice(0, 10)
 }
 
+function classifySecurityType(r: TreasuryApiRecord): string {
+  if (r.refCpiOnIssueDate && r.refCpiOnIssueDate.trim() !== '') return 'TIPS'
+  if (r.floatingRate === 'Yes') return 'FRN'
+  return r.securityType ?? ''
+}
+
 function parseRecord(r: TreasuryApiRecord): ParsedAuction {
   return {
     cusip:                  r.cusip,
     auctionDate:            parseDate(r.auctionDate) ?? '',
-    securityType:           r.securityType ?? '',
+    securityType:           classifySecurityType(r),
     securityTerm:           r.securityTerm ?? '',
     issueDate:              parseDate(r.issueDate),
     maturityDate:           parseDate(r.maturityDate),
