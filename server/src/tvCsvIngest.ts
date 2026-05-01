@@ -47,6 +47,14 @@ const DROP_FOLDER = process.env.TV_DROP_FOLDER ?? path.join(os.homedir(), 'tradi
 const ARCHIVE_FOLDER = path.join(DROP_FOLDER, 'archive')
 const ERROR_FOLDER = path.join(DROP_FOLDER, 'errors')
 
+// ── Config ───────────────────────────────────────────────────────────────────
+
+// TradingView CSVs include a "today" bar even for sessions that haven't ticked
+// yet, copying the prior close. Default-on detection drops that duplicate tip
+// before it lands in tv_series. See docs in CLAUDE.md.
+const SKIP_STALE_TIPS =
+  (process.env.TV_INGEST_SKIP_STALE_TIPS ?? 'true').toLowerCase() !== 'false'
+
 // ── Prepared statements ──────────────────────────────────────────────────────
 
 const upsertStmt = db.prepare(`
@@ -176,6 +184,102 @@ function upsertSeriesRows(rows: SeriesRow[], sourceFile: string): void {
   })()
 }
 
+// ── Stale-tip detection ──────────────────────────────────────────────────────
+// Drop the absolute latest row per symbol when its close exactly equals the
+// next-most-recent prior close (either earlier in the same CSV, or already in
+// tv_series). Only the absolute tip is eligible — historical flat closes are
+// preserved.
+
+interface StaleTipSkip {
+  symbol: string
+  latestTime: string
+  latestClose: number
+  priorTime: string
+  priorClose: number
+}
+
+const findDbPriorStmt = db.prepare(`
+  SELECT time, close FROM tv_series
+  WHERE symbol = ?
+    AND CAST(time AS INTEGER) < CAST(? AS INTEGER)
+    AND close IS NOT NULL
+  ORDER BY CAST(time AS INTEGER) DESC, time DESC
+  LIMIT 1
+`)
+
+function formatStaleTime(t: string): string {
+  const n = Number(t)
+  if (Number.isFinite(n) && n > 1e9 && t.length <= 12) {
+    return new Date(n * 1000).toISOString().slice(0, 10)
+  }
+  return t
+}
+
+function detectStaleTips(rows: SeriesRow[]): { kept: SeriesRow[]; skips: StaleTipSkip[] } {
+  if (rows.length === 0) return { kept: rows, skips: [] }
+
+  const bySymbol = new Map<string, SeriesRow[]>()
+  for (const r of rows) {
+    const arr = bySymbol.get(r.symbol)
+    if (arr) arr.push(r)
+    else bySymbol.set(r.symbol, [r])
+  }
+
+  const skipKeys = new Set<string>() // `${symbol}|${time}`
+  const skips: StaleTipSkip[] = []
+
+  // Sort numerically. tv_series stores `time` as either a unix-epoch string or
+  // an ISO date — Number(date) yields NaN for ISO dates, so fall back to
+  // lexicographic compare in that case (which matches calendar order for ISO).
+  const cmpTime = (a: string, b: string): number => {
+    const na = Number(a), nb = Number(b)
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb
+    return a < b ? -1 : a > b ? 1 : 0
+  }
+
+  for (const [sym, arr] of bySymbol) {
+    let latest = arr[0]
+    let secondInCsv: SeriesRow | undefined
+    for (let i = 1; i < arr.length; i++) {
+      if (cmpTime(arr[i].time, latest.time) > 0) {
+        secondInCsv = latest
+        latest = arr[i]
+      } else if (cmpTime(arr[i].time, latest.time) < 0) {
+        if (!secondInCsv || cmpTime(arr[i].time, secondInCsv.time) > 0) {
+          secondInCsv = arr[i]
+        }
+      }
+    }
+
+    let priorTime: string | undefined
+    let priorClose: number | undefined
+    if (secondInCsv) {
+      priorTime = secondInCsv.time
+      priorClose = secondInCsv.close
+    }
+    const dbPrior = findDbPriorStmt.get(sym, latest.time) as { time: string; close: number } | undefined
+    if (dbPrior && (!priorTime || cmpTime(dbPrior.time, priorTime) > 0)) {
+      priorTime = dbPrior.time
+      priorClose = dbPrior.close
+    }
+
+    if (priorTime !== undefined && priorClose !== undefined && priorClose === latest.close) {
+      skips.push({
+        symbol: sym,
+        latestTime: latest.time,
+        latestClose: latest.close,
+        priorTime,
+        priorClose,
+      })
+      skipKeys.add(`${sym}|${latest.time}`)
+    }
+  }
+
+  if (skipKeys.size === 0) return { kept: rows, skips }
+  const kept = rows.filter((r) => !skipKeys.has(`${r.symbol}|${r.time}`))
+  return { kept, skips }
+}
+
 // ── File processing ──────────────────────────────────────────────────────────
 
 const processing = new Set<string>()
@@ -239,8 +343,28 @@ async function processFile(filePath: string): Promise<void> {
       upsertRows(ohlcvRows)
     }
 
-    if (seriesRows.length > 0) {
-      upsertSeriesRows(seriesRows, filename)
+    let seriesToWrite = seriesRows
+    if (SKIP_STALE_TIPS && seriesRows.length > 0) {
+      const { kept, skips } = detectStaleTips(seriesRows)
+      seriesToWrite = kept
+      if (skips.length > 0) {
+        const symbolList = skips.map((s) => s.symbol).join(', ')
+        console.log(
+          `[tv-ingest] Stale-tip skips: ${skips.length} symbols had a stale tip dropped → [${symbolList}]`
+        )
+        for (const s of skips) {
+          console.log(
+            `[tv-ingest] [stale-tip] ${s.symbol} ${formatStaleTime(s.latestTime)} ` +
+            `close=${s.latestClose} matches prior ${formatStaleTime(s.priorTime)} close=${s.priorClose} — skipping`
+          )
+        }
+      } else {
+        console.log('[tv-ingest] Stale-tip skips: 0')
+      }
+    }
+
+    if (seriesToWrite.length > 0) {
+      upsertSeriesRows(seriesToWrite, filename)
     }
 
     const countAfter = (db.prepare(
@@ -250,8 +374,8 @@ async function processFile(filePath: string): Promise<void> {
     const newRows = countAfter - countBefore
     const updatedRows = ohlcvRows.length - newRows
 
-    const totalRows = ohlcvRows.length + seriesRows.length
-    console.log(`[tv-ingest] Parsed ${ohlcvRows.length} rows. Primary OHLCV: ${symbol}. Series ingested: ${seriesTickers.length} tickers, ${seriesRows.length} data points`)
+    const totalRows = ohlcvRows.length + seriesToWrite.length
+    console.log(`[tv-ingest] Parsed ${ohlcvRows.length} rows. Primary OHLCV: ${symbol}. Series ingested: ${seriesTickers.length} tickers, ${seriesToWrite.length} data points`)
     console.log(`[tv-ingest] OHLCV: ${ohlcvRows.length} rows for ${symbol} ${timeframe}, ${newRows} new / ${updatedRows} updated`)
     logStmt.run(filename, symbol, timeframe, totalRows, 'success', null)
 
@@ -331,6 +455,12 @@ export function startTvCsvWatcher(): void {
   // Manual scan on startup + periodic poll (WSL /mnt/c/ fallback)
   scanFolder()
   pollTimer = setInterval(scanFolder, 10_000)
+
+  if (!SKIP_STALE_TIPS) {
+    console.warn(
+      '[tv-ingest] WARNING: TV_INGEST_SKIP_STALE_TIPS=false — duplicate "today" bars from TradingView CSVs will be ingested as-is.'
+    )
+  }
 
   console.log(`[tv-ingest] TV CSV watcher started, watching: ${DROP_FOLDER}`)
 }

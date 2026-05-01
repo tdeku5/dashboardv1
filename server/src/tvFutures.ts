@@ -114,32 +114,58 @@ interface RawSeriesRow {
   close: number
 }
 
-function getContractsForTimestamp(prefix: string, timestamp: string): RawSeriesRow[] {
-  return db.prepare(`
-    SELECT symbol, time, close FROM tv_series
-    WHERE symbol LIKE ? AND time = ?
-    AND close IS NOT NULL AND close > 0
-  `).all(`${prefix}%`, timestamp) as RawSeriesRow[]
+// Build a GLOB pattern that matches only legitimate contract symbols for a
+// given market (e.g. SR3M6, EURZ9). Excludes prefix collisions like EURUSD
+// because those don't end in <monthCode><yearDigits>.
+function buildContractGlob(
+  prefix: string,
+  cadence: 'monthly' | 'quarterly',
+  yearDigits: 1 | 2,
+): string {
+  const monthClass = cadence === 'quarterly' ? '[HMUZ]' : '[FGHJKMNQUVXZ]'
+  const yearMask = yearDigits === 1 ? '?' : '??'
+  return `${prefix}${monthClass}${yearMask}`
 }
 
-function getTimestampForDate(prefix: string, targetDate: string): string | null {
+// Per-contract latest row at-or-before `asOfTs`, single round trip via a
+// "latest row per group" join. Returns one row per matching contract symbol.
+function getLatestRowsAtOrBefore(globPattern: string, asOfTs: string): RawSeriesRow[] {
+  return db.prepare(`
+    SELECT t.symbol, t.time, t.close
+    FROM tv_series t
+    INNER JOIN (
+      SELECT symbol, MAX(CAST(time AS INTEGER)) AS max_time
+      FROM tv_series
+      WHERE symbol GLOB ?
+        AND CAST(time AS INTEGER) <= ?
+        AND close IS NOT NULL
+        AND close > 0
+      GROUP BY symbol
+    ) latest ON latest.symbol = t.symbol AND CAST(t.time AS INTEGER) = latest.max_time
+  `).all(globPattern, parseInt(asOfTs, 10)) as RawSeriesRow[]
+}
+
+function getTimestampForDate(globPattern: string, targetDate: string): string | null {
   const endOfDay = new Date(targetDate + 'T23:59:59Z').getTime() / 1000
   const startOfDay = new Date(targetDate + 'T00:00:00Z').getTime() / 1000
   const row = db.prepare(`
     SELECT time FROM tv_series
-    WHERE symbol LIKE ? AND CAST(time AS INTEGER) >= ? AND CAST(time AS INTEGER) <= ?
+    WHERE symbol GLOB ?
+      AND CAST(time AS INTEGER) >= ?
+      AND CAST(time AS INTEGER) <= ?
+    ORDER BY CAST(time AS INTEGER) DESC
     LIMIT 1
-  `).get(`${prefix}%`, startOfDay, endOfDay) as { time: string } | undefined
+  `).get(globPattern, startOfDay, endOfDay) as { time: string } | undefined
   return row?.time ?? null
 }
 
-function getDistinctTimestampsDesc(prefix: string, limit: number = 500): string[] {
+function getDistinctTimestampsDesc(globPattern: string, limit: number = 500): string[] {
   const rows = db.prepare(`
     SELECT DISTINCT time FROM tv_series
-    WHERE symbol LIKE ?
+    WHERE symbol GLOB ?
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
-  `).all(`${prefix}%`, limit) as { time: string }[]
+  `).all(globPattern, limit) as { time: string }[]
   return rows.map(r => r.time)
 }
 
@@ -214,8 +240,9 @@ export function getTvCurve(
     }
   }
 
-  const { tickerPrefix, yearDigits, marketKey: resolvedKey } = market
-  const timestamps = getDistinctTimestampsDesc(tickerPrefix)
+  const { tickerPrefix, yearDigits, cadence, marketKey: resolvedKey } = market
+  const globPattern = buildContractGlob(tickerPrefix, cadence, yearDigits)
+  const timestamps = getDistinctTimestampsDesc(globPattern)
 
   if (timestamps.length === 0) {
     return {
@@ -231,24 +258,33 @@ export function getTvCurve(
 
   let currentTs: string
   if (asOfDate) {
-    const ts = getTimestampForDate(tickerPrefix, asOfDate)
+    const ts = getTimestampForDate(globPattern, asOfDate)
     currentTs = ts ?? timestamps[0]
   } else {
     currentTs = timestamps[0]
   }
 
-  const currentDate = tsToDate(currentTs)
-  const currentRows = getContractsForTimestamp(tickerPrefix, currentTs)
+  // Per-contract latest at-or-before currentTs. Each contract uses its own
+  // most recent close — the curve can mix dates if some contracts ticked
+  // through and others got their stale tip removed.
+  const currentRows = getLatestRowsAtOrBefore(globPattern, currentTs)
   const currentCurve = buildCurveFromRows(currentRows, tickerPrefix, yearDigits, resolvedKey)
+  const currentMaxTs = currentRows.length > 0
+    ? String(Math.max(...currentRows.map(r => parseInt(r.time, 10))))
+    : currentTs
+  const currentDate = tsToDate(currentMaxTs)
 
   const lookbackTs = getNthPriorTimestamp(timestamps, currentTs, Math.max(0, lookbackDays - 1))
   let lookbackCurve: TvFuturesContract[] = []
   let lookbackDate = ''
 
   if (lookbackTs) {
-    lookbackDate = tsToDate(lookbackTs)
-    const lookbackRows = getContractsForTimestamp(tickerPrefix, lookbackTs)
+    const lookbackRows = getLatestRowsAtOrBefore(globPattern, lookbackTs)
     lookbackCurve = buildCurveFromRows(lookbackRows, tickerPrefix, yearDigits, resolvedKey)
+    const lookbackMaxTs = lookbackRows.length > 0
+      ? String(Math.max(...lookbackRows.map(r => parseInt(r.time, 10))))
+      : lookbackTs
+    lookbackDate = tsToDate(lookbackMaxTs)
   }
 
   // Filter expired contracts using the current as-of date for BOTH curves so the

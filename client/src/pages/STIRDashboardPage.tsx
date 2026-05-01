@@ -4749,10 +4749,10 @@ export function STIRDashboardPage() {
           </div>
           )}
         </div>
-        {activeView === 'strips' && country === 'US' && product === 'sofr' && stripContracts.length > 0 && (
+        {activeView === 'strips' && useStirStyling && stripContracts.length > 0 && (
           <section className={styles.spreadsDashboardFullWidth}>
             <div className={styles.spreadsDashboardHeader}>
-              <div className={styles.spreadsHeader}>SR3 CALENDAR SPREADS</div>
+              <div className={styles.spreadsHeader}>{activeMarket.root} CALENDAR SPREADS</div>
               <div className={styles.spreadLookbackControl}>
                 <label htmlFor="spreadLookback">t −</label>
                 <input
@@ -4772,8 +4772,11 @@ export function STIRDashboardPage() {
                 <span style={{ marginLeft: 16 }}>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
               )}
             </div>
-            <div className={styles.spreadsGrid}>
-              {spreadColumns.map((col) => (
+            <div
+              className={styles.spreadsGrid}
+              style={{ gridTemplateColumns: `repeat(${Math.max(1, spreadColumns.filter((c) => c.data.length > 0).length)}, 1fr)` }}
+            >
+              {spreadColumns.filter((c) => c.data.length > 0).map((col) => (
                 <div key={col.stride} className={styles.spreadColumn}>
                   <div className={styles.spreadColumnTitle}>{col.stride}m Spreads</div>
                   <div className={styles.spreadChartContainer}>
@@ -4857,7 +4860,7 @@ export function STIRDashboardPage() {
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <button className={styles.modalClose} onClick={() => setOpenSpread(null)} aria-label="Close">×</button>
             <h2 className={styles.modalTitle} style={{ color: '#22d3ee' }}>{openSpread.label}</h2>
-            <p className={styles.modalSubtitle}>3M SOFR · {openSpread.frontSymbol} − {openSpread.backSymbol}</p>
+            <p className={styles.modalSubtitle}>{activeMarket.title} · {openSpread.frontSymbol} − {openSpread.backSymbol}</p>
             <div className={styles.modalChartContainer}>
               {(spreadFrontHistory.loading || spreadBackHistory.loading) ? (
                 <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>

@@ -16,28 +16,36 @@ export interface GlobalCurveRow {
 
 interface ApiResponse {
   asOfDate: string
+  lookbackDate?: string
   tenors: GlobalCurveRow[]
+  currentTenors?: GlobalCurveRow[]
+  lookbackTenors?: GlobalCurveRow[]
 }
 
 export interface GlobalYieldCurveData {
   loading: boolean
   error: string | null
   asOfDate: string
-  tenors: GlobalCurveRow[]
+  lookbackDate: string
+  tenors: GlobalCurveRow[]            // alias of currentTenors for back-compat
+  currentTenors: GlobalCurveRow[]
+  lookbackTenors: GlobalCurveRow[]
 }
 
-export function useGlobalYieldCurves(): GlobalYieldCurveData {
+export function useGlobalYieldCurves(lookbackDays: number = 0): GlobalYieldCurveData {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState('')
-  const [tenors, setTenors] = useState<GlobalCurveRow[]>([])
+  const [lookbackDate, setLookbackDate] = useState('')
+  const [currentTenors, setCurrentTenors] = useState<GlobalCurveRow[]>([])
+  const [lookbackTenors, setLookbackTenors] = useState<GlobalCurveRow[]>([])
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     setError(null)
 
-    fetch('/api/global/yield-curves')
+    fetch(`/api/global/yield-curves?lookbackDays=${lookbackDays}`)
       .then(async (res) => {
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`)
@@ -46,7 +54,9 @@ export function useGlobalYieldCurves(): GlobalYieldCurveData {
       .then((json) => {
         if (cancelled) return
         setAsOfDate(json.asOfDate)
-        setTenors(json.tenors)
+        setLookbackDate(json.lookbackDate ?? '')
+        setCurrentTenors(json.currentTenors ?? json.tenors ?? [])
+        setLookbackTenors(json.lookbackTenors ?? [])
         setLoading(false)
       })
       .catch((err) => {
@@ -56,7 +66,15 @@ export function useGlobalYieldCurves(): GlobalYieldCurveData {
       })
 
     return () => { cancelled = true }
-  }, [])
+  }, [lookbackDays])
 
-  return { loading, error, asOfDate, tenors }
+  return {
+    loading,
+    error,
+    asOfDate,
+    lookbackDate,
+    tenors: currentTenors,
+    currentTenors,
+    lookbackTenors,
+  }
 }

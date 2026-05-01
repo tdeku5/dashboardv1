@@ -162,6 +162,12 @@ Multi-FY overlay charts (used in DTS, MTS):
 | `dts_fiscal_flows` | Daily Treasury Statement cumulative flows |
 | `dts_tax_deposits` | DTS withheld tax deposits |
 
+## Data pipeline notes
+
+`tv_series` ingest applies stale-tip detection: if the latest bar for a symbol in an incoming TradingView CSV has a `close` that exactly equals the prior bar's `close`, it's treated as an unfilled session bar and dropped. This handles TV's habit of writing a duplicate "today" bar for sessions that haven't opened yet (commonly seen on European/Canadian sovereigns when exporting during US morning). Toggle via `TV_INGEST_SKIP_STALE_TIPS` env var (default: true). Only the absolute latest row per symbol is eligible — deeper historical flat closes are preserved.
+
+A one-time migration (`server/src/migrations/cleanStaleTips.ts`, gated by `PRAGMA user_version`) cleans pre-existing stale tips already in `tv_series` on startup.
+
 ## External APIs Used
 
 | API | Base URL | Auth |

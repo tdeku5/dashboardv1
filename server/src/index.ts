@@ -38,6 +38,7 @@ import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
+import { runStaleTipCleanup } from './migrations/cleanStaleTips'
 
 dotenv.config({ path: '../.env' })
 
@@ -72,6 +73,13 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 async function startup(): Promise<void> {
+  // One-time data migrations (gated by PRAGMA user_version, safe to call every start)
+  try {
+    runStaleTipCleanup()
+  } catch (err) {
+    console.error('[startup] Stale-tip cleanup error:', err)
+  }
+
   if (isDatabaseEmpty()) {
     console.log('[startup] Database is empty — running initial fetch (this may take ~1 min)…')
     await fetchAllSeries({ force: true })

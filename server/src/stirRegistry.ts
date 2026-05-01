@@ -9,6 +9,7 @@ export interface StirMarket {
   marketKey: MarketKey
   country: CountryCode
   displayName: string
+  shortName: string          // e.g. "SOFR", "SONIA", "EURIBOR" — for compact column headers
   rateLabel: string          // e.g. "CURRENT EFFR", "CURRENT BANK RATE"
   tickerPrefix: string
   cadence: 'monthly' | 'quarterly'
@@ -22,6 +23,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'FF',
     country: 'US',
     displayName: 'Fed Funds',
+    shortName: 'Fed Funds',
     rateLabel: 'CURRENT EFFR',
     tickerPrefix: 'FF',
     cadence: 'monthly',
@@ -33,6 +35,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'SR3',
     country: 'US',
     displayName: '3M SOFR',
+    shortName: 'SOFR',
     rateLabel: 'CURRENT EFFR',
     tickerPrefix: 'SR3',
     cadence: 'quarterly',
@@ -44,6 +47,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'SO3',
     country: 'UK',
     displayName: '3M SONIA',
+    shortName: 'SONIA',
     rateLabel: 'CURRENT SONIA',
     tickerPrefix: 'SO3',
     cadence: 'quarterly',
@@ -55,6 +59,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'EUR',
     country: 'EU',
     displayName: '3M EURIBOR',
+    shortName: 'EURIBOR',
     rateLabel: 'CURRENT EURIBOR',
     tickerPrefix: 'EUR',
     cadence: 'quarterly',
@@ -66,6 +71,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'CRA',
     country: 'CAD',
     displayName: '3M CORRA',
+    shortName: 'CORRA',
     rateLabel: 'CURRENT CORRA',
     tickerPrefix: 'CRA',
     cadence: 'quarterly',
@@ -77,6 +83,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'TOA3',
     country: 'JPY',
     displayName: '3M TONA',
+    shortName: 'TONA',
     rateLabel: 'CURRENT TONA',
     tickerPrefix: 'TOA3',
     cadence: 'quarterly',
@@ -88,6 +95,7 @@ export const STIR_MARKETS: StirMarket[] = [
     marketKey: 'AUS',
     country: 'AUS',
     displayName: '90D Bank Bill',
+    shortName: 'AU Bills',
     rateLabel: 'CURRENT IOCR',
     tickerPrefix: 'AUS',
     cadence: 'quarterly',
