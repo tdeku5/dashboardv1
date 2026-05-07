@@ -33,6 +33,7 @@ import styles from './STIRDashboardPage.module.css'
 const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
 import { CountryCurvePage } from './CountryCurvePage'
 import { GlobalRatesPage } from './GlobalRatesPage'
+import { CrudeOilPage } from './CrudeOilPage'
 
 type ViewTab = 'strips' | 'pricing' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
 
@@ -53,6 +54,12 @@ const COMMODITY_CATEGORIES: ReadonlyArray<{ key: CommodityCategory; label: strin
   { key: 'energy', label: 'ENERGY' },
   { key: 'ags',    label: 'AGS' },
   { key: 'softs',  label: 'SOFTS' },
+]
+
+type EnergyProduct = 'crude-oil'
+
+const ENERGY_PRODUCTS: ReadonlyArray<{ key: EnergyProduct; label: string }> = [
+  { key: 'crude-oil', label: 'CRUDE OIL' },
 ]
 
 type ProductKey = 'fedfunds' | 'sofr'
@@ -851,6 +858,7 @@ export function STIRDashboardPage() {
   const [activeView, setActiveView] = useState<ViewTab>('pricing')
   const [country, setCountry] = useState<CountryCode>('US')
   const [commodityCategory, setCommodityCategory] = useState<CommodityCategory>('energy')
+  const [energyProduct, setEnergyProduct] = useState<EnergyProduct>('crude-oil')
   const viewTabs = useMemo(() => getViewTabs(country), [country])
 
   // Fall back to first tab if current tab is no longer visible for this country
@@ -2614,9 +2622,20 @@ export function STIRDashboardPage() {
               value={commodityCategory}
               onChange={setCommodityCategory}
             />
-            <div className={styles.comingSoon}>
-              {COMMODITY_CATEGORIES.find((c) => c.key === commodityCategory)?.label} models coming soon
-            </div>
+            {commodityCategory === 'energy' ? (
+              <>
+                <AssetSubRibbon
+                  items={ENERGY_PRODUCTS}
+                  value={energyProduct}
+                  onChange={setEnergyProduct}
+                />
+                {energyProduct === 'crude-oil' && <CrudeOilPage />}
+              </>
+            ) : (
+              <div className={styles.comingSoon}>
+                {COMMODITY_CATEGORIES.find((c) => c.key === commodityCategory)?.label} models coming soon
+              </div>
+            )}
           </>
         )}
 

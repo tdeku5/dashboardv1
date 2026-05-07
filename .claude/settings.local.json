@@ -278,7 +278,9 @@
       "Bash(npx --prefix client tsc --noEmit -p client/tsconfig.json)",
       "Bash(echo \"---exit: $?\")",
       "Bash(cp /home/tdeku/dashboardv1/server/src/index.ts /tmp/_index_full.ts)",
-      "Bash(cp /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx /tmp/_stir_full.tsx)"
+      "Bash(cp /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx /tmp/_stir_full.tsx)",
+      "Bash(cp /tmp/_index_full.ts /home/tdeku/dashboardv1/server/src/index.ts)",
+      "Bash(cp /tmp/_stir_full.tsx /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx)"
     ]
   },
   "sandbox": {
