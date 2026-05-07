@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -17,6 +17,8 @@ import {
 } from 'recharts'
 import { useTvYieldCurve } from '../hooks/useTvYieldCurve'
 import { buildSpreadChartData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
+import { getCellColor } from '../lib/cellColor'
+import { HIST_LOOKBACKS, histLookbackChange } from '../lib/historicalChanges'
 import styles from './STIRDashboardPage.module.css'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -153,6 +155,38 @@ export function CountryCurvePage({ pageKey }: Props) {
     if (tenors.length === 0) return 30
     return tenors[tenors.length - 1].years
   }, [tenors])
+
+  // ── Historical Yield Changes (per-tenor × lookback heatmap) ─────────
+  const historicalChanges = useMemo(() => {
+    const rows = tenors.map(t => {
+      const series = data[t.key] || []
+      const cells = HIST_LOOKBACKS.map(lb => ({
+        lookback: lb.label,
+        bps: histLookbackChange(series, lb.tradingDays),
+      }))
+      return { rowLabel: t.label, cells }
+    })
+
+    const colMaxAbs: Record<string, number> = {}
+    for (const lb of HIST_LOOKBACKS) {
+      let max = 0
+      for (const r of rows) {
+        const cell = r.cells.find(c => c.lookback === lb.label)
+        if (cell?.bps != null && Number.isFinite(cell.bps)) {
+          const a = Math.abs(cell.bps)
+          if (a > max) max = a
+        }
+      }
+      colMaxAbs[lb.label] = max
+    }
+
+    let latestDate = ''
+    for (const t of tenors) {
+      const s = data[t.key] || []
+      if (s.length > 0 && s[s.length - 1].date > latestDate) latestDate = s[s.length - 1].date
+    }
+    return { rows, colMaxAbs, latestDate }
+  }, [data, tenors])
 
   // ── Yield boxes ─────────────────────────────────────────────────────
   const currentYields = useMemo(() => {
@@ -349,6 +383,41 @@ export function CountryCurvePage({ pageKey }: Props) {
           </>
         )}
       </div>
+
+      {/* ═══ Nominal Yields — Historical Changes Heatmap ═══ */}
+      {!loading && historicalChanges.rows.length > 0 && (
+        <div className={styles.ustDashboard}>
+          <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>NOMINAL YIELDS</div>
+          <div className={styles.ustYcDates}>
+            {'●'} AS OF: {historicalChanges.latestDate || '—'}
+          </div>
+          <div className={styles.histChangesGrid}>
+            <div className={styles.histChangesHeaderCell}></div>
+            {HIST_LOOKBACKS.map(lb => (
+              <div key={lb.label} className={styles.histChangesHeaderCell}>{lb.label}</div>
+            ))}
+            {historicalChanges.rows.map(row => (
+              <Fragment key={row.rowLabel}>
+                <div className={styles.histChangesRowLabel}>{row.rowLabel}</div>
+                {row.cells.map(cell => {
+                  const bg = getCellColor(cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                  return (
+                    <div
+                      key={`${row.rowLabel}-${cell.lookback}`}
+                      className={styles.histChangesCell}
+                      style={bg ? { background: bg } : undefined}
+                    >
+                      {cell.bps != null && Number.isFinite(cell.bps)
+                        ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                        : '—'}
+                    </div>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ═══ Nominal Yields Dashboard ═══ */}
       {!loading && (

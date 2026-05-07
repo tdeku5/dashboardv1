@@ -16,18 +16,15 @@ export interface GlobalCalendarSpreadsData {
   loading: boolean
   error: string | null
   asOfDate: string
-  lookbackDate: string
   countries: GlobalSpreadCountry[]
   strides: Record<number, GlobalSpreadRow[]>
-  lookbackStrides: Record<number, GlobalSpreadRow[]>
 }
 
 interface ApiResponse {
   asOfDate: string
-  lookbackDate?: string
+  lookbackDays: number
   countries: GlobalSpreadCountry[]
   strides: Record<number, GlobalSpreadRow[]>
-  lookbackStrides?: Record<number, GlobalSpreadRow[]>
 }
 
 const EMPTY_STRIDES: Record<number, GlobalSpreadRow[]> = { 1: [], 2: [], 3: [], 4: [] }
@@ -36,10 +33,8 @@ export function useGlobalCalendarSpreads(lookbackDays: number = 0): GlobalCalend
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState('')
-  const [lookbackDate, setLookbackDate] = useState('')
   const [countries, setCountries] = useState<GlobalSpreadCountry[]>([])
   const [strides, setStrides] = useState<Record<number, GlobalSpreadRow[]>>(EMPTY_STRIDES)
-  const [lookbackStrides, setLookbackStrides] = useState<Record<number, GlobalSpreadRow[]>>(EMPTY_STRIDES)
 
   useEffect(() => {
     let cancelled = false
@@ -55,10 +50,8 @@ export function useGlobalCalendarSpreads(lookbackDays: number = 0): GlobalCalend
       .then((json) => {
         if (cancelled) return
         setAsOfDate(json.asOfDate)
-        setLookbackDate(json.lookbackDate ?? '')
         setCountries(json.countries)
         setStrides(json.strides)
-        setLookbackStrides(json.lookbackStrides ?? EMPTY_STRIDES)
         setLoading(false)
       })
       .catch((err) => {
@@ -70,5 +63,5 @@ export function useGlobalCalendarSpreads(lookbackDays: number = 0): GlobalCalend
     return () => { cancelled = true }
   }, [lookbackDays])
 
-  return { loading, error, asOfDate, lookbackDate, countries, strides, lookbackStrides }
+  return { loading, error, asOfDate, countries, strides }
 }

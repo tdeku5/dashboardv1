@@ -77,41 +77,28 @@ globalRouter.get('/yield-curves', (req: Request, res: Response) => {
   try {
     const lookbackDays = Math.max(0, parseInt(String(req.query.lookbackDays ?? '0'), 10) || 0)
 
-    const buildTenors = (lookback: number): { rows: Record<string, unknown>[]; asOfDate: string } => {
-      const rows: Record<string, unknown>[] = []
-      let asOfDate = ''
+    const rows: Record<string, unknown>[] = []
+    let asOfDate = ''
 
-      for (const spec of TENOR_SPECS) {
-        const row: Record<string, unknown> = { tenor: spec.tenor, years: spec.years }
-        let hasAny = false
+    for (const spec of TENOR_SPECS) {
+      const row: Record<string, unknown> = { tenor: spec.tenor, years: spec.years }
+      let hasAny = false
 
-        for (const ck of COUNTRY_KEYS) {
-          const symbol = spec[ck as keyof TenorSpec] as string | undefined
-          if (!symbol) continue
-          const point = getTvYieldAtLookback(symbol, lookback)
-          if (point) {
-            row[RESPONSE_KEYS[ck]] = point.value
-            hasAny = true
-            if (!asOfDate || point.date > asOfDate) asOfDate = point.date
-          }
+      for (const ck of COUNTRY_KEYS) {
+        const symbol = spec[ck as keyof TenorSpec] as string | undefined
+        if (!symbol) continue
+        const point = getTvYieldAtLookback(symbol, lookbackDays)
+        if (point) {
+          row[RESPONSE_KEYS[ck]] = point.value
+          hasAny = true
+          if (!asOfDate || point.date > asOfDate) asOfDate = point.date
         }
-
-        if (hasAny) rows.push(row)
       }
 
-      return { rows, asOfDate }
+      if (hasAny) rows.push(row)
     }
 
-    const current = buildTenors(0)
-    const lookback = lookbackDays > 0 ? buildTenors(lookbackDays) : { rows: [], asOfDate: '' }
-
-    res.json({
-      asOfDate: current.asOfDate,
-      lookbackDate: lookback.asOfDate,
-      tenors: current.rows,            // back-compat field
-      currentTenors: current.rows,
-      lookbackTenors: lookback.rows,
-    })
+    res.json({ asOfDate, lookbackDays, tenors: rows })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected global yield curve error'
     console.error('[global] Yield curves error:', msg)
@@ -154,56 +141,42 @@ globalRouter.get('/forward-curves', (req: Request, res: Response) => {
   try {
     const lookbackDays = Math.max(0, parseInt(String(req.query.lookbackDays ?? '0'), 10) || 0)
 
+    // getTvCurve always returns currentCurve = today; lookbackCurve = N back
+    // (when N>0). For date-shift mode pick the snapshot at the resolved date.
     const curves = FORWARD_MARKETS.map(fm => {
       const c = getTvCurve(fm.marketKey, Math.max(1, lookbackDays))
-      return {
-        responseKey: fm.responseKey,
-        marketKey: fm.marketKey,
-        currentContracts: c.currentCurve,
-        lookbackContracts: c.lookbackCurve,
-        currentDate: c.currentDate,
-        lookbackDate: c.lookbackDate,
-      }
+      const contracts = lookbackDays > 0 ? c.lookbackCurve : c.currentCurve
+      const asOfDate  = lookbackDays > 0 ? c.lookbackDate : c.currentDate
+      return { responseKey: fm.responseKey, marketKey: fm.marketKey, contracts, asOfDate }
     })
 
-    const asOfDate = curves.find(c => c.currentDate)?.currentDate ?? ''
-    const lookbackDate = lookbackDays > 0 ? (curves.find(c => c.lookbackDate)?.lookbackDate ?? '') : ''
+    const asOfDate = curves.find(c => c.asOfDate)?.asOfDate ?? ''
 
     const sr3 = curves.find(c => c.marketKey === 'SR3')
-    if (!sr3 || sr3.currentContracts.length === 0) {
-      res.json({ asOfDate, lookbackDate, contracts: [], currentContracts: [], lookbackContracts: [] })
+    if (!sr3 || sr3.contracts.length === 0) {
+      res.json({ asOfDate, lookbackDays, contracts: [] })
       return
     }
-    const front = sr3.currentContracts[0]
+    const front = sr3.contracts[0]
     const axis = buildContractAxis(front.monthCode, front.year, 2030)
 
-    type Contract = (typeof sr3.currentContracts)[number]
+    type Contract = (typeof sr3.contracts)[number]
     const findByCode = (contracts: Contract[], code: string): Contract | undefined => {
       const monthCode = code[0]
       const yearDigit = parseInt(code.slice(1), 10)
       return contracts.find(c => c.monthCode === monthCode && c.year % 10 === yearDigit)
     }
 
-    const buildRows = (which: 'currentContracts' | 'lookbackContracts') =>
-      axis.map(code => {
-        const row: Record<string, string | number | null> = { code }
-        for (const c of curves) {
-          const ct = findByCode(c[which], code)
-          row[c.responseKey] = ct?.impliedRate != null ? ct.impliedRate : null
-        }
-        return row
-      })
-
-    const contracts = buildRows('currentContracts')
-    const lookbackContracts = lookbackDays > 0 ? buildRows('lookbackContracts') : []
-
-    res.json({
-      asOfDate,
-      lookbackDate,
-      contracts,                  // back-compat
-      currentContracts: contracts,
-      lookbackContracts,
+    const contracts = axis.map(code => {
+      const row: Record<string, string | number | null> = { code }
+      for (const c of curves) {
+        const ct = findByCode(c.contracts, code)
+        row[c.responseKey] = ct?.impliedRate != null ? ct.impliedRate : null
+      }
+      return row
     })
+
+    res.json({ asOfDate, lookbackDays, contracts })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected global forward curve error'
     console.error('[global] Forward curves error:', msg)
@@ -223,13 +196,9 @@ globalRouter.get('/calendar-spreads', (req: Request, res: Response) => {
 
     const curves = FORWARD_MARKETS.map(fm => {
       const c = getTvCurve(fm.marketKey, Math.max(1, lookbackDays))
-      return {
-        marketKey: fm.marketKey,
-        currentContracts: c.currentCurve,
-        lookbackContracts: c.lookbackCurve,
-        currentDate: c.currentDate,
-        lookbackDate: c.lookbackDate,
-      }
+      const contracts = lookbackDays > 0 ? c.lookbackCurve : c.currentCurve
+      const asOfDate  = lookbackDays > 0 ? c.lookbackDate : c.currentDate
+      return { marketKey: fm.marketKey, contracts, asOfDate }
     })
 
     const countries = FORWARD_MARKETS.map(fm => {
@@ -241,49 +210,41 @@ globalRouter.get('/calendar-spreads', (req: Request, res: Response) => {
       }
     })
 
-    const asOfDate = curves.find(c => c.currentDate)?.currentDate ?? ''
-    const lookbackDate = lookbackDays > 0 ? (curves.find(c => c.lookbackDate)?.lookbackDate ?? '') : ''
-
+    const asOfDate = curves.find(c => c.asOfDate)?.asOfDate ?? ''
     const shortLabel = (c: { monthCode: string; year: number }) => `${c.monthCode}${c.year % 10}`
 
-    type Contract = (typeof curves)[number]['currentContracts'][number]
-    const buildStrides = (which: 'currentContracts' | 'lookbackContracts') => {
-      const out: Record<number, Array<Record<string, string | number>>> = {}
-      for (const stride of SPREAD_STRIDES) {
-        const maxRows = Math.max(0, ...curves.map(c => c[which].length - stride))
-        const rows: Array<Record<string, string | number>> = []
-        for (let i = 0; i < maxRows; i++) {
-          const row: Record<string, string | number> = { position: i + 1, label: '' }
-          const sr3 = curves.find(c => c.marketKey === 'SR3')
-          if (sr3 && sr3[which].length > i + stride) {
-            row.label = `${shortLabel(sr3[which][i])}/${shortLabel(sr3[which][i + stride])}`
-          } else {
-            const fallback = curves.find(c => c[which].length > i + stride)
-            if (fallback) {
-              row.label = `${shortLabel(fallback[which][i])}/${shortLabel(fallback[which][i + stride])}`
-            }
+    type Contract = (typeof curves)[number]['contracts'][number]
+    const strides: Record<number, Array<Record<string, string | number>>> = {}
+    for (const stride of SPREAD_STRIDES) {
+      const maxRows = Math.max(0, ...curves.map(c => c.contracts.length - stride))
+      const rows: Array<Record<string, string | number>> = []
+      for (let i = 0; i < maxRows; i++) {
+        const row: Record<string, string | number> = { position: i + 1, label: '' }
+        const sr3 = curves.find(c => c.marketKey === 'SR3')
+        if (sr3 && sr3.contracts.length > i + stride) {
+          row.label = `${shortLabel(sr3.contracts[i])}/${shortLabel(sr3.contracts[i + stride])}`
+        } else {
+          const fallback = curves.find(c => c.contracts.length > i + stride)
+          if (fallback) {
+            row.label = `${shortLabel(fallback.contracts[i])}/${shortLabel(fallback.contracts[i + stride])}`
           }
-          for (const c of curves) {
-            const arr: Contract[] = c[which]
-            if (arr.length > i + stride) {
-              const front = arr[i]
-              const back = arr[i + stride]
-              if (front.impliedRate != null && back.impliedRate != null) {
-                row[c.marketKey] = +(((back.impliedRate - front.impliedRate) * 100).toFixed(4))
-              }
-            }
-          }
-          rows.push(row)
         }
-        out[stride] = rows
+        for (const c of curves) {
+          const arr: Contract[] = c.contracts
+          if (arr.length > i + stride) {
+            const front = arr[i]
+            const back = arr[i + stride]
+            if (front.impliedRate != null && back.impliedRate != null) {
+              row[c.marketKey] = +(((back.impliedRate - front.impliedRate) * 100).toFixed(4))
+            }
+          }
+        }
+        rows.push(row)
       }
-      return out
+      strides[stride] = rows
     }
 
-    const strides = buildStrides('currentContracts')
-    const lookbackStrides = lookbackDays > 0 ? buildStrides('lookbackContracts') : { 1: [], 2: [], 3: [], 4: [] }
-
-    res.json({ asOfDate, lookbackDate, countries, strides, lookbackStrides })
+    res.json({ asOfDate, lookbackDays, countries, strides })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected global calendar spreads error'
     console.error('[global] Calendar spreads error:', msg)
@@ -450,6 +411,257 @@ globalRouter.get('/yield-changes', (_req: Request, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected global yield changes error'
     console.error('[global] Yield changes error:', msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
+// ── GET /api/global/rates-summary ────────────────────────────────────────────
+// Per-country at-a-glance: yield Δ at 2Y/5Y/10Y/30Y, 2s10s + 10s30s curve
+// regime, next CB move, terminal − OCR, front − 12m. Two configurable lookbacks
+// drive the yield deltas and the regime classification respectively.
+
+type CurveRegime =
+  | 'Bull Steepener' | 'Bear Steepener' | 'Steepener Twist'
+  | 'Bull Flattener' | 'Bear Flattener' | 'Flattener Twist'
+  | 'Neutral'
+
+// Mirrors client/src/lib/curveRegime.ts; inlined to keep server independent.
+function classifyRegime(shortChange: number, longChange: number, spreadChange: number): CurveRegime {
+  if (spreadChange > 0) {
+    if (shortChange < 0 && longChange < 0) return 'Bull Steepener'
+    if (shortChange > 0 && longChange > 0) return 'Bear Steepener'
+    return 'Steepener Twist'
+  }
+  if (spreadChange < 0) {
+    if (shortChange < 0 && longChange < 0) return 'Bull Flattener'
+    if (shortChange > 0 && longChange > 0) return 'Bear Flattener'
+    return 'Flattener Twist'
+  }
+  return 'Neutral'
+}
+
+interface SummaryCountry {
+  country: 'US' | 'UK' | 'EU' | 'CA' | 'JP' | 'AU'
+  yieldPrefix: string   // tv_series prefix for the country's sovereign curve
+  stirMarketKey: string // STIR market key for the country
+}
+
+const SUMMARY_COUNTRIES: SummaryCountry[] = [
+  { country: 'US', yieldPrefix: 'US', stirMarketKey: 'SR3' },
+  { country: 'UK', yieldPrefix: 'GB', stirMarketKey: 'SO3' },
+  { country: 'EU', yieldPrefix: 'DE', stirMarketKey: 'EUR' },  // Bunds = EU benchmark
+  { country: 'CA', yieldPrefix: 'CA', stirMarketKey: 'CRA' },
+  { country: 'JP', yieldPrefix: 'JP', stirMarketKey: 'TOA3' },
+  { country: 'AU', yieldPrefix: 'AU', stirMarketKey: 'AUS' },
+]
+
+const YIELD_LOOKBACK_DAYS: Record<string, number> = {
+  '1d': 1, '5d': 5, '1m': 21, '3m': 63, '6m': 126,
+  // 'ytd' is special-cased in resolveYieldLookback
+}
+
+const REGIME_LOOKBACK_DAYS: Record<string, number> = {
+  '20d': 20, '60d': 60, '200d': 200,
+}
+
+// Returns the close on-or-before the given calendar date for a tv_series symbol.
+// Used for YTD-style lookups (date-based rather than N-back).
+function getTvYieldOnOrBefore(symbol: string, isoDate: string): { value: number; date: string } | null {
+  const cutoffTs = Math.floor(new Date(`${isoDate}T23:59:59Z`).getTime() / 1000)
+  const row = db.prepare(`
+    SELECT time, close FROM tv_series
+    WHERE symbol = ? AND close IS NOT NULL AND CAST(time AS INTEGER) <= ?
+    ORDER BY CAST(time AS INTEGER) DESC
+    LIMIT 1
+  `).get(symbol, cutoffTs) as { time: string; close: number } | undefined
+  if (!row) return null
+  return { value: row.close, date: tsToDate(parseInt(row.time, 10)) }
+}
+
+function getYieldPair(
+  symbol: string,
+  yieldLookback: string,
+): { current: { value: number; date: string }; lookback: { value: number; date: string } } | null {
+  const current = getTvYieldAtLookback(symbol, 0)
+  if (!current) return null
+
+  if (yieldLookback === 'ytd') {
+    const year = parseInt(current.date.slice(0, 4), 10)
+    // The Atlanta-Fed-style "first trading day of year" — use the most recent
+    // close at or before Jan 1, then the next sync trading day. Simpler:
+    // treat the lookback as the close ON or before the first business day
+    // of the current year.
+    const ytdAnchor = `${year - 1}-12-31`
+    const lookback = getTvYieldOnOrBefore(symbol, ytdAnchor)
+    if (!lookback) return null
+    return { current, lookback }
+  }
+
+  const days = YIELD_LOOKBACK_DAYS[yieldLookback] ?? 1
+  const lookback = getTvYieldAtLookback(symbol, days)
+  if (!lookback) return null
+  return { current, lookback }
+}
+
+function getDff(): number | null {
+  const row = db.prepare(`
+    SELECT value FROM series_observations
+    WHERE series_id = 'DFF' AND value IS NOT NULL
+    ORDER BY date DESC
+    LIMIT 1
+  `).get() as { value: number } | undefined
+  return row?.value ?? null
+}
+
+function getAnchorRate(stirMarketKey: string): number | null {
+  const market = getMarket(stirMarketKey)
+  if (!market) return null
+  if (market.anchorSource.type === 'static') return market.anchorSource.value
+  if (market.anchorSource.seriesId === 'DFF') return getDff()
+  // Other FRED-anchored markets aren't expected today; fall through to null.
+  return null
+}
+
+interface TerminalContractPick { impliedRate: number | null }
+
+function findTerminalContract(contracts: TerminalContractPick[]): TerminalContractPick | null {
+  if (contracts.length === 0) return null
+  if (contracts.length < 3) return contracts[contracts.length - 1]
+
+  const rate = (i: number) => contracts[i].impliedRate
+  const r0 = rate(0), r1 = rate(1)
+  if (r0 == null || r1 == null) return contracts[contracts.length - 1]
+
+  let baseDirection = Math.sign(r1 - r0)
+  let baseIdx = 0
+
+  if (baseDirection === 0) {
+    for (let i = 2; i < contracts.length; i++) {
+      const a = rate(i), b = rate(i - 1)
+      if (a == null || b == null) continue
+      const dir = Math.sign(a - b)
+      if (dir !== 0) { baseDirection = dir; baseIdx = i - 1; break }
+    }
+    if (baseDirection === 0) return contracts[contracts.length - 1]
+  }
+
+  for (let i = baseIdx + 1; i < contracts.length; i++) {
+    const a = rate(i), b = rate(i - 1)
+    if (a == null || b == null) continue
+    const dir = Math.sign(a - b)
+    if (dir !== 0 && dir !== baseDirection) return contracts[i - 1]
+  }
+  return contracts[contracts.length - 1]
+}
+
+interface SummaryRow {
+  country: string
+  delta2Y: number | null
+  delta5Y: number | null
+  delta10Y: number | null
+  delta30Y: number | null
+  regime2s10s: CurveRegime | null
+  regime10s30s: CurveRegime | null
+  nextMove: 'HIKE' | 'CUT' | 'UNCH' | null
+  terminalMinusOcr: number | null
+  frontMinus12m: number | null
+}
+
+globalRouter.get('/rates-summary', (req: Request, res: Response) => {
+  try {
+    const yieldLookback = String(req.query.yieldLookback ?? '1d').toLowerCase()
+    const regimeLookback = String(req.query.regimeLookback ?? '20d').toLowerCase()
+    const regimeDays = REGIME_LOOKBACK_DAYS[regimeLookback] ?? 20
+
+    let asOfDate = ''
+    let yieldLookbackDate = ''
+    let regimeLookbackDate = ''
+
+    const rows: SummaryRow[] = SUMMARY_COUNTRIES.map(({ country, yieldPrefix, stirMarketKey }) => {
+      // ── Yield deltas ──────────────────────────────────────────────────
+      const tenorPair = (tenorSuffix: '02Y' | '05Y' | '10Y' | '30Y'): number | null => {
+        const pair = getYieldPair(`${yieldPrefix}${tenorSuffix}`, yieldLookback)
+        if (!pair) return null
+        if (pair.current.date > asOfDate) asOfDate = pair.current.date
+        if (pair.lookback.date > yieldLookbackDate) yieldLookbackDate = pair.lookback.date
+        return +((pair.current.value - pair.lookback.value) * 100).toFixed(2)
+      }
+      const delta2Y  = tenorPair('02Y')
+      const delta5Y  = tenorPair('05Y')
+      const delta10Y = tenorPair('10Y')
+      const delta30Y = tenorPair('30Y')
+
+      // ── Curve regimes (own lookback window, independent of yield delta) ─
+      const regimePair = (
+        shortSuffix: '02Y' | '10Y',
+        longSuffix: '10Y' | '30Y',
+      ): CurveRegime | null => {
+        const shortNow = getTvYieldAtLookback(`${yieldPrefix}${shortSuffix}`, 0)
+        const longNow  = getTvYieldAtLookback(`${yieldPrefix}${longSuffix}`,  0)
+        const shortPrev = getTvYieldAtLookback(`${yieldPrefix}${shortSuffix}`, regimeDays)
+        const longPrev  = getTvYieldAtLookback(`${yieldPrefix}${longSuffix}`,  regimeDays)
+        if (!shortNow || !longNow || !shortPrev || !longPrev) return null
+        if (shortPrev.date > regimeLookbackDate) regimeLookbackDate = shortPrev.date
+        const shortChange = shortNow.value - shortPrev.value
+        const longChange  = longNow.value  - longPrev.value
+        const spreadChange = (longNow.value - shortNow.value) - (longPrev.value - shortPrev.value)
+        return classifyRegime(shortChange, longChange, spreadChange)
+      }
+      const regime2s10s  = regimePair('02Y', '10Y')
+      const regime10s30s = regimePair('10Y', '30Y')
+
+      // ── STIR-derived columns ──────────────────────────────────────────
+      const curve = getTvCurve(stirMarketKey, 1)
+      const contracts = curve.currentCurve
+
+      // Next move: front two contracts. Front rate > next rate → cuts priced
+      // between now and the next CB meeting; front < next → hikes priced.
+      let nextMove: 'HIKE' | 'CUT' | 'UNCH' | null = null
+      if (contracts.length >= 2 && contracts[0].impliedRate != null && contracts[1].impliedRate != null) {
+        const diffBps = (contracts[0].impliedRate - contracts[1].impliedRate) * 100
+        if (diffBps > 0) nextMove = 'CUT'
+        else if (diffBps < 0) nextMove = 'HIKE'
+        else nextMove = 'UNCH'
+      }
+
+      // Terminal − OCR: terminal contract's implied rate minus the country's
+      // anchor rate. anchorSource is in registry; DFF is fetched live for US.
+      const terminal = findTerminalContract(contracts)
+      const anchor = getAnchorRate(stirMarketKey)
+      const terminalMinusOcr = (terminal?.impliedRate != null && anchor != null)
+        ? +((terminal.impliedRate - anchor) * 100).toFixed(2)
+        : null
+
+      // Front − 12m: rate priced 12m forward minus the front rate. Positive
+      // means the curve is rising forward (hikes priced over the next year),
+      // negative means cuts priced. Same sign convention as the yield-Δ and
+      // Terminal−OCR columns: positive = bearish for fixed income.
+      let frontMinus12m: number | null = null
+      if (contracts.length >= 5 && contracts[0].impliedRate != null && contracts[4].impliedRate != null) {
+        frontMinus12m = +((contracts[4].impliedRate - contracts[0].impliedRate) * 100).toFixed(2)
+      }
+
+      return {
+        country,
+        delta2Y, delta5Y, delta10Y, delta30Y,
+        regime2s10s, regime10s30s,
+        nextMove,
+        terminalMinusOcr,
+        frontMinus12m,
+      }
+    })
+
+    res.json({
+      asOfDate,
+      yieldLookbackDate,
+      regimeLookbackDate,
+      yieldLookback,
+      regimeLookback,
+      rows,
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unexpected rates-summary error'
+    console.error('[global] Rates summary error:', msg)
     res.status(500).json({ error: msg })
   }
 })

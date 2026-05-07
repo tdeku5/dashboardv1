@@ -151,6 +151,7 @@ export const ALL_ONS_SERIES: Array<{ cdid: string; datasetId: string }> = [
   { cdid: 'D7G7', datasetId: 'mm23' },   // CPI All Items YoY %
   { cdid: 'D7OE', datasetId: 'mm23' },   // CPI All Items MoM %
   { cdid: 'DKO8', datasetId: 'mm23' },   // Core CPI YoY %
+  { cdid: 'DKC6', datasetId: 'mm23' },   // Core CPI index (excl. energy/food/alcohol/tobacco)
   { cdid: 'D7G8', datasetId: 'mm23' },   // CPI Food YoY %
   { cdid: 'D7G9', datasetId: 'mm23' },   // CPI Alcohol & tobacco YoY %
   { cdid: 'D7GA', datasetId: 'mm23' },   // CPI Clothing YoY %

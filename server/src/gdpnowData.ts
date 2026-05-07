@@ -65,6 +65,17 @@ function getNextQuarter(quarter: string): string {
   return `Q${q} ${y}`
 }
 
+// Chronological comparator. Plain string sort orders Q1 2026 < Q2 2014 because
+// it compares character-by-character — wrong for "find the latest quarter."
+function quarterCompare(a: string, b: string): number {
+  const ma = a.match(/Q(\d)\s+(\d{4})/)
+  const mb = b.match(/Q(\d)\s+(\d{4})/)
+  if (!ma || !mb) return a.localeCompare(b)
+  const yearDiff = parseInt(ma[2]) - parseInt(mb[2])
+  if (yearDiff !== 0) return yearDiff
+  return parseInt(ma[1]) - parseInt(mb[1])
+}
+
 // ── Sheet parsers ────────────────────────────────────────────────────────────
 
 function parseTrackingArchives(workbook: XLSX.WorkBook): ParsedForecast[] {
@@ -344,8 +355,10 @@ export async function syncGDPNow(): Promise<{ total: number; newRows: number }> 
   // Parse historical vintages from TrackingArchives
   const archiveForecasts = parseTrackingArchives(workbook)
 
-  // Determine the last archived quarter for TableCont
-  const allQuarters = [...new Set(archiveForecasts.map((f) => f.quarter))].sort()
+  // Determine the last archived quarter for TableCont (chronological — string
+  // sort would put Q4 2025 above Q1 2026 and mis-tag TableCont's current
+  // vintages as the prior quarter).
+  const allQuarters = [...new Set(archiveForecasts.map((f) => f.quarter))].sort(quarterCompare)
   const lastArchiveQuarter = allQuarters[allQuarters.length - 1] || 'Q4 2025'
 
   // Parse current quarter from TableCont
@@ -357,6 +370,13 @@ export async function syncGDPNow(): Promise<{ total: number; newRows: number }> 
 
   const latestBefore = getGDPNowLatestDate()
 
+  // Full replacement: TrackingArchives is the authoritative source for archived
+  // vintages, and TableCont contributes the current (still-being-forecast)
+  // quarter. Wiping and re-inserting on every sync makes the table self-healing
+  // — a row that was previously mis-tagged (e.g. a TableCont row attributed to
+  // the prior quarter because of a sort bug) won't survive as an orphan.
+  // UPSERT tolerates within-parse duplicates (TrackingArchives + TableCont
+  // can overlap by one row during the transition into a new quarter).
   const upsertStmt = db.prepare(`
     INSERT INTO gdpnow_forecasts (quarter, forecast_date, value)
     VALUES (?, ?, ?)
@@ -364,6 +384,7 @@ export async function syncGDPNow(): Promise<{ total: number; newRows: number }> 
   `)
 
   db.transaction(() => {
+    db.prepare('DELETE FROM gdpnow_forecasts').run()
     for (const item of allForecasts) {
       upsertStmt.run(item.quarter, item.forecastDate, item.value)
     }

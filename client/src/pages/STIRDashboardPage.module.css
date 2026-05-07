@@ -124,8 +124,8 @@
 }
 
 .viewTabActive {
-  color: #4EC9B0;
-  background: rgba(78, 201, 176, 0.08);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
 }
 
 .controlsSection,
@@ -1334,8 +1334,8 @@
 }
 
 .assetClassBtnActive {
-  color: #FFD700;
-  background: rgba(255, 215, 0, 0.08);
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.12);
 }
 
 .ffrBand {
@@ -1584,6 +1584,196 @@
   color: #64748B;
   margin-top: 8px;
   line-height: 1.5;
+}
+
+/* ── Historical Yield Changes (UST tab) ───────────────────────────────────── */
+
+.histChangesRow {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.histChangesGrid {
+  display: grid;
+  grid-template-columns: 80px repeat(5, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.beRealGrid {
+  display: grid;
+  grid-template-columns: 90px repeat(5, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.beRealSeparator {
+  grid-column: 1 / -1;
+  height: 8px;
+  background: #000000;
+  margin: 0;
+}
+
+/* ── Global Rates Summary ─────────────────────────────────────────────────── */
+
+.globalSummarySection {
+  max-width: 1200px;
+  margin: 0 auto 32px;
+}
+
+.summaryHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summaryTitle {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #e2e8f0;
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+
+.summaryControls {
+  display: flex;
+  gap: 16px;
+}
+
+.summaryControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.summaryControl select {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #e5e7eb;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border-radius: 2px;
+}
+
+.summaryControl select:focus {
+  outline: none;
+  border-color: #60a5fa;
+}
+
+.summaryTable {
+  width: auto;
+  margin-left: auto;
+  margin-right: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.summaryTable th {
+  text-align: right;
+  padding: 8px 14px;
+  font-size: 12px;
+  color: #cbd5e1;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #1e293b;
+  text-transform: uppercase;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.summaryTable th:first-child {
+  text-align: left;
+}
+
+.summaryTable td {
+  padding: 8px 14px;
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.summaryTable td:first-child {
+  text-align: left;
+  color: #e5e7eb;
+  letter-spacing: 0.05em;
+}
+
+.summaryTable tr:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Per-column widths for the summary table. */
+.colCountry  { width: 80px;  min-width: 80px; }
+.colDelta    { width: 90px;  min-width: 90px; }
+.colRegime   { width: 110px; min-width: 110px; text-align: center !important; text-transform: none !important; }
+.colNextMove { width: 120px; min-width: 120px; }
+.colSpread   { width: 110px; min-width: 110px; }
+
+/* Visual separator: thin border + extra padding between the yield-Δ block
+   (4 columns) and the regime block (2 columns). Targets the FIRST .colRegime
+   cell in each row (i.e. the 2s10s column header and its body cells). */
+.summaryTable th.colRegime:first-of-type,
+.summaryTable td.colRegime:first-of-type {
+  border-left: 1px solid #1e293b;
+  padding-left: 18px;
+}
+
+.unitSuffix {
+  font-size: 9px;
+  color: #64748b;
+  font-weight: 400;
+  margin-left: 2px;
+  text-transform: lowercase;
+  letter-spacing: 0;
+}
+
+.cellPositive { color: #22c55e; }
+.cellNegative { color: #ef4444; }
+.cellNeutral  { color: #94a3b8; }
+
+.histChangesHeaderCell {
+  padding: 8px 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  background: var(--surface-header);
+}
+
+.histChangesRowLabel {
+  padding: 10px 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+  background: var(--surface-header);
+}
+
+.histChangesCell {
+  padding: 10px 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: var(--surface);
 }
 
 @media (max-width: 900px) {

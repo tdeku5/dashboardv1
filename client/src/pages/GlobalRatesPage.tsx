@@ -13,6 +13,9 @@ import { useGlobalYieldCurves } from '../hooks/useGlobalYieldCurves'
 import { useGlobalForwardCurves } from '../hooks/useGlobalForwardCurves'
 import { useGlobalCalendarSpreads } from '../hooks/useGlobalCalendarSpreads'
 import { useGlobalYieldChanges, type YieldChangeMetric, type YieldChangeRowKey } from '../hooks/useGlobalYieldChanges'
+import { useGlobalRatesSummary, type CurveRegimeName, type NextMove } from '../hooks/useGlobalRatesSummary'
+import { getCellColor } from '../lib/cellColor'
+import { REGIME_COLORS } from '../lib/curveRegime'
 import { ReferenceLine } from 'recharts'
 import styles from './STIRDashboardPage.module.css'
 
@@ -63,17 +66,107 @@ const YIELD_CHANGE_COUNTRIES: { key: string; label: string }[] = [
 
 const YIELD_CHANGE_ROWS: YieldChangeRowKey[] = ['2Y', '5Y', '10Y', '30Y', '2s10s', '10s30s']
 
-// Per-row color normalization: the strongest |σ| in each row anchors that
-// row's gradient. Brown/bronze for selloffs (σ > 0), teal for rallies (σ < 0).
-// Power curve (0.7) keeps mid-magnitude moves visible instead of crushing them
-// to near-neutral; 0.65 max opacity preserves text readability.
-function getCellColor(sigma: number | null | undefined, rowMaxAbs: number): string | undefined {
-  if (sigma == null || !Number.isFinite(sigma) || rowMaxAbs === 0) return undefined
-  const intensity = sigma / rowMaxAbs
-  const curved = Math.sign(intensity) * Math.pow(Math.abs(intensity), 0.7)
-  const opacity = Math.abs(curved) * 0.65
-  if (curved > 0) return `rgba(180, 120, 60, ${opacity})`
-  return `rgba(78, 201, 176, ${opacity})`
+const REGIME_SHORT_LABELS: Record<CurveRegimeName, string> = {
+  'Bull Steepener': 'Bull Stp',
+  'Bear Steepener': 'Bear Stp',
+  'Steepener Twist': 'Stp Twist',
+  'Bull Flattener': 'Bull Flt',
+  'Bear Flattener': 'Bear Flt',
+  'Flattener Twist': 'Flt Twist',
+  'Neutral': 'Neutral',
+}
+
+const YIELD_LOOKBACK_OPTIONS = [
+  { value: '1d', label: '1D' }, { value: '5d', label: '5D' },
+  { value: '1m', label: '1M' }, { value: '3m', label: '3M' },
+  { value: '6m', label: '6M' }, { value: 'ytd', label: 'YTD' },
+] as const
+
+const REGIME_LOOKBACK_OPTIONS = [
+  { value: '20d', label: '20D' }, { value: '60d', label: '60D' }, { value: '200d', label: '200D' },
+] as const
+
+// Rates-trader convention: positive bps in yield = red (bearish, rates up).
+function deltaColorClass(v: number | null): string {
+  if (v == null) return styles.cellNeutral
+  if (v > 0) return styles.cellNegative
+  if (v < 0) return styles.cellPositive
+  return ''
+}
+
+// Front − 12m: positive = curve rising forward = hikes priced (red, bearish);
+// negative = curve falling forward = cuts priced (green). Same sign convention
+// as the yield-Δ and Terminal−OCR columns.
+function frontMinus12mColorClass(v: number | null): string {
+  if (v == null) return styles.cellNeutral
+  if (v > 0) return styles.cellNegative
+  if (v < 0) return styles.cellPositive
+  return ''
+}
+
+// Terminal − OCR: positive = hikes still required to reach terminal (red);
+// negative = cuts to reach terminal (green).
+function terminalSpreadColorClass(v: number | null): string {
+  if (v == null) return styles.cellNeutral
+  if (v > 0) return styles.cellNegative
+  if (v < 0) return styles.cellPositive
+  return ''
+}
+
+function nextMoveColorClass(v: NextMove): string {
+  if (v === 'HIKE') return styles.cellNegative
+  if (v === 'CUT') return styles.cellPositive
+  return styles.cellNeutral
+}
+
+function fmtSignedBps(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return '—'
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(1)}`
+}
+
+// Per-column gradient: blue for negative, red for positive, intensity scales
+// with |value| / column's |max|. Cap alpha at 0.35 so the green/red text on
+// top stays legible.
+function deltaCellStyle(value: number | null, columnAbsMax: number): React.CSSProperties | undefined {
+  if (value == null || !Number.isFinite(value) || columnAbsMax === 0) return undefined
+  const intensity = Math.min(1, Math.abs(value) / columnAbsMax)
+  const alpha = (intensity * 0.35).toFixed(3)
+  if (value < 0) return { background: `rgba(59, 130, 246, ${alpha})` }
+  if (value > 0) return { background: `rgba(239, 68, 68, ${alpha})` }
+  return undefined
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
+  if (!m) return { r: 128, g: 128, b: 128 }
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
+}
+
+// Pick black or white text for a given background based on luminance. Above
+// ~0.55 → dark text reads better; below → white text.
+function regimeCellStyle(regime: CurveRegimeName | null): React.CSSProperties {
+  if (!regime) return { color: '#94a3b8' }
+  const bg = REGIME_COLORS[regime]
+  if (!bg) return { color: '#94a3b8' }
+  const { r, g, b } = hexToRgb(bg)
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return {
+    background: bg,
+    color: luminance > 0.55 ? '#000000' : '#ffffff',
+    fontWeight: 700,
+  }
+}
+
+function columnAbsMax(values: Array<number | null>): number {
+  let max = 0
+  for (const v of values) {
+    if (v != null && Number.isFinite(v)) {
+      const a = Math.abs(v)
+      if (a > max) max = a
+    }
+  }
+  return max
 }
 
 function fmtSigma(z: number | null | undefined): string {
@@ -89,9 +182,9 @@ function fmtBps(b: number | null | undefined): string {
 }
 
 export function GlobalRatesPage() {
-  const [yieldLookback, setYieldLookback] = useState(1)
-  const [forwardLookback, setForwardLookback] = useState(1)
-  const [spreadsLookback, setSpreadsLookback] = useState(1)
+  const [yieldLookback, setYieldLookback] = useState(0)
+  const [forwardLookback, setForwardLookback] = useState(0)
+  const [spreadsLookback, setSpreadsLookback] = useState(0)
 
   const yieldData = useGlobalYieldCurves(yieldLookback)
   const forwardData = useGlobalForwardCurves(forwardLookback)
@@ -99,21 +192,9 @@ export function GlobalRatesPage() {
   const yieldChanges = useGlobalYieldChanges()
   const [compressed, setCompressed] = useState(false)
 
-  // Merge current + lookback rows by row key into _current/_lookback per country.
-  const mergeForChart = <T extends Record<string, unknown>>(
-    current: T[], lookback: T[], keyField: keyof T, countryKeys: readonly string[]
-  ): Array<Record<string, unknown>> => {
-    const lookbackByKey = new Map<unknown, T>(lookback.map((r) => [r[keyField], r]))
-    return current.map((cur) => {
-      const lb = lookbackByKey.get(cur[keyField])
-      const out: Record<string, unknown> = { ...cur }
-      for (const c of countryKeys) {
-        out[`${c}_current`] = cur[c as keyof T] ?? null
-        out[`${c}_lookback`] = lb ? (lb[c as keyof T] ?? null) : null
-      }
-      return out
-    })
-  }
+  const [summaryYieldLookback, setSummaryYieldLookback] = useState<string>('1d')
+  const [summaryRegimeLookback, setSummaryRegimeLookback] = useState<string>('20d')
+  const summary = useGlobalRatesSummary(summaryYieldLookback, summaryRegimeLookback)
 
   const fmtSpread = (v: number | undefined): string => {
     if (typeof v !== 'number') return '—'
@@ -126,20 +207,9 @@ export function GlobalRatesPage() {
     return ''
   }
 
-  const ycMergedRows = useMemo(
-    () => mergeForChart(yieldData.currentTenors, yieldData.lookbackTenors, 'tenor', YIELD_COUNTRIES as readonly string[]),
-    [yieldData.currentTenors, yieldData.lookbackTenors]
-  )
-
   const ycYDomain = useMemo((): [number, number] => {
     const vals: number[] = []
-    for (const r of yieldData.currentTenors) {
-      for (const c of YIELD_COUNTRIES) {
-        const v = r[c] as number | undefined | null
-        if (v != null) vals.push(v)
-      }
-    }
-    for (const r of yieldData.lookbackTenors) {
+    for (const r of yieldData.tenors) {
       for (const c of YIELD_COUNTRIES) {
         const v = r[c] as number | undefined | null
         if (v != null) vals.push(v)
@@ -150,22 +220,11 @@ export function GlobalRatesPage() {
     const max = Math.max(...vals)
     const pad = (max - min) * 0.1 || 0.3
     return [min - pad, max + pad]
-  }, [yieldData.currentTenors, yieldData.lookbackTenors])
-
-  const fwdMergedRows = useMemo(
-    () => mergeForChart(forwardData.currentContracts, forwardData.lookbackContracts, 'code', FORWARD_COUNTRIES as readonly string[]),
-    [forwardData.currentContracts, forwardData.lookbackContracts]
-  )
+  }, [yieldData.tenors])
 
   const fwdYDomain = useMemo((): [number, number] => {
     const vals: number[] = []
-    for (const r of forwardData.currentContracts) {
-      for (const c of FORWARD_COUNTRIES) {
-        const v = r[c] as number | undefined | null
-        if (v != null) vals.push(v)
-      }
-    }
-    for (const r of forwardData.lookbackContracts) {
+    for (const r of forwardData.contracts) {
       for (const c of FORWARD_COUNTRIES) {
         const v = r[c] as number | undefined | null
         if (v != null) vals.push(v)
@@ -176,7 +235,7 @@ export function GlobalRatesPage() {
     const max = Math.max(...vals)
     const pad = (max - min) * 0.1 || 0.3
     return [min - pad, max + pad]
-  }, [forwardData.currentContracts, forwardData.lookbackContracts])
+  }, [forwardData.contracts])
 
   const maxYears = useMemo(() => {
     if (yieldData.tenors.length === 0) return 30
@@ -201,6 +260,92 @@ export function GlobalRatesPage() {
 
   return (
     <div className={styles.fullPanel}>
+      {/* ═══ Global Rates Summary ═══ */}
+      <div className={styles.globalSummarySection}>
+        <div className={styles.summaryHeader}>
+          <h3 className={styles.summaryTitle}>GLOBAL RATES SUMMARY</h3>
+          <div className={styles.summaryControls}>
+            <div className={styles.summaryControl}>
+              <label htmlFor="summaryYieldLookback">YIELD Δ LOOKBACK:</label>
+              <select
+                id="summaryYieldLookback"
+                value={summaryYieldLookback}
+                onChange={e => setSummaryYieldLookback(e.target.value)}
+              >
+                {YIELD_LOOKBACK_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.summaryControl}>
+              <label htmlFor="summaryRegimeLookback">REGIME LOOKBACK:</label>
+              <select
+                id="summaryRegimeLookback"
+                value={summaryRegimeLookback}
+                onChange={e => setSummaryRegimeLookback(e.target.value)}
+              >
+                {REGIME_LOOKBACK_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+        {summary.loading ? (
+          <div className={styles.loading}>Loading summary…</div>
+        ) : summary.error ? (
+          <div className={styles.error}>{summary.error}</div>
+        ) : summary.data ? (() => {
+          const rows = summary.data.rows
+          const max2Y  = columnAbsMax(rows.map(r => r.delta2Y))
+          const max5Y  = columnAbsMax(rows.map(r => r.delta5Y))
+          const max10Y = columnAbsMax(rows.map(r => r.delta10Y))
+          const max30Y = columnAbsMax(rows.map(r => r.delta30Y))
+          return (
+          <table className={styles.summaryTable}>
+            <thead>
+              <tr>
+                <th className={styles.colCountry}>Country</th>
+                <th className={styles.colDelta}>2Y Δ</th>
+                <th className={styles.colDelta}>5Y Δ</th>
+                <th className={styles.colDelta}>10Y Δ</th>
+                <th className={styles.colDelta}>30Y Δ</th>
+                <th className={styles.colRegime}>2s10s</th>
+                <th className={styles.colRegime}>10s30s</th>
+                <th className={styles.colNextMove}>Next CB Move</th>
+                <th className={styles.colSpread}>Terminal − OCR <span className={styles.unitSuffix}>(bps)</span></th>
+                <th className={styles.colSpread}>Front − 12m <span className={styles.unitSuffix}>(bps)</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => (
+                <tr key={row.country}>
+                  <td className={styles.colCountry}>{row.country}</td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta2Y)}`}  style={deltaCellStyle(row.delta2Y, max2Y)}>{fmtSignedBps(row.delta2Y)}</td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta5Y)}`}  style={deltaCellStyle(row.delta5Y, max5Y)}>{fmtSignedBps(row.delta5Y)}</td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta10Y)}`} style={deltaCellStyle(row.delta10Y, max10Y)}>{fmtSignedBps(row.delta10Y)}</td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta30Y)}`} style={deltaCellStyle(row.delta30Y, max30Y)}>{fmtSignedBps(row.delta30Y)}</td>
+                  <td className={styles.colRegime} style={regimeCellStyle(row.regime2s10s)}>
+                    {row.regime2s10s ? REGIME_SHORT_LABELS[row.regime2s10s] : '—'}
+                  </td>
+                  <td className={styles.colRegime} style={regimeCellStyle(row.regime10s30s)}>
+                    {row.regime10s30s ? REGIME_SHORT_LABELS[row.regime10s30s] : '—'}
+                  </td>
+                  <td className={`${styles.colNextMove} ${nextMoveColorClass(row.nextMove)}`}>{row.nextMove ?? '—'}</td>
+                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.terminalMinusOcr)}`}>
+                    {fmtSignedBps(row.terminalMinusOcr)}
+                  </td>
+                  <td className={`${styles.colSpread} ${frontMinus12mColorClass(row.frontMinus12m)}`}>
+                    {fmtSignedBps(row.frontMinus12m)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          )
+        })() : null}
+      </div>
+
       <div className={styles.globalTopRow}>
       {/* ═══ Global Yield Curves ═══ */}
       <div className={styles.ustDashboard} style={{ minWidth: 0 }}>
@@ -234,7 +379,7 @@ export function GlobalRatesPage() {
           </div>
         </div>
         <div className={styles.ustYcDates}>
-          {'\u25CF'} AS OF: {yieldData.asOfDate || '—'}
+          {'\u25CF'} AS OF: {yieldData.asOfDate || '—'}{yieldLookback > 0 && ` (t − ${yieldLookback})`}
         </div>
 
         {yieldData.loading ? (
@@ -274,10 +419,15 @@ export function GlobalRatesPage() {
                   return String(label)
                 }}
               />
-              <Legend wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+              <Legend
+                verticalAlign="top"
+                height={28}
+                wrapperStyle={{ paddingBottom: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+              />
               {YIELD_COUNTRIES.map(c => (
                 <Line
                   key={c}
+                  name={c}
                   type="monotone"
                   dataKey={c}
                   stroke={COUNTRY_COLORS[c]}
@@ -295,9 +445,23 @@ export function GlobalRatesPage() {
       <div className={styles.ustDashboard} style={{ minWidth: 0 }}>
         <div className={styles.ustYcHeader}>
           <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>GLOBAL FORWARD CURVES (STIR STRIPS)</div>
+          <div className={styles.ustYcControls}>
+            <div className={styles.spreadLookbackControl}>
+              <label htmlFor="fwdLookback">t −</label>
+              <input
+                id="fwdLookback"
+                type="number"
+                min="0"
+                max="252"
+                value={forwardLookback}
+                onChange={(e) => setForwardLookback(Math.max(0, parseInt(e.target.value) || 0))}
+                className={styles.spreadLookbackInput}
+              />
+            </div>
+          </div>
         </div>
         <div className={styles.ustYcDates}>
-          {'\u25CF'} AS OF: {forwardData.asOfDate || '—'}
+          {'\u25CF'} AS OF: {forwardData.asOfDate || '—'}{forwardLookback > 0 && ` (t − ${forwardLookback})`}
         </div>
 
         {forwardData.loading ? (
@@ -327,10 +491,15 @@ export function GlobalRatesPage() {
                 contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
                 formatter={(value: unknown, name: string | undefined) => [value != null && typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
               />
-              <Legend wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+              <Legend
+                verticalAlign="top"
+                height={28}
+                wrapperStyle={{ paddingBottom: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+              />
               {FORWARD_COUNTRIES.map(c => (
                 <Line
                   key={c}
+                  name={c}
                   type="monotone"
                   dataKey={c}
                   stroke={FORWARD_COLORS[c]}
@@ -369,7 +538,7 @@ export function GlobalRatesPage() {
                     const country = yieldChanges.countries[key]
                     const metric: YieldChangeMetric | null | undefined = country?.[row]
                     const z = metric?.zScore
-                    const bg = getCellColor(z, yieldChangeRowMaxAbs[row])
+                    const bg = getCellColor(z, yieldChangeRowMaxAbs[row], 'red-blue')
                     return (
                       <div
                         key={`${key}-${row}`}
@@ -403,9 +572,21 @@ export function GlobalRatesPage() {
       <div className={styles.spreadsDashboardFullWidth}>
         <div className={styles.spreadsDashboardHeader}>
           <div className={styles.spreadsHeader}>GLOBAL CALENDAR SPREADS</div>
+          <div className={styles.spreadLookbackControl}>
+            <label htmlFor="spreadsLookback">t −</label>
+            <input
+              id="spreadsLookback"
+              type="number"
+              min="0"
+              max="252"
+              value={spreadsLookback}
+              onChange={(e) => setSpreadsLookback(Math.max(0, parseInt(e.target.value) || 0))}
+              className={styles.spreadLookbackInput}
+            />
+          </div>
         </div>
         <div className={styles.spreadsDateLabels}>
-          {'●'} AS OF: {spreadsData.asOfDate || '—'}
+          {'●'} AS OF: {spreadsData.asOfDate || '—'}{spreadsLookback > 0 && ` (t − ${spreadsLookback})`}
         </div>
 
         {spreadsData.loading ? (
@@ -449,10 +630,15 @@ export function GlobalRatesPage() {
                           contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
                           formatter={(v: unknown, name: string | undefined) => [typeof v === 'number' ? `${v.toFixed(2)}bp` : '—', name ?? '']}
                         />
-                        <Legend wrapperStyle={{ fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+                        <Legend
+                          verticalAlign="top"
+                          height={24}
+                          wrapperStyle={{ paddingBottom: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                        />
                         {spreadsData.countries.map((c) => (
                           <Line
                             key={c.marketKey}
+                            name={c.marketKey}
                             type="linear"
                             dataKey={c.marketKey}
                             stroke={SPREAD_MARKET_COLORS[c.marketKey] ?? '#cbd5e1'}

@@ -13,29 +13,22 @@ export interface GlobalForwardPoint {
 
 interface ApiResponse {
   asOfDate: string
-  lookbackDate?: string
+  lookbackDays: number
   contracts: GlobalForwardPoint[]
-  currentContracts?: GlobalForwardPoint[]
-  lookbackContracts?: GlobalForwardPoint[]
 }
 
 export interface GlobalForwardCurveData {
   loading: boolean
   error: string | null
   asOfDate: string
-  lookbackDate: string
   contracts: GlobalForwardPoint[]
-  currentContracts: GlobalForwardPoint[]
-  lookbackContracts: GlobalForwardPoint[]
 }
 
 export function useGlobalForwardCurves(lookbackDays: number = 0): GlobalForwardCurveData {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState('')
-  const [lookbackDate, setLookbackDate] = useState('')
-  const [currentContracts, setCurrentContracts] = useState<GlobalForwardPoint[]>([])
-  const [lookbackContracts, setLookbackContracts] = useState<GlobalForwardPoint[]>([])
+  const [contracts, setContracts] = useState<GlobalForwardPoint[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -51,9 +44,7 @@ export function useGlobalForwardCurves(lookbackDays: number = 0): GlobalForwardC
       .then((json) => {
         if (cancelled) return
         setAsOfDate(json.asOfDate)
-        setLookbackDate(json.lookbackDate ?? '')
-        setCurrentContracts(json.currentContracts ?? json.contracts ?? [])
-        setLookbackContracts(json.lookbackContracts ?? [])
+        setContracts(json.contracts ?? [])
         setLoading(false)
       })
       .catch((err) => {
@@ -65,13 +56,5 @@ export function useGlobalForwardCurves(lookbackDays: number = 0): GlobalForwardC
     return () => { cancelled = true }
   }, [lookbackDays])
 
-  return {
-    loading,
-    error,
-    asOfDate,
-    lookbackDate,
-    contracts: currentContracts,
-    currentContracts,
-    lookbackContracts,
-  }
+  return { loading, error, asOfDate, contracts }
 }

@@ -37,6 +37,7 @@ import { syncMonthlyGDPContributions, backfillMonthlyGDPContributions } from './
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
+import { ukFundamentalRouter } from './routes/ukFundamental'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 import { runStaleTipCleanup } from './migrations/cleanStaleTips'
 
@@ -67,6 +68,7 @@ app.use('/api/boe',          boeRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
+app.use('/api/uk/fundamental', ukFundamentalRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

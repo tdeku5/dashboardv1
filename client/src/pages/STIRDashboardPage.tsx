@@ -17,13 +17,17 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { CountrySelector, type CountryCode } from '../components/CountrySelector'
+import { AssetSubRibbon } from '../components/AssetSubRibbon'
 import { FredRefreshButton } from '../components/FredRefreshButton'
+import { UKFundamentalModelPanel } from '../components/UKFundamentalModelPanel'
 import { fetchBEASeries } from '../lib/bea'
 import { useFedWatch } from '../hooks/useFedWatch'
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import { buildSpreadChartData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
+import { getCellColor } from '../lib/cellColor'
+import { HIST_LOOKBACKS, histLookbackChange } from '../lib/historicalChanges'
 import styles from './STIRDashboardPage.module.css'
 
 const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
@@ -40,6 +44,15 @@ const ASSET_CLASSES: Array<{ key: AssetClass; label: string }> = [
   { key: 'equities', label: 'EQUITIES' },
   { key: 'fx', label: 'FX' },
   { key: 'commodities', label: 'COMMODITIES' },
+]
+
+type CommodityCategory = 'metals' | 'energy' | 'ags' | 'softs'
+
+const COMMODITY_CATEGORIES: ReadonlyArray<{ key: CommodityCategory; label: string }> = [
+  { key: 'metals', label: 'METALS' },
+  { key: 'energy', label: 'ENERGY' },
+  { key: 'ags',    label: 'AGS' },
+  { key: 'softs',  label: 'SOFTS' },
 ]
 
 type ProductKey = 'fedfunds' | 'sofr'
@@ -321,6 +334,12 @@ const UST_TENORS = [
   { key: 'DGS7', label: '7Y' },
   { key: 'DGS10', label: '10Y' },
   { key: 'DGS30', label: '30Y' },
+] as const
+const BE_REAL_ROWS: ReadonlyArray<{ key: string; label: string; addSeparatorAfter?: boolean }> = [
+  { key: 'T5YIE', label: '5Y BE' },
+  { key: 'T10YIE', label: '10Y BE', addSeparatorAfter: true },
+  { key: 'real5y', label: '5Y Real' },
+  { key: 'real10y', label: '10Y Real' },
 ] as const
 const UST_EXTRA = [
   { key: 'DGS1MO' },
@@ -831,6 +850,7 @@ export function STIRDashboardPage() {
   const [assetClass, setAssetClass] = useState<AssetClass>('rates')
   const [activeView, setActiveView] = useState<ViewTab>('pricing')
   const [country, setCountry] = useState<CountryCode>('US')
+  const [commodityCategory, setCommodityCategory] = useState<CommodityCategory>('energy')
   const viewTabs = useMemo(() => getViewTabs(country), [country])
 
   // Fall back to first tab if current tab is no longer visible for this country
@@ -1900,6 +1920,39 @@ export function STIRDashboardPage() {
     })
   }, [ustData])
 
+  const historicalChanges = useMemo(() => {
+    const rows = UST_TENORS.map(t => {
+      const series = ustData[t.key] || []
+      const cells = HIST_LOOKBACKS.map(lb => ({
+        lookback: lb.label,
+        bps: histLookbackChange(series, lb.tradingDays),
+      }))
+      return { rowLabel: t.label, cells }
+    })
+
+    // Per-column normalization: each lookback column has its own |bps| scale,
+    // so a 5D move and a YTD move don't compete on the same axis.
+    const colMaxAbs: Record<string, number> = {}
+    for (const lb of HIST_LOOKBACKS) {
+      let max = 0
+      for (const r of rows) {
+        const cell = r.cells.find(c => c.lookback === lb.label)
+        if (cell?.bps != null && Number.isFinite(cell.bps)) {
+          const a = Math.abs(cell.bps)
+          if (a > max) max = a
+        }
+      }
+      colMaxAbs[lb.label] = max
+    }
+
+    let latestDate = ''
+    for (const t of UST_TENORS) {
+      const s = ustData[t.key] || []
+      if (s.length > 0 && s[s.length - 1].date > latestDate) latestDate = s[s.length - 1].date
+    }
+    return { rows, colMaxAbs, latestDate }
+  }, [ustData])
+
   const currentSpreads = useMemo(() => {
     return UST_SPREADS.map((spread) => {
       const longSeries = ustData[spread.long] || []
@@ -1959,6 +2012,46 @@ export function STIRDashboardPage() {
 
     return { real5y, real10y, realSpread }
   }, [ustData])
+
+  const beRealChanges = useMemo(() => {
+    const seriesByKey: Record<string, { date: string; value: number }[]> = {
+      T5YIE:   ustData.T5YIE   || [],
+      T10YIE:  ustData.T10YIE  || [],
+      real5y:  realYieldData.real5y,
+      real10y: realYieldData.real10y,
+    }
+    const rows = BE_REAL_ROWS.map(r => {
+      const series = seriesByKey[r.key] || []
+      const cells = HIST_LOOKBACKS.map(lb => ({
+        lookback: lb.label,
+        bps: histLookbackChange(series, lb.tradingDays),
+      }))
+      return { rowLabel: r.label, cells }
+    })
+
+    // Per-column normalization, computed independently from the
+    // historicalChanges grid (BE/Real moves are typically smaller than
+    // nominal yield moves; mixing scales would crush this grid).
+    const colMaxAbs: Record<string, number> = {}
+    for (const lb of HIST_LOOKBACKS) {
+      let max = 0
+      for (const r of rows) {
+        const cell = r.cells.find(c => c.lookback === lb.label)
+        if (cell?.bps != null && Number.isFinite(cell.bps)) {
+          const a = Math.abs(cell.bps)
+          if (a > max) max = a
+        }
+      }
+      colMaxAbs[lb.label] = max
+    }
+
+    let latestDate = ''
+    for (const r of BE_REAL_ROWS) {
+      const s = seriesByKey[r.key] || []
+      if (s.length > 0 && s[s.length - 1].date > latestDate) latestDate = s[s.length - 1].date
+    }
+    return { rows, colMaxAbs, latestDate }
+  }, [ustData, realYieldData])
 
   const attrChartData = useMemo(() => {
     const nominal = ustData['DGS5'] || []
@@ -2474,7 +2567,7 @@ export function STIRDashboardPage() {
               className={`${styles.assetClassBtn} ${assetClass === ac.key ? styles.assetClassBtnActive : ''}`}
               onClick={() => setAssetClass(ac.key)}
               style={{
-                border: `1px solid ${assetClass === ac.key ? '#FFD700' : 'rgba(255, 255, 255, 0.15)'}`,
+                border: `1px solid ${assetClass === ac.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
                 ...(idx > 0 ? { borderLeft: 'none' } : {}),
               }}
             >
@@ -2515,7 +2608,16 @@ export function STIRDashboardPage() {
 
         {/* ═══ Commodities View ═══ */}
         {assetClass === 'commodities' && (
-          <div className={styles.comingSoon}>Commodities coming soon</div>
+          <>
+            <AssetSubRibbon
+              items={COMMODITY_CATEGORIES}
+              value={commodityCategory}
+              onChange={setCommodityCategory}
+            />
+            <div className={styles.comingSoon}>
+              {COMMODITY_CATEGORIES.find((c) => c.key === commodityCategory)?.label} models coming soon
+            </div>
+          </>
         )}
 
         {/* ═══ Rates View (existing content) ═══ */}
@@ -2531,7 +2633,7 @@ export function STIRDashboardPage() {
               className={`${styles.viewTab} ${activeView === tab.key ? styles.viewTabActive : ''}`}
               onClick={() => setActiveView(tab.key)}
               style={{
-                border: `1px solid ${activeView === tab.key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
+                border: `1px solid ${activeView === tab.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
                 ...(idx > 0 ? { borderLeft: 'none' } : {}),
               }}
             >
@@ -2558,8 +2660,8 @@ export function STIRDashboardPage() {
           </div>
         )}
 
-        <div className={(activeView === 'strips' || activeView === 'pricing') && country === 'US' ? styles.twoPanel : styles.fullPanel}>
-          <div className={(activeView === 'strips' || activeView === 'pricing') && country === 'US' ? styles.leftPanel : undefined}>
+        <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK') ? styles.twoPanel : styles.fullPanel}>
+          <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK') ? styles.leftPanel : undefined}>
         {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.ffrBand}>
             {activeMarket.rateLabel} {fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'}
@@ -3062,6 +3164,88 @@ export function STIRDashboardPage() {
                   </ResponsiveContainer>
                 </>
               )}
+            </div>
+
+            {/* ═══ Historical Yield Changes + BE/Real (side-by-side) ═══ */}
+            <div className={styles.histChangesRow}>
+              <div className={styles.ustDashboard}>
+                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>NOMINAL YIELDS</div>
+                <div className={styles.ustYcDates}>
+                  {'●'} AS OF: {historicalChanges.latestDate || '—'}
+                </div>
+                {ustLoading ? (
+                  <div className={styles.loading}>Loading Treasury data…</div>
+                ) : ustError ? (
+                  <div className={styles.error}>{ustError}</div>
+                ) : (
+                  <div className={styles.histChangesGrid}>
+                    <div className={styles.histChangesHeaderCell}></div>
+                    {HIST_LOOKBACKS.map(lb => (
+                      <div key={lb.label} className={styles.histChangesHeaderCell}>{lb.label}</div>
+                    ))}
+                    {historicalChanges.rows.map(row => (
+                      <Fragment key={row.rowLabel}>
+                        <div className={styles.histChangesRowLabel}>{row.rowLabel}</div>
+                        {row.cells.map(cell => {
+                          const bg = getCellColor(cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          return (
+                            <div
+                              key={`${row.rowLabel}-${cell.lookback}`}
+                              className={styles.histChangesCell}
+                              style={bg ? { background: bg } : undefined}
+                            >
+                              {cell.bps != null && Number.isFinite(cell.bps)
+                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                : '—'}
+                            </div>
+                          )
+                        })}
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.ustDashboard}>
+                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>BREAKEVENS &amp; REAL RATES</div>
+                <div className={styles.ustYcDates}>
+                  {'●'} AS OF: {beRealChanges.latestDate || '—'}
+                </div>
+                {ustLoading ? (
+                  <div className={styles.loading}>Loading Treasury data…</div>
+                ) : ustError ? (
+                  <div className={styles.error}>{ustError}</div>
+                ) : (
+                  <div className={styles.beRealGrid}>
+                    <div className={styles.histChangesHeaderCell}></div>
+                    {HIST_LOOKBACKS.map(lb => (
+                      <div key={lb.label} className={styles.histChangesHeaderCell}>{lb.label}</div>
+                    ))}
+                    {beRealChanges.rows.map((row, idx) => (
+                      <Fragment key={row.rowLabel}>
+                        <div className={styles.histChangesRowLabel}>{row.rowLabel}</div>
+                        {row.cells.map(cell => {
+                          const bg = getCellColor(cell.bps, beRealChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          return (
+                            <div
+                              key={`${row.rowLabel}-${cell.lookback}`}
+                              className={styles.histChangesCell}
+                              style={bg ? { background: bg } : undefined}
+                            >
+                              {cell.bps != null && Number.isFinite(cell.bps)
+                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                : '—'}
+                            </div>
+                          )
+                        })}
+                        {BE_REAL_ROWS[idx]?.addSeparatorAfter && (
+                          <div className={styles.beRealSeparator} />
+                        )}
+                      </Fragment>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* ═══ Nominal Yields Dashboard ═══ */}
@@ -4747,6 +4931,12 @@ export function STIRDashboardPage() {
               </div>
             </div>
           </div>
+          )}
+
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'UK' && (
+            <div className={styles.rightPanel}>
+              <UKFundamentalModelPanel />
+            </div>
           )}
         </div>
         {activeView === 'strips' && useStirStyling && stripContracts.length > 0 && (

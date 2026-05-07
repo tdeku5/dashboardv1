@@ -269,7 +269,16 @@
       "Bash(awk 'NR==435,NR==445; NR==680,NR==700; NR==870,NR==910' /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.module.css)",
       "Bash(xxd)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('asOf=', d['asOfDate'], 'prev=', d['previousDate']\\); print\\('countries=', list\\(d['countries'].keys\\(\\)\\)\\); us=d['countries']['US']; print\\('US rows=', list\\(us.keys\\(\\)\\)\\); print\\('US 10Y=', us['10Y']\\); print\\('US 2s10s=', us['2s10s']\\)\")",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(awk 'NR==420' /home/tdeku/dashboardv1/client/src/pages/GlobalRatesPage.tsx)",
+      "Bash(python3 *)",
+      "Bash(awk 'NR==645' /home/tdeku/dashboardv1/client/src/pages/GlobalRatesPage.tsx)",
+      "Bash(awk NR>=502 && NR<=515 *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(npx --prefix client tsc --noEmit -p client/tsconfig.json)",
+      "Bash(echo \"---exit: $?\")",
+      "Bash(cp /home/tdeku/dashboardv1/server/src/index.ts /tmp/_index_full.ts)",
+      "Bash(cp /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx /tmp/_stir_full.tsx)"
     ]
   },
   "sandbox": {

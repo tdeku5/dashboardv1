@@ -16,29 +16,22 @@ export interface GlobalCurveRow {
 
 interface ApiResponse {
   asOfDate: string
-  lookbackDate?: string
+  lookbackDays: number
   tenors: GlobalCurveRow[]
-  currentTenors?: GlobalCurveRow[]
-  lookbackTenors?: GlobalCurveRow[]
 }
 
 export interface GlobalYieldCurveData {
   loading: boolean
   error: string | null
   asOfDate: string
-  lookbackDate: string
-  tenors: GlobalCurveRow[]            // alias of currentTenors for back-compat
-  currentTenors: GlobalCurveRow[]
-  lookbackTenors: GlobalCurveRow[]
+  tenors: GlobalCurveRow[]
 }
 
 export function useGlobalYieldCurves(lookbackDays: number = 0): GlobalYieldCurveData {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [asOfDate, setAsOfDate] = useState('')
-  const [lookbackDate, setLookbackDate] = useState('')
-  const [currentTenors, setCurrentTenors] = useState<GlobalCurveRow[]>([])
-  const [lookbackTenors, setLookbackTenors] = useState<GlobalCurveRow[]>([])
+  const [tenors, setTenors] = useState<GlobalCurveRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -54,9 +47,7 @@ export function useGlobalYieldCurves(lookbackDays: number = 0): GlobalYieldCurve
       .then((json) => {
         if (cancelled) return
         setAsOfDate(json.asOfDate)
-        setLookbackDate(json.lookbackDate ?? '')
-        setCurrentTenors(json.currentTenors ?? json.tenors ?? [])
-        setLookbackTenors(json.lookbackTenors ?? [])
+        setTenors(json.tenors ?? [])
         setLoading(false)
       })
       .catch((err) => {
@@ -68,13 +59,5 @@ export function useGlobalYieldCurves(lookbackDays: number = 0): GlobalYieldCurve
     return () => { cancelled = true }
   }, [lookbackDays])
 
-  return {
-    loading,
-    error,
-    asOfDate,
-    lookbackDate,
-    tenors: currentTenors,
-    currentTenors,
-    lookbackTenors,
-  }
+  return { loading, error, asOfDate, tenors }
 }
