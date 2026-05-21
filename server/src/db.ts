@@ -949,6 +949,22 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_tv_series_symbol ON tv_series(symbol);
+
+  -- Unified daily overnight policy / market rates across central banks.
+  -- Populated by overnight* collectors (FRED for SONIA/ECBDFR, BoC Valet for
+  -- CORRA, BoJ for TONA, RBA F1 CSV for AONIA + cash rate target).
+  CREATE TABLE IF NOT EXISTS overnight_rates (
+    date           TEXT NOT NULL,
+    series_code    TEXT NOT NULL,   -- 'SONIA' | 'ECBDFR' | 'CORRA' | 'CA_TARGET' | 'TONA' | 'AONIA' | 'AU_CASH_RATE_TARGET'
+    value          REAL,
+    is_provisional INTEGER DEFAULT 0,
+    source         TEXT,             -- 'FRED' | 'BoC' | 'BoJ' | 'RBA'
+    ingested_at    TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_overnight_rates_series_date
+    ON overnight_rates(series_code, date DESC);
 `)
 
 // Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)

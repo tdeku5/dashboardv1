@@ -180,6 +180,13 @@ export const ALL_SERIES: string[] = [
   'RIWB53000S', 'RIWZ53010S', 'RIWB53100S',
   'RIWB53110S', 'RIWB53120S', 'RIWB53130S',
   'RIWB53200S', 'RIWB53210S', 'RIWB53220S', 'RIWB53230S', 'RIWB53300S',
+  // ─── US Rates → Policy Rate tab ───
+  // EFFR overnight cash rate, NBER recession indicator, and the par UST yields
+  // used on the Policy Rate vs Term Structure chart. Sourced from FRED for
+  // provenance consistency (the dashboard also has TV-sourced UST yields, but
+  // the Policy Rate page deliberately uses FRED throughout).
+  'EFFR', 'USREC',
+  'DGS2', 'DGS5', 'DGS10', 'DGS30',
 ]
 
 export const STALE_HOURS = 20

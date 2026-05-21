@@ -22,6 +22,8 @@ import { FredRefreshButton } from '../components/FredRefreshButton'
 import { UKFundamentalModelPanel } from '../components/UKFundamentalModelPanel'
 import { fetchBEASeries } from '../lib/bea'
 import { useFedWatch } from '../hooks/useFedWatch'
+import { useOvernightRates } from '../hooks/useOvernightRates'
+import { PolicyRatePage } from './PolicyRatePage'
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
@@ -34,8 +36,14 @@ const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m
 import { CountryCurvePage } from './CountryCurvePage'
 import { GlobalRatesPage } from './GlobalRatesPage'
 import { CrudeOilPage } from './CrudeOilPage'
+import { IndexComparisonPage } from './IndexComparisonPage'
+import { SectorAttributionPage } from './SectorAttributionPage'
+import { BreadthPage } from './BreadthPage'
+import { CrossAssetVolPage } from './CrossAssetVolPage'
+import { CountryReturnsPage } from './CountryReturnsPage'
+import { PairReturnsPage } from './PairReturnsPage'
 
-type ViewTab = 'strips' | 'pricing' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
+type ViewTab = 'strips' | 'pricing' | 'policy' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
 
 type AssetClass = 'macro' | 'rates' | 'equities' | 'fx' | 'commodities'
 
@@ -62,6 +70,33 @@ const ENERGY_PRODUCTS: ReadonlyArray<{ key: EnergyProduct; label: string }> = [
   { key: 'crude-oil', label: 'CRUDE OIL' },
 ]
 
+type EquitySection = 'index-comparison' | 'sector-attribution' | 'breadth'
+
+const EQUITY_SECTIONS: ReadonlyArray<{ key: EquitySection; label: string }> = [
+  { key: 'index-comparison',   label: 'INDEX COMPARISON' },
+  { key: 'sector-attribution', label: 'SECTOR ATTRIBUTION' },
+  { key: 'breadth',            label: 'BREADTH' },
+]
+
+type MacroSection = 'regimes' | 'cross-asset-vol'
+
+const MACRO_SECTIONS: ReadonlyArray<{ key: MacroSection; label: string }> = [
+  { key: 'regimes',          label: 'REGIMES' },
+  { key: 'cross-asset-vol',  label: 'CROSS ASSET VOL' },
+]
+
+type GlobalEquitySection = 'country-returns'
+
+const GLOBAL_EQUITY_SECTIONS: ReadonlyArray<{ key: GlobalEquitySection; label: string }> = [
+  { key: 'country-returns', label: 'COUNTRY RETURNS' },
+]
+
+type GlobalFxSection = 'pair-returns'
+
+const GLOBAL_FX_SECTIONS: ReadonlyArray<{ key: GlobalFxSection; label: string }> = [
+  { key: 'pair-returns', label: 'PAIR RETURNS' },
+]
+
 type ProductKey = 'fedfunds' | 'sofr'
 
 const PRODUCT_CONFIG: Record<ProductKey, { label: string; root: string; title: string }> = {
@@ -70,12 +105,15 @@ const PRODUCT_CONFIG: Record<ProductKey, { label: string; root: string; title: s
 }
 
 // Non-US countries have a single market each
-const COUNTRY_MARKET: Record<Exclude<CountryCode, 'US' | 'Global'>, { root: string; title: string; rateLabel: string }> = {
-  UK:  { root: 'SO3',  title: '3M SONIA',     rateLabel: 'CURRENT SONIA' },
-  EU:  { root: 'EUR',  title: '3M EURIBOR',   rateLabel: 'CURRENT EURIBOR' },
-  CAD: { root: 'CRA',  title: '3M CORRA',     rateLabel: 'CURRENT CORRA' },
-  JPY: { root: 'TOA3', title: '3M TONA',      rateLabel: 'CURRENT TONA' },
-  AUS: { root: 'AUS',  title: '90D BANK BILL', rateLabel: 'CURRENT IOCR' },
+// rateLabel matches the overnight series surfaced in the banner. The EU page
+// shows the ECB Deposit Facility Rate (a policy rate); the AUS page shows AONIA
+// (the realized interbank overnight rate, formerly mislabeled "IOCR").
+const COUNTRY_MARKET: Record<Exclude<CountryCode, 'US' | 'Global'>, { root: string; title: string; rateLabel: string; overnightSeries: string }> = {
+  UK:  { root: 'SO3',  title: '3M SONIA',      rateLabel: 'CURRENT SONIA', overnightSeries: 'SONIA' },
+  EU:  { root: 'EUR',  title: '3M EURIBOR',    rateLabel: 'CURRENT ECB DFR', overnightSeries: 'ECBDFR' },
+  CAD: { root: 'CRA',  title: '3M CORRA',      rateLabel: 'CURRENT CORRA', overnightSeries: 'CORRA' },
+  JPY: { root: 'TOA3', title: '3M TONA',       rateLabel: 'CURRENT TONA',  overnightSeries: 'TONA' },
+  AUS: { root: 'AUS',  title: '90D BANK BILL', rateLabel: 'CURRENT AONIA', overnightSeries: 'AONIA' },
 }
 
 const FVM_TABS = [
@@ -91,6 +129,7 @@ function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string 
     return [
       { key: 'strips', label: 'STIR STRIPS' },
       { key: 'pricing', label: 'FORWARD PRICING' },
+      { key: 'policy', label: 'POLICY RATE' },
       { key: 'ust', label: 'UST CURVE' },
       { key: 'attribution', label: 'YIELD ATTRIBUTION' },
       { key: 'credit', label: 'CREDIT' },
@@ -430,6 +469,12 @@ function fmtBps(v: number): string {
   return `${sign}${v.toFixed(1)}`
 }
 
+function fmtSignedDecimal(v: number): string {
+  if (Math.abs(v) < 0.05) return '0.0'
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(1)}`
+}
+
 function toneFromBps(v: number): 'cut' | 'hike' | 'flat' {
   if (v > 0.01) return 'hike'
   if (v < -0.01) return 'cut'
@@ -437,15 +482,15 @@ function toneFromBps(v: number): 'cut' | 'hike' | 'flat' {
 }
 
 function summaryFromBps(v: number): string {
-  const moves = Math.abs(v) / 25
-  if (Math.abs(v) < 0.01) return 'UNCH'
-  if (moves < 1) {
-    const pct = (moves * 100).toFixed(0)
-    if (v > 0) return `+${pct}% HIKES`
-    return `${pct}% CUTS`
-  }
-  if (v > 0) return `+${moves.toFixed(1)} HIKES`
-  return `${moves.toFixed(1)} CUTS`
+  // Probability format: |bps| / 25 = probability of a 25-bp move at (or by)
+  // this meeting. For Summary (Total) this can exceed 100% — "120.8% Hike"
+  // = the cumulative implied path is equivalent to 1.208 full hikes.
+  // Direction (Hike/Cut/Flat) is taken from the sign of bps; the percent
+  // is always rendered unsigned because "Cut" already carries the sign.
+  const pct = Math.abs(v) / 25 * 100
+  if (Math.abs(v) < 0.05) return `${pct.toFixed(1)}% Flat`
+  if (v > 0) return `${pct.toFixed(1)}% Hike`
+  return `${pct.toFixed(1)}% Cut`
 }
 
 function impliedMovesFromBps(v: number): number {
@@ -859,6 +904,10 @@ export function STIRDashboardPage() {
   const [country, setCountry] = useState<CountryCode>('US')
   const [commodityCategory, setCommodityCategory] = useState<CommodityCategory>('energy')
   const [energyProduct, setEnergyProduct] = useState<EnergyProduct>('crude-oil')
+  const [equitySection, setEquitySection] = useState<EquitySection>('index-comparison')
+  const [globalEquitySection, setGlobalEquitySection] = useState<GlobalEquitySection>('country-returns')
+  const [globalFxSection, setGlobalFxSection] = useState<GlobalFxSection>('pair-returns')
+  const [macroSection, setMacroSection] = useState<MacroSection>('regimes')
   const viewTabs = useMemo(() => getViewTabs(country), [country])
 
   // Fall back to first tab if current tab is no longer visible for this country
@@ -970,14 +1019,26 @@ export function STIRDashboardPage() {
   // Derive active market from country + product selection
   const activeMarket = useMemo(() => {
     if (country === 'US' || country === 'Global') {
-      return { root: productConfig.root, title: productConfig.title, rateLabel: 'CURRENT EFFR' }
+      const rateLabel = product === 'sofr' ? 'CURRENT SOFR' : 'CURRENT EFFR'
+      return { root: productConfig.root, title: productConfig.title, rateLabel, overnightSeries: null as string | null }
     }
-    return COUNTRY_MARKET[country]
-  }, [country, productConfig])
+    const m = COUNTRY_MARKET[country]
+    return { root: m.root, title: m.title, rateLabel: m.rateLabel, overnightSeries: m.overnightSeries as string | null }
+  }, [country, productConfig, product])
 
   const curve = useFuturesCurve(activeMarket.root, lookbackDays)
   const fedwatch = useFedWatch(activeMarket.root)
   const strip = useFuturesStrip(activeMarket.root)
+  // Non-US banners read the latest overnight rate from /api/overnight-rates;
+  // US continues to use fedwatch.currentEFFR (live EFFR / SOFR via FRED).
+  const overnightCodes = useMemo<readonly string[]>(
+    () => (activeMarket.overnightSeries ? [activeMarket.overnightSeries] : []),
+    [activeMarket.overnightSeries],
+  )
+  const overnight = useOvernightRates(overnightCodes)
+  const overnightLatest = activeMarket.overnightSeries
+    ? overnight.data[activeMarket.overnightSeries] ?? null
+    : null
 
   // Independent t-X lookback for the SR3 calendar-spreads dashboard.
   const [spreadLookbackDays, setSpreadLookbackDays] = useState(1)
@@ -1084,8 +1145,14 @@ export function STIRDashboardPage() {
       return fedwatch.meetings
         .filter((meeting) => meeting.meetingDate <= '2027-12-31')
         .map((meeting) => {
-          const stepBps = meeting.expectedChange * 100
-          const totalBps = (meeting.effrEnd - fedwatch.currentEFFR) * 100
+          // Server returns expectedChange already in bps (decimal-rate × 10000).
+          // totalBps is computed from percent-unit rates, so the × 100 there
+          // converts (percent diff) → bps and is correct.
+          const stepBps = meeting.expectedChange
+          // meeting.effrEnd and currentPolicyRate share units (both policy in
+          // shift-tree markets; both proxy otherwise). currentEFFR is always
+          // the raw proxy anchor so it's not safe to use as the baseline here.
+          const totalBps = (meeting.effrEnd - fedwatch.currentPolicyRate) * 100
           const tone = toneFromBps(stepBps)
           return {
             key: meeting.meetingDate,
@@ -1127,14 +1194,16 @@ export function STIRDashboardPage() {
   const overnightRow = useMemo<SummaryRow>(() => ({
     key: 'cash',
     label: 'Overnight Cash',
-    impliedRate: fedwatch.currentEFFR,
+    // Use currentPolicyRate so this row shares units with meeting.effrEnd in
+    // the SOFR (shift-tree) tab; for other tabs it equals currentEFFR.
+    impliedRate: fedwatch.currentPolicyRate || fedwatch.currentEFFR,
     stepBps: 0,
     totalBps: 0,
     impliedMoves: 0,
-    stepSummary: 'UNCH',
-    totalSummary: 'UNCH',
+    stepSummary: '0.0% Flat',
+    totalSummary: '0.0% Flat',
     tone: 'flat',
-  }), [fedwatch.currentEFFR])
+  }), [fedwatch.currentPolicyRate, fedwatch.currentEFFR])
 
   const matrixRows = useMemo(() => {
     return fedwatch.cumulativeProbabilities.map((row) => {
@@ -2592,26 +2661,59 @@ export function STIRDashboardPage() {
         {/* ═══ Macro View ═══ */}
         {assetClass === 'macro' && (
           <>
-            <div className={styles.viewTabs}>
-              <button
-                className={`${styles.viewTab} ${styles.viewTabActive}`}
-                style={{ border: '1px solid #4EC9B0' }}
-              >
-                REGIMES
-              </button>
-            </div>
-            <div className={styles.comingSoon}>Regimes coming soon</div>
+            <AssetSubRibbon
+              items={MACRO_SECTIONS}
+              value={macroSection}
+              onChange={setMacroSection}
+            />
+            {macroSection === 'regimes' && (
+              <div className={styles.comingSoon}>Regimes coming soon</div>
+            )}
+            {macroSection === 'cross-asset-vol' && <CrossAssetVolPage />}
           </>
         )}
 
         {/* ═══ Equities View ═══ */}
         {assetClass === 'equities' && (
-          <div className={styles.comingSoon}>Equities coming soon</div>
+          country === 'US' ? (
+            <>
+              <AssetSubRibbon
+                items={EQUITY_SECTIONS}
+                value={equitySection}
+                onChange={setEquitySection}
+              />
+              {equitySection === 'index-comparison' && <IndexComparisonPage />}
+              {equitySection === 'sector-attribution' && <SectorAttributionPage />}
+              {equitySection === 'breadth' && <BreadthPage />}
+            </>
+          ) : country === 'Global' ? (
+            <>
+              <AssetSubRibbon
+                items={GLOBAL_EQUITY_SECTIONS}
+                value={globalEquitySection}
+                onChange={setGlobalEquitySection}
+              />
+              {globalEquitySection === 'country-returns' && <CountryReturnsPage />}
+            </>
+          ) : (
+            <div className={styles.comingSoon}>{country} equities coming soon</div>
+          )
         )}
 
         {/* ═══ FX View ═══ */}
         {assetClass === 'fx' && (
-          <div className={styles.comingSoon}>FX coming soon</div>
+          country === 'Global' ? (
+            <>
+              <AssetSubRibbon
+                items={GLOBAL_FX_SECTIONS}
+                value={globalFxSection}
+                onChange={setGlobalFxSection}
+              />
+              {globalFxSection === 'pair-returns' && <PairReturnsPage />}
+            </>
+          ) : (
+            <div className={styles.comingSoon}>{country} FX coming soon</div>
+          )
         )}
 
         {/* ═══ Commodities View ═══ */}
@@ -2683,7 +2785,23 @@ export function STIRDashboardPage() {
           <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK') ? styles.leftPanel : undefined}>
         {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.ffrBand}>
-            {activeMarket.rateLabel} {fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'}
+            {activeMarket.rateLabel}{' '}
+            {(() => {
+              if (overnightLatest) {
+                const stale = overnightLatest.stale_days > 3
+                return (
+                  <>
+                    {overnightLatest.value.toFixed(2)}%
+                    {stale && (
+                      <span className={styles.curveNote} style={{ marginLeft: 8, display: 'inline-block' }}>
+                        Last updated: {overnightLatest.date}
+                      </span>
+                    )}
+                  </>
+                )
+              }
+              return fedwatch.currentEFFR != null ? `${fedwatch.currentEFFR.toFixed(2)}%` : '—'
+            })()}
           </div>
         )}
         {activeView === 'pricing' && (
@@ -2732,6 +2850,14 @@ export function STIRDashboardPage() {
                     <div className={styles.panelTitle}>
                       {country}: {activeMarket.title}
                     </div>
+                    {curve.trimmedStaleSymbols.length > 0 && (
+                      <div className={styles.curveNote}>
+                        Curve trimmed: dropped {curve.trimmedStaleSymbols.length}
+                        {' '}stale contract{curve.trimmedStaleSymbols.length === 1 ? '' : 's'}
+                        {' '}({curve.trimmedStaleSymbols.join(', ')})
+                        {curve.lastGoodContract && ` · last good contract = ${curve.lastGoodContract}`}
+                      </div>
+                    )}
                     <ResponsiveContainer width="100%" height={320}>
                       <LineChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 4 }}>
                         <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
@@ -2818,12 +2944,16 @@ export function STIRDashboardPage() {
                       <thead>
                         <tr>
                           <th>Meeting</th>
-                          <th>Implied Rate</th>
-                          <th>Bps (Step)</th>
-                          <th>Bps (Total)</th>
-                          <th>Implied # Cuts/Hikes</th>
-                          <th>Summary</th>
-                          <th>Summary (Total)</th>
+                          <th>Implied<br/>Rate</th>
+                          <th>Bps<br/>(Step)</th>
+                          <th>Bps<br/>(Total)</th>
+                          <th>Implied # Cuts/Hikes<br/>(Step)</th>
+                          {/* Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec */}
+                          {!(country === 'US' && product === 'fedfunds') && (
+                            <th>Implied # Cuts/Hikes<br/>(Total)</th>
+                          )}
+                          <th>Summary<br/>(Step)</th>
+                          <th>Summary<br/>(Total)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2833,7 +2963,10 @@ export function STIRDashboardPage() {
                             <td className={styles.mono}>{fmtRate(row.impliedRate)}</td>
                             <td className={`${styles.mono} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.stepBps)}</td>
                             <td className={`${styles.mono} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.totalBps)}</td>
-                            <td className={styles.mono}>{row.impliedMoves.toFixed(1)}</td>
+                            <td className={`${styles.mono} ${styles.cellCenter} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.stepBps / 25)}</td>
+                            {!(country === 'US' && product === 'fedfunds') && (
+                              <td className={`${styles.mono} ${styles.cellCenter} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.totalBps / 25)}</td>
+                            )}
                             <td><span className={`${styles.badge} ${styles[row.tone]}`}>{row.stepSummary}</span></td>
                             <td><span className={`${styles.badge} ${styles[row.totalBps < 0 ? 'cut' : row.totalBps > 0 ? 'hike' : 'flat']}`}>{row.totalSummary}</span></td>
                           </tr>
@@ -2843,11 +2976,18 @@ export function STIRDashboardPage() {
                   </div>
                 </section>
 
-                {fedwatch.rangeColumns.length > 0 && (
+                {country === 'US' && product === 'fedfunds' && fedwatch.rangeColumns.length > 0 && (
                   <section className={styles.section}>
                     <button className={styles.matrixToggle} onClick={() => setShowMatrix((v) => !v)}>
                       {showMatrix ? '▼' : '▶'} Detailed Probability Matrix
                     </button>
+                    {showMatrix && (
+                      <div className={styles.matrixSubtitle}>
+                        {Math.abs(fedwatch.proxyToPolicySpread) > 1e-9 && fedwatch.proxyToPolicySpreadSource
+                          ? fedwatch.proxyToPolicySpreadSource
+                          : `as of ${fedwatch.asOfDate || '—'}`}
+                      </div>
+                    )}
                     {showMatrix && (
                       <div className={styles.matrixWrap}>
                         <table className={styles.matrixTable}>
@@ -3068,6 +3208,12 @@ export function STIRDashboardPage() {
               </>
             )}
           </>
+        )}
+
+        {activeView === 'policy' && country === 'US' && (
+          <section className={styles.section}>
+            <PolicyRatePage />
+          </section>
         )}
 
         {activeView === 'ust' && (

@@ -20,6 +20,8 @@ export interface FuturesCurveResponse {
   availableDates: string[]
   lookbackDays: number
   rootSymbol: string
+  trimmedStaleSymbols: string[]
+  lastGoodContract: string | null
 }
 
 interface UseFuturesCurveResult extends FuturesCurveResponse {
@@ -35,6 +37,8 @@ const EMPTY_RESULT: FuturesCurveResponse = {
   availableDates: [],
   lookbackDays: 0,
   rootSymbol: '',
+  trimmedStaleSymbols: [],
+  lastGoodContract: null,
 }
 
 export function useFuturesCurve(rootSymbol: string, lookbackDays: number, date?: string): UseFuturesCurveResult {

@@ -6,7 +6,9 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "fetch": "tsx src/fetchAllSeries.ts"
+    "fetch": "tsx src/fetchAllSeries.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -24,6 +26,7 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.9.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.7"
   }
 }

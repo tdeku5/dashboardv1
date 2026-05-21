@@ -23,10 +23,20 @@ export interface FedWatchCumulativeRow {
 export interface FedWatchResponse {
   asOfDate: string
   currentEFFR: number
+  // Current policy lower bound (proxy + spread). Equals currentEFFR for
+  // markets without a translation; differs for SR3 (policy ≈ SOFR − spread).
+  // Use for the Summary table's Overnight Cash row when in policy units.
+  currentPolicyRate: number
   currentTargetRange: string
   meetings: FedWatchMeeting[]
   cumulativeProbabilities: FedWatchCumulativeRow[]
   rangeColumns: string[]
+  // Decimal offset between proxy (overnight) rate and policy rate. Zero for
+  // US Fed Funds (EFFR floats within the target band, so the floor-bucket
+  // label IS the band). Non-zero for ECB/BoE/etc. where the policy rate
+  // sits a few bp above the overnight proxy.
+  proxyToPolicySpread: number
+  proxyToPolicySpreadSource: string
 }
 
 interface UseFedWatchResult extends FedWatchResponse {
@@ -37,10 +47,13 @@ interface UseFedWatchResult extends FedWatchResponse {
 const EMPTY_RESULT: FedWatchResponse = {
   asOfDate: '',
   currentEFFR: 0,
+  currentPolicyRate: 0,
   currentTargetRange: '',
   meetings: [],
   cumulativeProbabilities: [],
   rangeColumns: [],
+  proxyToPolicySpread: 0,
+  proxyToPolicySpreadSource: '',
 }
 
 export function useFedWatch(market?: string, date?: string): UseFedWatchResult {

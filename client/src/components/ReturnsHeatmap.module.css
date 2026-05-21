@@ -1,0 +1,142 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: #94A3B8;
+  letter-spacing: 0.04em;
+}
+
+.warning {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: #f59e0b;
+  letter-spacing: 0.04em;
+  padding: 6px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 2px;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.table {
+  display: grid;
+  grid-template-columns: 1fr;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(9, 14, 21, 0.6);
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Sector column flex-shrinks; data columns share the remaining space evenly. */
+.row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.6fr) repeat(5, minmax(60px, 1fr));
+  align-items: stretch;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+}
+
+.row:last-child { border-bottom: none; }
+
+.row:not(.headRow):hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.headRow {
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border);
+}
+
+.cell {
+  padding: 16px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.headCell {
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  color: #728197;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.sectorCell {
+  justify-content: flex-start;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.dataCell {
+  justify-content: center;
+  text-align: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.sectorName {
+  color: #e2e8f0;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sectorTicker {
+  color: #4e6070;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Region/group separator row — full-width subtle divider with small label. */
+.groupRow {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.groupRow:first-child {
+  border-top: none;
+}
+
+.groupLabel {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: #5a6b7e;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+}

@@ -250,6 +250,18 @@
   margin-bottom: 10px;
 }
 
+.curveNote {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: #f59e0b;
+  padding: 4px 8px;
+  margin: 0 0 8px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 2px;
+  background: rgba(245, 158, 11, 0.06);
+}
+
 .tooltip {
   background: #090e15;
   border: 1px solid rgba(255,255,255,0.13);
@@ -318,6 +330,12 @@
   letter-spacing: 0.06em;
   font-size: 10px;
   background: rgba(255,255,255,0.02);
+  /* Allow paired (Step)/(Total) headers to wrap to two lines and stay
+   * vertically/horizontally centered so column widths stay uniform. */
+  text-align: center;
+  vertical-align: middle;
+  white-space: normal;
+  line-height: 1.25;
 }
 
 .table tbody tr:nth-child(even),
@@ -327,6 +345,13 @@
 
 .mono {
   font-family: var(--font-mono);
+}
+
+/* Applied to body cells that should sit visually centered under their
+ * two-line header (e.g. the Implied # Cuts/Hikes (Step) and (Total) columns
+ * on the Summary Table). */
+.cellCenter {
+  text-align: center;
 }
 
 .badge {
@@ -371,6 +396,15 @@
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   cursor: pointer;
+}
+
+.matrixSubtitle {
+  padding: 6px 16px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: #6b7889;
+  border-bottom: 1px solid var(--border);
 }
 
 .matrixHot {

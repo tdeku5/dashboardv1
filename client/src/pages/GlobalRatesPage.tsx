@@ -17,6 +17,7 @@ import { useGlobalRatesSummary, type CurveRegimeName, type NextMove } from '../h
 import { getCellColor } from '../lib/cellColor'
 import { REGIME_COLORS } from '../lib/curveRegime'
 import { ReferenceLine } from 'recharts'
+import { DailyChangeModal } from '../components/DailyChangeModal'
 import styles from './STIRDashboardPage.module.css'
 
 const COUNTRY_COLORS: Record<string, string> = {
@@ -195,6 +196,8 @@ export function GlobalRatesPage() {
   const [summaryYieldLookback, setSummaryYieldLookback] = useState<string>('1d')
   const [summaryRegimeLookback, setSummaryRegimeLookback] = useState<string>('20d')
   const summary = useGlobalRatesSummary(summaryYieldLookback, summaryRegimeLookback)
+
+  const [detailCell, setDetailCell] = useState<{ country: string; countryLabel: string; tenor: YieldChangeRowKey } | null>(null)
 
   const fmtSpread = (v: number | undefined): string => {
     if (typeof v !== 'number') return '—'
@@ -539,11 +542,21 @@ export function GlobalRatesPage() {
                     const metric: YieldChangeMetric | null | undefined = country?.[row]
                     const z = metric?.zScore
                     const bg = getCellColor(z, yieldChangeRowMaxAbs[row], 'red-blue')
+                    const cellStyle: React.CSSProperties = { cursor: 'pointer', ...(bg ? { background: bg } : {}) }
                     return (
                       <div
                         key={`${key}-${row}`}
                         className={styles.yieldChangeCell}
-                        style={bg ? { background: bg } : undefined}
+                        style={cellStyle}
+                        onClick={() => setDetailCell({ country: key, countryLabel: label, tenor: row })}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setDetailCell({ country: key, countryLabel: label, tenor: row })
+                          }
+                        }}
                       >
                         <div className={styles.yieldChangeCellHeader}>{label} {row}</div>
                         {metric ? (
@@ -685,6 +698,15 @@ export function GlobalRatesPage() {
           </div>
         )}
       </div>
+
+      {detailCell && (
+        <DailyChangeModal
+          country={detailCell.country}
+          countryLabel={detailCell.countryLabel}
+          tenor={detailCell.tenor}
+          onClose={() => setDetailCell(null)}
+        />
+      )}
     </div>
   )
 }

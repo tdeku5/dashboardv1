@@ -1,0 +1,146 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.content {
+  background: #0a1018;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 22px 24px 20px;
+  width: 70vw;
+  max-width: 900px;
+  height: 65vh;
+  max-height: 720px;
+  min-height: 480px;
+  position: relative;
+  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  color: var(--text-primary);
+}
+
+.titleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid #1e2433;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.titleSubtle {
+  color: #94A3B8;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.close {
+  background: transparent;
+  border: none;
+  color: #94A3B8;
+  font-size: 22px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 6px;
+}
+
+.close:hover {
+  color: #ffffff;
+}
+
+.lookbackRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.lookbackLabel {
+  font-size: 10px;
+  color: #94A3B8;
+  letter-spacing: 0.1em;
+}
+
+.lookbackButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.lookbackButtons button {
+  background: transparent;
+  border: 1px solid #334155;
+  color: #94A3B8;
+  padding: 4px 12px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  letter-spacing: 0.05em;
+  border-radius: 2px;
+}
+
+.lookbackButtons button:hover {
+  color: #cbd5e1;
+}
+
+.activeLookback {
+  background: rgba(34, 197, 94, 0.1) !important;
+  color: #4ade80 !important;
+  border-color: #4ade80 !important;
+}
+
+.chartContainer {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.statStrip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding-top: 12px;
+  margin-top: 8px;
+  border-top: 1px solid #1e2433;
+  font-size: 11px;
+  color: #cbd5e1;
+  letter-spacing: 0.04em;
+}
+
+.statLabel {
+  color: #64748B;
+}
+
+.statSep {
+  color: #334155;
+}
+
+.loading,
+.error {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94A3B8;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.error {
+  color: #ef4444;
+}

@@ -280,7 +280,14 @@
       "Bash(cp /home/tdeku/dashboardv1/server/src/index.ts /tmp/_index_full.ts)",
       "Bash(cp /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx /tmp/_stir_full.tsx)",
       "Bash(cp /tmp/_index_full.ts /home/tdeku/dashboardv1/server/src/index.ts)",
-      "Bash(cp /tmp/_stir_full.tsx /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx)"
+      "Bash(cp /tmp/_stir_full.tsx /home/tdeku/dashboardv1/client/src/pages/STIRDashboardPage.tsx)",
+      "Bash(tee /tmp/dashboard-dev.log)",
+      "Read(//tmp/**)",
+      "Bash(apt list *)",
+      "Bash(git mv *)",
+      "Bash(wait bpdlxxuos *)",
+      "Bash(npm test *)",
+      "Bash(wait)"
     ]
   },
   "sandbox": {

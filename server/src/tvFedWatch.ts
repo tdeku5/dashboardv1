@@ -1,6 +1,21 @@
 import { db } from './db'
 import { getMarket, type StirMarket } from './stirRegistry'
 import { CB_MEETINGS } from './cbMeetings'
+import {
+  BPS_STEP,
+  bucketRangeLabel,
+  computeStepProbabilities,
+  expandTree,
+  stepProbabilitiesAsDeltas,
+  type MeetingDeltaSet,
+} from './lib/fedwatch'
+import {
+  decomposeAcrossContracts,
+  decomposeContract,
+  referenceQuarter,
+  thirdWednesday,
+  type ContractObservation,
+} from './lib/sr3Settlement'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,11 +41,25 @@ export interface FedWatchCumulativeRow {
 
 export interface TvFedWatchResponse {
   asOfDate: string
+  // The proxy rate the tree operates on (EFFR for FF, SOFR for SR3, ESTR for
+  // EUR, etc.). Shown in the "CURRENT {RATE}" banner at the top of the page.
   currentEFFR: number
+  // The current policy lower bound (or proxy snapped to grid for markets that
+  // don't translate). Used by the Summary table's Overnight Cash row when the
+  // Summary table is in policy units (shift-tree alignment).
+  currentPolicyRate: number
   currentTargetRange: string
   meetings: FedWatchMeeting[]
   cumulativeProbabilities: FedWatchCumulativeRow[]
   rangeColumns: string[]
+  // Proxy-to-policy spread (in decimal) used to render policy-range labels.
+  // For US FF currently 0 (EFFR is the proxy; bucket labels read directly).
+  // For SR3 computed live as policy_lower − SOFR (typically negative).
+  // For non-USD STIRs this is the (policy - proxy) offset — see stirRegistry.
+  proxyToPolicySpread: number
+  // Source label for the spread, e.g. "DFR - ESTR (live)" or "static fallback".
+  // Surfaced in the UI subtitle so the user can monitor for regime shifts.
+  proxyToPolicySpreadSource: string
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -40,7 +69,7 @@ const MONTH_CODES_BY_INDEX: Record<number, string> = {
   6: 'N', 7: 'Q', 8: 'U', 9: 'V', 10: 'X', 11: 'Z',
 }
 const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-const BPS_STEP = 0.0025 // 25bp in decimal
+// BPS_STEP imported from ./lib/fedwatch
 const QUARTERLY_MONTHS = new Set([2, 5, 8, 11]) // H=Mar, M=Jun, U=Sep, Z=Dec
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,8 +89,12 @@ function fmtRange(lower: number, upper: number): string {
   return `${lo}-${hi}`
 }
 
-function roundToGrid(rate: number): number {
-  return Math.round(rate / BPS_STEP) * BPS_STEP
+// Floor (not round) to identify the 25-bp bucket CONTAINING the rate. This
+// matches the CME methodology: a 3.63% EFFR sits inside the [3.50, 3.75]
+// Fed target band, not [3.75, 4.00]. Used for the "current target range"
+// banner and for the start bucket of the cumulative probability tree.
+function floorToGrid(rate: number): number {
+  return Math.floor(rate / BPS_STEP) * BPS_STEP
 }
 
 function tsToDate(ts: string): string {
@@ -143,15 +176,6 @@ function buildSymbol(prefix: string, yearDigits: 1 | 2, year: number, month: num
   return `${prefix}${code}${yearSuffix}`
 }
 
-// For quarterly markets, find the next quarterly contract month on or after the given month
-function nextQuarterlyMonth(year: number, month: number): { year: number; month: number } {
-  const qMonths = [2, 5, 8, 11] // Mar, Jun, Sep, Dec
-  for (const qm of qMonths) {
-    if (qm >= month) return { year, month: qm }
-  }
-  return { year: year + 1, month: 2 } // wrap to next Mar
-}
-
 // ── Core FedWatch calculation ────────────────────────────────────────────────
 
 export function getTvFedWatch(marketKey: string, asOfDate?: string): TvFedWatchResponse {
@@ -160,8 +184,8 @@ export function getTvFedWatch(marketKey: string, asOfDate?: string): TvFedWatchR
     return emptyResponse()
   }
 
-  const anchorRate = getAnchorRate(market)
-  if (anchorRate === null) {
+  const rawAnchor = getAnchorRate(market)
+  if (rawAnchor === null) {
     return emptyResponse()
   }
 
@@ -185,31 +209,121 @@ export function getTvFedWatch(marketKey: string, asOfDate?: string): TvFedWatchR
     if (!latestTs) {
       return {
         ...emptyResponse(),
-        currentEFFR: +(anchorRate * 100).toFixed(4),
-        currentTargetRange: fmtRange(roundToGrid(anchorRate), roundToGrid(anchorRate) + BPS_STEP),
+        currentEFFR: +(rawAnchor * 100).toFixed(4),
+        currentPolicyRate: +(rawAnchor * 100).toFixed(4),
+        currentTargetRange: fmtRange(floorToGrid(rawAnchor), floorToGrid(rawAnchor) + BPS_STEP),
       }
     }
     asOfTs = latestTs
     resolvedDate = tsToDate(latestTs)
   }
 
-  const currentLower = roundToGrid(anchorRate)
+  // Resolve the proxy-to-policy spread (internal sign: policy − proxy).
+  const { spread, spreadSource } = resolveSpread(market)
+
+  // SR3 (shift-tree) needs a policy-anchored tree, not a SOFR-anchored one.
+  // SOFR can sit anywhere within the policy range on any given day; today
+  // it's exactly at the lower bound (3.50%), which would skew the tree.
+  // Use floor(EFFR, 25bp) as the policy lower bound directly, and translate
+  // each SR3-implied SOFR into policy by adding the (negative) spread.
+  const useShiftTree = market.policyAlignment === 'shift-tree'
+  // anchorRate is what the tree starts from and what the Overnight Cash row
+  // of the Summary table reports. For shift-tree we want policy units, so
+  // override with floor(EFFR, 25bp) — the policy lower bound. For shift-label
+  // we keep the proxy (rawAnchor).
+  let anchorRate = rawAnchor
+  if (useShiftTree) {
+    const dffRow = db.prepare(`
+      SELECT value FROM series_observations
+      WHERE series_id = 'DFF' ORDER BY date DESC LIMIT 1
+    `).get() as { value: number } | undefined
+    if (dffRow) {
+      anchorRate = Math.floor(dffRow.value / 100 / BPS_STEP) * BPS_STEP
+    }
+  }
+  // Hold onto the proxy anchor for the "CURRENT {RATE}" banner. For shift-tree
+  // (SR3), the banner should display the live SOFR rate, not the policy bucket.
+  const proxyAnchor = rawAnchor
+
+  const currentLower = useShiftTree
+    ? floorToGrid(anchorRate)
+    : floorToGrid(anchorRate + spread)
   const currentTargetRange = fmtRange(currentLower, currentLower + BPS_STEP)
 
   const futureMeetings = meetings.filter(m => m > resolvedDate)
 
-  // Helper to get implied rate for a contract
+  // Helper to get implied rate for a contract. For shift-tree, translate the
+  // proxy-implied rate into policy units by adding the spread (= policy − proxy,
+  // negative for SOFR). The downstream `compute*` paths then operate entirely
+  // in policy units and don't need a separate shift step.
   const getImplied = (year: number, month: number): number | null => {
     const sym = buildSymbol(prefix, market.yearDigits, year, month)
     const price = getContractPrice(sym, asOfTs)
     if (price === null) return null
-    return (100 - price) / 100
+    const proxy = (100 - price) / 100
+    return useShiftTree ? proxy + spread : proxy
   }
 
   if (market.cadence === 'monthly') {
-    return computeMonthlyFedWatch(market, futureMeetings, anchorRate, resolvedDate, getImplied)
+    return computeMonthlyFedWatch(market, futureMeetings, anchorRate, proxyAnchor, resolvedDate, getImplied, spread, spreadSource, currentTargetRange)
   } else {
-    return computeQuarterlyFedWatch(market, futureMeetings, anchorRate, resolvedDate, getImplied)
+    return computeQuarterlyFedWatch(market, futureMeetings, anchorRate, proxyAnchor, resolvedDate, getImplied, spread, spreadSource, currentTargetRange)
+  }
+}
+
+function resolveSpread(market: StirMarket): { spread: number; spreadSource: string } {
+  // spreadSource is consumed by the client as a subtitle below the
+  // probability-matrix header. Keep it compact: a short summary, optionally
+  // with " · as of {date}" appended. When the spread is zero the client
+  // omits the entire spread sentence and shows only an as-of label.
+  const src = market.proxyToPolicySpreadSource
+  if (src.type === 'zero') {
+    return { spread: 0, spreadSource: '' }
+  }
+  if (src.type === 'static') {
+    return {
+      spread: src.bps / 10000,
+      spreadSource: `Spread: ${src.bps >= 0 ? '+' : ''}${src.bps} bp (policy − proxy, static)`,
+    }
+  }
+  // src.type === 'live-sofr-policy': spread = policy_lower − typical SOFR.
+  // Internal convention is policy − proxy (negative when SOFR > policy_lower).
+  //
+  // We use the **median** of the last 20 trading days of (SOFR − policy_lower)
+  // rather than today's spot. Reason: SOFR can sit unusually low on any given
+  // day (today's print of 3.50% is exactly at the policy lower bound, an
+  // outlier vs the typical 10-15 bp gap). The futures market prices the
+  // *expected* forward SOFR spread, not today's spot — so we need a smoothed
+  // estimate. Median is robust to quarter-end / month-end spikes.
+  const sofrRows = db.prepare(`
+    SELECT value, date FROM series_observations
+    WHERE series_id = 'SOFR'
+    ORDER BY date DESC LIMIT 20
+  `).all() as { value: number; date: string }[]
+  const dffRow = db.prepare(`
+    SELECT value, date FROM series_observations
+    WHERE series_id = 'DFF' ORDER BY date DESC LIMIT 1
+  `).get() as { value: number; date: string } | undefined
+  if (sofrRows.length === 0 || !dffRow) {
+    return { spread: 0, spreadSource: '' }
+  }
+  const policyLower = Math.floor(dffRow.value / 100 / BPS_STEP) * BPS_STEP
+  const spotSofr = sofrRows[0].value / 100
+  const spotDiff = spotSofr - policyLower
+
+  // Median diff over the window.
+  const diffs = sofrRows.map(r => r.value / 100 - policyLower).sort((a, b) => a - b)
+  const medianDiff = diffs.length % 2
+    ? diffs[(diffs.length - 1) / 2]
+    : (diffs[diffs.length / 2 - 1] + diffs[diffs.length / 2]) / 2
+
+  // Internal sign: policy − proxy. Median diff is (proxy − policy), so negate.
+  const spread = -medianDiff
+  const medianDiffBp = medianDiff * 10000
+  const spotDiffBp = spotDiff * 10000
+  return {
+    spread,
+    spreadSource: `Spread: +${medianDiffBp.toFixed(1)} bp · 20d median of SOFR − policy (spot ${spotDiffBp >= 0 ? '+' : ''}${spotDiffBp.toFixed(1)} bp) · multi-meeting decomposition: cross-contract day-weighted LSQ · as of ${sofrRows[0].date}`,
   }
 }
 
@@ -219,9 +333,14 @@ function computeMonthlyFedWatch(
   market: StirMarket,
   futureMeetings: string[],
   anchorRate: number,
+  proxyAnchor: number,
   resolvedDate: string,
   getImplied: (year: number, month: number) => number | null,
+  proxyToPolicySpread: number,
+  proxyToPolicySpreadSource: string,
+  currentTargetRange: string,
 ): TvFedWatchResponse {
+  const alignment = market.policyAlignment
   // Build set of months that contain a meeting
   const meetingMonthSet = new Set<string>()
   for (const m of futureMeetings) {
@@ -277,7 +396,7 @@ function computeMonthlyFedWatch(
     }
 
     const expectedChange = effrEnd - effrStart
-    const probabilities = computeProbabilities(effrStart, effrEnd)
+    const probabilities = computeProbabilities(effrStart, effrEnd, proxyToPolicySpread, alignment)
 
     result.push({
       meetingDate,
@@ -296,212 +415,366 @@ function computeMonthlyFedWatch(
     prevEffrEnd = effrEnd
   }
 
-  const { cumulativeProbabilities, rangeColumns } = computeCumulativeProbabilities(result, anchorRate)
+  const { cumulativeProbabilities, rangeColumns } = computeCumulativeProbabilities(
+    result, anchorRate, proxyToPolicySpread, alignment,
+  )
 
   return {
     asOfDate: resolvedDate,
-    currentEFFR: +(anchorRate * 100).toFixed(4),
-    currentTargetRange: fmtRange(roundToGrid(anchorRate), roundToGrid(anchorRate) + BPS_STEP),
+    currentEFFR: +(proxyAnchor * 100).toFixed(4),
+    currentPolicyRate: +(anchorRate * 100).toFixed(4),
+    currentTargetRange,
     meetings: result,
     cumulativeProbabilities,
     rangeColumns,
+    proxyToPolicySpread,
+    proxyToPolicySpreadSource,
   }
 }
 
-// ── Quarterly FedWatch ───────────────────────────────────────────────────────
-// Simplified model: each meeting maps to the next quarterly contract on or after
-// the meeting month. The contract's implied rate is treated as the average rate
-// over the quarter. For meetings within the quarter, we apply the same partial-
-// period blending formula, treating the quarter (3 months ≈ 90 days) as the
-// averaging window. This is an approximation that avoids the full multi-meeting
-// quarterly blending complexity.
+// ── Quarterly FedWatch (proper SR3 reference-quarter + multi-meeting) ────────
+//
+// New (correct) model:
+//   1. For each upcoming SR3 contract that hosts any future FOMC meeting,
+//      compute its Reference Quarter: [3rdWed(deliveryMonth − 3) inclusive,
+//      3rdWed(deliveryMonth) exclusive]. (CME spec — see lib/sr3Settlement.ts.)
+//   2. Walk contracts chronologically. For each, identify the FOMC meetings
+//      inside its ref quarter (0, 1, or 2+ meetings).
+//   3. Decompose: given the contract's observed compounded R and the
+//      pre-meeting-1 carry-forward rate, solve for the per-meeting outcomes
+//      using equal-split (each meeting moves the rate by the same Δ).
+//      [Strategy C-2; we can't use SR1-anchored C-1 because SR1 contracts for
+//      the forward horizon aren't ingested.]
+//   4. Each meeting then has a (preRate, postRate) pair in proxy units; apply
+//      the SOFR-to-policy translation upstream-style by adding `spread` (=
+//      policy − proxy, internal sign) when alignment is shift-tree.
+//
+// The previous implementation mapped meetings to the wrong contract (the
+// delivery month containing the meeting, not the contract whose ref quarter
+// contains the meeting) and treated the contract's implied rate as the
+// post-meeting rate directly, ignoring the within-quarter pre-meeting period.
+// That created a ~1-bucket bias at the front of the curve.
 
 function computeQuarterlyFedWatch(
   market: StirMarket,
   futureMeetings: string[],
   anchorRate: number,
+  proxyAnchor: number,
   resolvedDate: string,
   getImplied: (year: number, month: number) => number | null,
+  proxyToPolicySpread: number,
+  proxyToPolicySpreadSource: string,
+  currentTargetRange: string,
 ): TvFedWatchResponse {
-  // Simplified quarterly model: for each meeting, map to the next quarterly
-  // contract on or after the meeting month. Use the contract's implied rate
-  // as the post-meeting rate estimate. This avoids the multi-meeting-per-quarter
-  // blending complexity while producing smooth, reasonable output. The contract's
-  // implied rate is a weighted average of pre- and post-meeting rates, so it
-  // slightly understates the actual post-meeting level, but the error is small
-  // when the rate change is moderate.
+  const alignment = market.policyAlignment
   const result: FedWatchMeeting[] = []
-  let prevEffrEnd = anchorRate
 
-  for (let i = 0; i < futureMeetings.length; i++) {
-    const meetingDate = futureMeetings[i]
-    const { year, month, day } = parseDate(meetingDate)
-
-    // Find the quarterly contract covering this meeting
-    const qm = nextQuarterlyMonth(year, month)
-    const impliedRate = getImplied(qm.year, qm.month)
-    if (impliedRate === null) continue
-
-    const contractSymbol = buildSymbol(market.tickerPrefix, market.yearDigits, qm.year, qm.month)
-
-    // effrStart: for first meeting in a new quarter, use prior quarter's contract
-    // as a clean anchor; otherwise chain from prior meeting.
-    let effrStart: number
-    if (i === 0) {
-      effrStart = anchorRate
-    } else {
-      const prevMtg = parseDate(futureMeetings[i - 1])
-      const prevMtgQ = nextQuarterlyMonth(prevMtg.year, prevMtg.month)
-      if (monthKey(prevMtgQ.year, prevMtgQ.month) !== monthKey(qm.year, qm.month)) {
-        // New quarter — use prior quarter's contract rate as anchor
-        const prevQm = prevQuarterlyMonth(qm.year, qm.month)
-        const prevQRate = getImplied(prevQm.year, prevQm.month)
-        effrStart = prevQRate ?? prevEffrEnd
-      } else {
-        effrStart = prevEffrEnd
+  // Find the SR3 contract whose ref quarter contains `meetingDateUtc`. The
+  // contract delivery month is the FIRST quarterly month (H/M/U/Z) in
+  // chronological order whose 3rd Wednesday is strictly after the meeting
+  // date — i.e., the contract whose ref quarter ENDS after the meeting (and
+  // therefore the only one whose ref quarter can contain that meeting).
+  const containingContract = (meetingDateUtc: Date): { year: number; month: number } => {
+    const year = meetingDateUtc.getUTCFullYear()
+    const month = meetingDateUtc.getUTCMonth()
+    // Generate the next 8 quarterly delivery months from `year-month` forward.
+    const quarterlyMonths = [2, 5, 8, 11]
+    const candidates: Array<{ y: number; m: number }> = []
+    for (let yr = year; yr <= year + 2; yr++) {
+      for (const qm of quarterlyMonths) {
+        if (yr === year && qm < month) continue
+        candidates.push({ y: yr, m: qm })
       }
     }
-
-    // Use contract implied rate directly as the post-meeting rate estimate
-    const effrEnd = impliedRate
-    const totalDays = daysInMonth(year, month)
-    const daysBeforeMeeting = day - 1
-    const daysAfterMeeting = totalDays - daysBeforeMeeting
-
-    const expectedChange = effrEnd - effrStart
-    const probabilities = computeProbabilities(effrStart, effrEnd)
-
-    result.push({
-      meetingDate,
-      meetingMonth: `${MONTH_NAMES[month]} ${year}`,
-      monthContract: contractSymbol,
-      impliedAvgRate: +(impliedRate * 100).toFixed(4),
-      effrStart: +(effrStart * 100).toFixed(4),
-      effrEnd: +(effrEnd * 100).toFixed(4),
-      expectedChange: +(expectedChange * 10000).toFixed(1),
-      daysBeforeMeeting,
-      daysAfterMeeting,
-      probabilities,
-      calcSource: 'tv_series',
-    })
-
-    prevEffrEnd = effrEnd
+    candidates.sort((a, b) => (a.y - b.y) || (a.m - b.m))
+    for (const c of candidates) {
+      const refQuarterEnd = thirdWednesday(c.y, c.m)
+      if (refQuarterEnd.getTime() > meetingDateUtc.getTime()) {
+        return { year: c.y, month: c.m }
+      }
+    }
+    return { year: year + 1, month: 2 }
   }
 
-  const { cumulativeProbabilities, rangeColumns } = computeCumulativeProbabilities(result, anchorRate)
+  // Group meetings by containing contract (year, month index).
+  const futureMeetingDates = futureMeetings.map((s) => ({
+    iso: s,
+    date: new Date(s + 'T00:00:00Z'),
+  }))
+
+  type ContractKey = string
+  const key = (y: number, m: number) => `${y}-${m}`
+  const meetingsByContract = new Map<ContractKey, { y: number; m: number; meetings: typeof futureMeetingDates }>()
+  for (const md of futureMeetingDates) {
+    const c = containingContract(md.date)
+    const k = key(c.year, c.month)
+    let entry = meetingsByContract.get(k)
+    if (!entry) {
+      entry = { y: c.year, m: c.month, meetings: [] }
+      meetingsByContract.set(k, entry)
+    }
+    entry.meetings.push(md)
+  }
+
+  // Walk contracts in chronological order.
+  const sortedContracts = Array.from(meetingsByContract.values()).sort((a, b) => {
+    if (a.y !== b.y) return a.y - b.y
+    return a.m - b.m
+  })
+
+  const useShiftTree = alignment === 'shift-tree'
+
+  // ── SR3 path: cross-contract day-weighted least-squares ────────────────
+  // Each meeting's Δ_m appears in every subsequent contract's compounded R
+  // weighted by (RQ_end_c − m) / D_c. Solve the whole system jointly so the
+  // per-meeting Δs reflect real day-weights instead of equal splits within
+  // a single contract. Non-USD (shift-label) markets fall through to the
+  // per-contract equal-split path below — they use simpler STIR conventions
+  // and the multi-meeting-per-quarter issue is less acute there.
+  if (useShiftTree) {
+    const observations: ContractObservation[] = []
+    const meetingsAll: Date[] = []
+    const meetingsAllIso: string[] = []
+    for (const md of futureMeetingDates) {
+      meetingsAll.push(md.date)
+      meetingsAllIso.push(md.iso)
+    }
+
+    // Build the full set of SR3 contracts that overlap the visible window:
+    // every quarterly delivery month whose RQ_end > today, up to the contract
+    // whose RQ_end exceeds the last meeting in our list. Including contracts
+    // with zero meetings in their RQ (e.g. the front contract whose RQ ends
+    // just before the first future meeting) constrains r_0 directly and
+    // stabilises the LSQ.
+    const resolvedDateObj = new Date(resolvedDate + 'T00:00:00Z')
+    const lastMeetingTime = meetingsAll.length > 0
+      ? meetingsAll[meetingsAll.length - 1].getTime()
+      : resolvedDateObj.getTime() + 365 * 86_400_000
+    const quarterlyMonths = [2, 5, 8, 11]
+    const allCandidates: Array<{ y: number; m: number }> = []
+    const startYear = resolvedDateObj.getUTCFullYear()
+    for (let yr = startYear; yr <= startYear + 3; yr++) {
+      for (const qm of quarterlyMonths) {
+        allCandidates.push({ y: yr, m: qm })
+      }
+    }
+    const includedContracts: Array<{ y: number; m: number; rqStart: Date; rqEnd: Date }> = []
+    for (const c of allCandidates) {
+      const rq = referenceQuarter(c.y, c.m)
+      if (rq.endExclusive.getTime() <= resolvedDateObj.getTime()) continue
+      if (rq.start.getTime() > lastMeetingTime + 30 * 86_400_000) break
+      includedContracts.push({ y: c.y, m: c.m, rqStart: rq.start, rqEnd: rq.endExclusive })
+    }
+
+    for (const c of includedContracts) {
+      const impliedDecimal = getImplied(c.y, c.m)
+      if (impliedDecimal === null) continue
+      // getImplied for shift-tree returns policy-translated; strip the spread
+      // back out to get the raw SR3-implied SOFR (proxy units) for the LSQ.
+      const rObservedProxy = (impliedDecimal - proxyToPolicySpread) * 100
+      observations.push({
+        rqStart: c.rqStart,
+        rqEnd: c.rqEnd,
+        observedR: rObservedProxy,
+      })
+    }
+
+    const lsq = decomposeAcrossContracts({
+      contracts: observations,
+      meetings: meetingsAll,
+      lambda: 0.01, // small Tikhonov; stabilises back of curve without distorting front
+    })
+
+    // Walk meetings in order: preRate = previous postRate (or LSQ r_0 for the
+    // first), postRate = LSQ output. Convert to decimal for the rest of the
+    // pipeline.
+    for (let i = 0; i < meetingsAllIso.length; i++) {
+      const iso = meetingsAllIso[i]
+      const date = futureMeetingDates[i].date
+      const postRateProxy = lsq.postRates[i] / 100
+      const preRateProxy = i === 0 ? lsq.r0 / 100 : lsq.postRates[i - 1] / 100
+
+      const effrStart = preRateProxy + proxyToPolicySpread
+      const effrEnd = postRateProxy + proxyToPolicySpread
+      const expectedChange = effrEnd - effrStart
+      const probabilities = computeProbabilities(effrStart, effrEnd, proxyToPolicySpread, alignment)
+
+      const { month: mIdx, year: mYr } = parseDate(iso)
+      const daysBeforeMeeting = date.getUTCDate() - 1
+      const daysAfterMeeting = daysInMonth(mYr, mIdx) - daysBeforeMeeting
+
+      // Attribute the meeting to its containing contract symbol for display.
+      const containing = containingContract(date)
+      const sym = buildSymbol(market.tickerPrefix, market.yearDigits, containing.year, containing.month)
+
+      result.push({
+        meetingDate: iso,
+        meetingMonth: `${MONTH_NAMES[mIdx]} ${mYr}`,
+        monthContract: sym,
+        impliedAvgRate: +(postRateProxy * 100).toFixed(4),
+        effrStart: +(effrStart * 100).toFixed(4),
+        effrEnd: +(effrEnd * 100).toFixed(4),
+        expectedChange: +(expectedChange * 10000).toFixed(1),
+        daysBeforeMeeting,
+        daysAfterMeeting,
+        probabilities,
+        calcSource: `sr3-lsq:day-weighted`,
+      })
+    }
+  } else {
+    // ── Non-USD path: per-contract equal-split (unchanged) ────────────────
+    let carryRate = proxyAnchor
+
+    for (const entry of sortedContracts) {
+      const { y, m, meetings: cmeetings } = entry
+      const impliedDecimal = getImplied(y, m)
+      if (impliedDecimal === null) continue
+      const rObservedProxy = impliedDecimal * 100 // shift-label: getImplied returns proxy
+
+      const rq = referenceQuarter(y, m)
+      const meetingDates = cmeetings.map((c) => c.date)
+
+      const { postRates, strategy } = decomposeContract({
+        rq,
+        meetings: meetingDates,
+        rPre: carryRate * 100,
+        rObserved: rObservedProxy,
+      })
+
+      const contractSymbol = buildSymbol(market.tickerPrefix, market.yearDigits, y, m)
+
+      let preRateProxy = carryRate
+      for (let mi = 0; mi < cmeetings.length; mi++) {
+        const { iso, date } = cmeetings[mi]
+        const postRateProxy = postRates[mi] / 100
+
+        const effrStart = preRateProxy
+        const effrEnd = postRateProxy
+        const expectedChange = effrEnd - effrStart
+        const probabilities = computeProbabilities(effrStart, effrEnd, proxyToPolicySpread, alignment)
+
+        const { month: mIdx, year: mYr } = parseDate(iso)
+        const daysBeforeMeeting = date.getUTCDate() - 1
+        const daysAfterMeeting = daysInMonth(mYr, mIdx) - daysBeforeMeeting
+
+        result.push({
+          meetingDate: iso,
+          meetingMonth: `${MONTH_NAMES[mIdx]} ${mYr}`,
+          monthContract: contractSymbol,
+          impliedAvgRate: +(rObservedProxy).toFixed(4),
+          effrStart: +(effrStart * 100).toFixed(4),
+          effrEnd: +(effrEnd * 100).toFixed(4),
+          expectedChange: +(expectedChange * 10000).toFixed(1),
+          daysBeforeMeeting,
+          daysAfterMeeting,
+          probabilities,
+          calcSource: `sr3-decompose:${strategy}`,
+        })
+
+        preRateProxy = postRateProxy
+      }
+
+      if (postRates.length > 0) {
+        carryRate = postRates[postRates.length - 1] / 100
+      }
+    }
+  }
+
+  const { cumulativeProbabilities, rangeColumns } = computeCumulativeProbabilities(
+    result, anchorRate, proxyToPolicySpread, alignment,
+  )
 
   return {
     asOfDate: resolvedDate,
-    currentEFFR: +(anchorRate * 100).toFixed(4),
-    currentTargetRange: fmtRange(roundToGrid(anchorRate), roundToGrid(anchorRate) + BPS_STEP),
+    currentEFFR: +(proxyAnchor * 100).toFixed(4),
+    currentPolicyRate: +(anchorRate * 100).toFixed(4),
+    currentTargetRange,
     meetings: result,
     cumulativeProbabilities,
     rangeColumns,
+    proxyToPolicySpread,
+    proxyToPolicySpreadSource,
   }
-}
-
-function prevQuarterlyMonth(year: number, month: number): { year: number; month: number } {
-  const qMonths = [2, 5, 8, 11]
-  for (let i = qMonths.length - 1; i >= 0; i--) {
-    if (qMonths[i] < month) return { year, month: qMonths[i] }
-  }
-  return { year: year - 1, month: 11 }
 }
 
 // ── Probability computation ──────────────────────────────────────────────────
+//
+// Single-meeting step probabilities — thin formatter around the lib's
+// computeStepProbabilities, which implements the CME PDF's exact ΔR/25bp
+// interpolation including the ZLB redirect.
 
-function computeProbabilities(effrStart: number, effrEnd: number): Record<string, number> {
-  const startGrid = roundToGrid(effrStart)
+function computeProbabilities(
+  effrStart: number,
+  effrEnd: number,
+  proxyToPolicySpread: number,
+  alignment: 'shift-label' | 'shift-tree' | undefined,
+): Record<string, number> {
+  // Inputs are already in display units: policy for shift-tree (translated
+  // upstream in getImplied / anchorRate), proxy for shift-label.
+  // shift-tree: bucket the policy rate directly; label offset = 0.
+  // shift-label: bucket the proxy rate; bucketRangeLabel adds the spread to
+  // approximate the policy range (preserves existing ECB/SONIA behavior).
+  const labelOffset = alignment === 'shift-tree' ? 0 : proxyToPolicySpread
+
+  const buckets = computeStepProbabilities({ effrStart, effrEnd })
   const probs: Record<string, number> = {}
-
-  const maxSteps = 3
-  const candidates: number[] = []
-  for (let i = -maxSteps; i <= maxSteps; i++) {
-    const rate = startGrid + i * BPS_STEP
-    if (rate >= 0) candidates.push(rate)
+  for (const { bucketCenter, prob } of buckets) {
+    if (prob > 0.001) {
+      const label = bucketRangeLabel(bucketCenter, labelOffset)
+      probs[label] = (probs[label] ?? 0) + +prob.toFixed(4)
+    }
   }
-
-  if (candidates.length === 0) return probs
-
-  let lowerIdx = 0
-  for (let i = 0; i < candidates.length - 1; i++) {
-    if (effrEnd >= candidates[i]) lowerIdx = i
-  }
-
-  const lower = candidates[lowerIdx]
-  const upper = candidates[Math.min(lowerIdx + 1, candidates.length - 1)]
-
-  if (Math.abs(upper - lower) < 1e-8) {
-    const rangeKey = fmtRange(lower, lower + BPS_STEP)
-    probs[rangeKey] = 1.0
-  } else {
-    const pUpper = (effrEnd - lower) / (upper - lower)
-    const pLower = 1 - pUpper
-
-    const clampedLower = Math.max(0, Math.min(1, pLower))
-    const clampedUpper = Math.max(0, Math.min(1, pUpper))
-
-    const lowerRange = fmtRange(lower, lower + BPS_STEP)
-    const upperRange = fmtRange(upper, upper + BPS_STEP)
-
-    if (clampedLower > 0.001) probs[lowerRange] = +clampedLower.toFixed(4)
-    if (clampedUpper > 0.001) probs[upperRange] = +clampedUpper.toFixed(4)
-  }
-
   return probs
 }
+
+// Path-aware cumulative tree expansion. Each meeting's deltas (P(-25), P(0),
+// P(+25)) convolve onto the running rate distribution; ZLB redirect at the
+// lower bound; renormalize for float drift. See ./lib/fedwatch.ts.
 
 function computeCumulativeProbabilities(
   meetings: FedWatchMeeting[],
   anchorRate: number,
+  proxyToPolicySpread: number,
+  alignment: 'shift-label' | 'shift-tree' | undefined,
 ): { cumulativeProbabilities: FedWatchCumulativeRow[]; rangeColumns: string[] } {
   if (meetings.length === 0) return { cumulativeProbabilities: [], rangeColumns: [] }
 
+  // Inputs (anchor + meeting rates) already in display units. For shift-tree
+  // that means policy units; for shift-label that means proxy units (and
+  // bucketRangeLabel adds the spread to approximate the policy range).
+  const meetingDeltaSets: MeetingDeltaSet[] = meetings.map((m) => {
+    const start = m.effrStart / 100
+    const end = m.effrEnd / 100
+    return {
+      impliedEndRate: end,
+      deltas: stepProbabilitiesAsDeltas({ effrStart: start, effrEnd: end }),
+    }
+  })
+
+  const startingRate = anchorRate
+  const labelOffset = alignment === 'shift-tree' ? 0 : proxyToPolicySpread
+
+  const treeRows = expandTree({
+    startingRate,
+    meetings: meetingDeltaSets,
+  })
+
   const allRanges = new Set<string>()
-  const startGrid = roundToGrid(anchorRate)
-
-  type Distribution = Map<string, number>
-  let currentDist: Distribution = new Map()
-  const currentRange = fmtRange(startGrid, startGrid + BPS_STEP)
-  currentDist.set(currentRange, 1.0)
-
-  const cumulativeProbabilities: FedWatchCumulativeRow[] = []
-
-  for (const meeting of meetings) {
-    const newDist: Distribution = new Map()
-
-    for (const [_priorRange, priorProb] of currentDist) {
-      for (const [outcomeRange, outcomeProb] of Object.entries(meeting.probabilities)) {
-        const combined = priorProb * outcomeProb
-        if (combined > 0.0001) {
-          newDist.set(outcomeRange, (newDist.get(outcomeRange) ?? 0) + combined)
-        }
-      }
-    }
-
-    const total = Array.from(newDist.values()).reduce((s, v) => s + v, 0)
-    if (total > 0) {
-      for (const [k, v] of newDist) {
-        newDist.set(k, v / total)
-        allRanges.add(k)
-      }
-    }
-
-    const { month, year } = parseDate(meeting.meetingDate)
-
+  const cumulativeProbabilities: FedWatchCumulativeRow[] = meetings.map((m, i) => {
+    const { month, year } = parseDate(m.meetingDate)
     const targetRanges: Record<string, number> = {}
-    for (const [range, prob] of newDist) {
-      targetRanges[range] = +prob.toFixed(4)
+    for (const [bucketCenter, prob] of treeRows[i].bucketProbabilities) {
+      if (prob < 0.0001) continue
+      const label = bucketRangeLabel(bucketCenter, labelOffset)
+      targetRanges[label] = (targetRanges[label] ?? 0) + +prob.toFixed(4)
+      allRanges.add(label)
     }
-
-    cumulativeProbabilities.push({
-      meetingDate: meeting.meetingDate,
+    return {
+      meetingDate: m.meetingDate,
       meetingLabel: `${MONTH_NAMES[month]} ${year}`,
       targetRanges,
-    })
-
-    currentDist = newDist
-  }
+    }
+  })
 
   const rangeColumns = Array.from(allRanges).sort((a, b) => {
     const aLo = parseFloat(a.split('-')[0])
@@ -518,9 +791,12 @@ function emptyResponse(): TvFedWatchResponse {
   return {
     asOfDate: '',
     currentEFFR: 0,
+    currentPolicyRate: 0,
     currentTargetRange: '',
     meetings: [],
     cumulativeProbabilities: [],
     rangeColumns: [],
+    proxyToPolicySpread: 0,
+    proxyToPolicySpreadSource: 'unavailable',
   }
 }

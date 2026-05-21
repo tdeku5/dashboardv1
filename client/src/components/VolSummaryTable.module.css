@@ -1,0 +1,123 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(9, 14, 21, 0.6);
+  padding: 14px 16px;
+}
+
+.panelHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panelTitle {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+}
+
+.panelSubtitle {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #94A3B8;
+  letter-spacing: 0.04em;
+}
+
+.placeholder {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: #4a5568;
+  text-align: center;
+  padding: 28px 0;
+  letter-spacing: 0.06em;
+}
+
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.thead th {
+  color: #728197;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: right;
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: nowrap;
+}
+
+.thead th.tickerCol {
+  text-align: left;
+}
+
+.thead th.groupSep {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tbody td {
+  padding: 8px 10px;
+  text-align: right;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.tbody td.tickerCell {
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tickerDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tickerLabel {
+  color: #e2e8f0;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.currentCell {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.groupSep {
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.boldCell {
+  font-weight: 700;
+}
+
+.dim {
+  color: #4a5568;
+}

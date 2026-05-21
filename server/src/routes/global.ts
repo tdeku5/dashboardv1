@@ -361,7 +361,7 @@ function computeSpreadMetric(longLeg: YieldSeries[], shortLeg: YieldSeries[]): S
 type SourceDescriptor = { kind: 'fred' | 'tv'; id: string }
 
 const YIELD_SOURCES: Record<string, Partial<Record<'2Y' | '5Y' | '10Y' | '30Y', SourceDescriptor>>> = {
-  US:      { '2Y': { kind: 'fred', id: 'DGS2' }, '5Y': { kind: 'fred', id: 'DGS5' }, '10Y': { kind: 'fred', id: 'DGS10' }, '30Y': { kind: 'fred', id: 'DGS30' } },
+  US:      { '2Y': { kind: 'tv', id: 'US02Y' }, '5Y': { kind: 'tv', id: 'US05Y' }, '10Y': { kind: 'tv', id: 'US10Y' }, '30Y': { kind: 'tv', id: 'US30Y' } },
   Canada:  { '2Y': { kind: 'tv', id: 'CA02Y' }, '5Y': { kind: 'tv', id: 'CA05Y' }, '10Y': { kind: 'tv', id: 'CA10Y' }, '30Y': { kind: 'tv', id: 'CA30Y' } },
   AU:      { '2Y': { kind: 'tv', id: 'AU02Y' }, '5Y': { kind: 'tv', id: 'AU05Y' }, '10Y': { kind: 'tv', id: 'AU10Y' }, '30Y': { kind: 'tv', id: 'AU30Y' } },
   Japan:   { '2Y': { kind: 'tv', id: 'JP02Y' }, '5Y': { kind: 'tv', id: 'JP05Y' }, '10Y': { kind: 'tv', id: 'JP10Y' }, '30Y': { kind: 'tv', id: 'JP30Y' } },
@@ -411,6 +411,162 @@ globalRouter.get('/yield-changes', (_req: Request, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected global yield changes error'
     console.error('[global] Yield changes error:', msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
+// ── GET /api/global/daily-change-history ─────────────────────────────────────
+// Per-cell drilldown for the yield-changes matrix. Returns daily basis-point
+// changes over the requested lookback, plus a 200-day rolling sigma (same
+// window the matrix uses for its z-scores) for reference-line rendering.
+
+const LOOKBACK_TRADING_DAYS: Record<string, number> = {
+  '6m': 126,
+  '1y': 252,
+  '2y': 504,
+  '5y': 1260,
+}
+
+const DETAIL_HISTORY_LIMIT = 1600 // covers 5y lookback + 200d sigma buffer
+
+function getFredYieldHistoryFull(seriesId: string, limit: number): YieldSeries[] {
+  const rows = db.prepare(`
+    SELECT date, value FROM series_observations
+    WHERE series_id = ? AND value IS NOT NULL
+    ORDER BY date DESC
+    LIMIT ?
+  `).all(seriesId, limit) as { date: string; value: number }[]
+  return rows.reverse().map(r => ({ date: r.date, value: r.value }))
+}
+
+function getTvYieldHistoryFull(symbol: string, limit: number): YieldSeries[] {
+  const rows = db.prepare(`
+    SELECT time, close FROM tv_series
+    WHERE symbol = ? AND close IS NOT NULL
+    ORDER BY CAST(time AS INTEGER) DESC
+    LIMIT ?
+  `).all(symbol, limit) as { time: string; close: number }[]
+  return rows.reverse().map(r => ({ date: tsToDate(parseInt(r.time, 10)), value: r.close }))
+}
+
+interface DailyChange { date: string; change_bps: number }
+
+function buildYieldChanges(history: YieldSeries[]): DailyChange[] {
+  const out: DailyChange[] = []
+  for (let i = 1; i < history.length; i++) {
+    out.push({ date: history[i].date, change_bps: (history[i].value - history[i - 1].value) * 100 })
+  }
+  return out
+}
+
+function buildSpreadChanges(longLeg: YieldSeries[], shortLeg: YieldSeries[]): DailyChange[] {
+  const shortByDate = new Map(shortLeg.map(p => [p.date, p.value]))
+  const spread: YieldSeries[] = []
+  for (const p of longLeg) {
+    const s = shortByDate.get(p.date)
+    if (s != null) spread.push({ date: p.date, value: (p.value - s) * 100 }) // bps
+  }
+  const out: DailyChange[] = []
+  for (let i = 1; i < spread.length; i++) {
+    out.push({ date: spread[i].date, change_bps: spread[i].value - spread[i - 1].value })
+  }
+  return out
+}
+
+function loadHistory(src: SourceDescriptor, limit: number): YieldSeries[] {
+  return src.kind === 'fred' ? getFredYieldHistoryFull(src.id, limit) : getTvYieldHistoryFull(src.id, limit)
+}
+
+globalRouter.get('/daily-change-history', (req: Request, res: Response) => {
+  try {
+    const country = String(req.query.country ?? '')
+    const tenor = String(req.query.tenor ?? '')
+    const lookback = String(req.query.lookback ?? '1y').toLowerCase()
+
+    const sources = YIELD_SOURCES[country]
+    if (!sources) {
+      res.status(400).json({ error: `Unknown country '${country}'` })
+      return
+    }
+    const lookbackDays = LOOKBACK_TRADING_DAYS[lookback]
+    if (!lookbackDays) {
+      res.status(400).json({ error: `Unknown lookback '${lookback}'` })
+      return
+    }
+
+    let changes: DailyChange[]
+    if (tenor === '2s10s' || tenor === '10s30s') {
+      const [shortKey, longKey] = tenor === '2s10s' ? ['2Y', '10Y'] : ['10Y', '30Y']
+      const shortSrc = sources[shortKey as '2Y' | '5Y' | '10Y' | '30Y']
+      const longSrc = sources[longKey as '2Y' | '5Y' | '10Y' | '30Y']
+      if (!shortSrc || !longSrc) {
+        res.status(400).json({ error: `No source for ${country} ${tenor}` })
+        return
+      }
+      const shortHist = loadHistory(shortSrc, DETAIL_HISTORY_LIMIT)
+      const longHist = loadHistory(longSrc, DETAIL_HISTORY_LIMIT)
+      if (shortHist.length < 2 || longHist.length < 2) {
+        res.status(404).json({ error: 'Insufficient history' })
+        return
+      }
+      changes = buildSpreadChanges(longHist, shortHist)
+    } else if (tenor === '2Y' || tenor === '5Y' || tenor === '10Y' || tenor === '30Y') {
+      const src = sources[tenor]
+      if (!src) {
+        res.status(400).json({ error: `No source for ${country} ${tenor}` })
+        return
+      }
+      const hist = loadHistory(src, DETAIL_HISTORY_LIMIT)
+      if (hist.length < 2) {
+        res.status(404).json({ error: 'Insufficient history' })
+        return
+      }
+      changes = buildYieldChanges(hist)
+    } else {
+      res.status(400).json({ error: `Unknown tenor '${tenor}'` })
+      return
+    }
+
+    if (changes.length === 0) {
+      res.status(404).json({ error: 'No daily changes available' })
+      return
+    }
+
+    // 200d sigma anchored to the most recent date — same convention as the matrix.
+    const sigma200dRaw = rollingStdDev(changes.map(c => c.change_bps), ROLLING_WINDOW)
+    const sigma200d = sigma200dRaw && sigma200dRaw > 0 ? sigma200dRaw : null
+
+    // Visible window: last N trading days.
+    const visible = changes.slice(-lookbackDays)
+
+    const latest = changes[changes.length - 1]
+    const latestSigma = sigma200d ? latest.change_bps / sigma200d : null
+
+    const visibleVals = visible.map(c => c.change_bps)
+    const meanBps = visibleVals.reduce((s, v) => s + v, 0) / visibleVals.length
+    let stdevBps: number | null = null
+    if (visibleVals.length >= 2) {
+      const sse = visibleVals.reduce((s, v) => s + (v - meanBps) * (v - meanBps), 0)
+      stdevBps = Math.sqrt(sse / (visibleVals.length - 1))
+    }
+
+    res.json({
+      country,
+      tenor,
+      lookback,
+      asOfDate: latest.date,
+      sigma200d,
+      series: visible,
+      stats: {
+        latest_bps: latest.change_bps,
+        latest_sigma: latestSigma,
+        mean_bps: meanBps,
+        stdev_bps: stdevBps,
+      },
+    })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unexpected daily-change-history error'
+    console.error('[global] Daily change history error:', msg)
     res.status(500).json({ error: msg })
   }
 })

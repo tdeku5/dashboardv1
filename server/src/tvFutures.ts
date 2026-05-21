@@ -24,6 +24,12 @@ export interface TvCurveResponse {
   currentCurve: TvFuturesContract[]
   lookbackCurve: TvFuturesContract[]
   availableDates: string[]
+  // Contracts dropped because their latest tick is more than ~10 trading days
+  // (14 calendar days) behind the curve's most-recent timestamp. Surface this
+  // so the page can show "Curve trimmed: last good contract = …" in the subtitle
+  // rather than rendering stale prices as a misleading kink at the long end.
+  trimmedStaleSymbols: string[]
+  lastGoodContract: string | null
 }
 
 export interface TvContractHistoryResponse {
@@ -32,6 +38,14 @@ export interface TvContractHistoryResponse {
 }
 
 // ── Constants ────────────────────────────────────────────────────────────────
+
+// Curve staleness threshold: a contract whose most recent close is more than
+// this many calendar days behind the curve's max-ts is dropped from the curve.
+// 14 cal days ≈ 10 trading days, matching the user-facing tolerance for
+// "stale" 3M SOFR back-end contracts (e.g. 2031 quarterlies that stopped
+// ticking weeks before the curve front).
+const CURVE_STALENESS_DAYS = 14
+const CURVE_STALENESS_SECONDS = CURVE_STALENESS_DAYS * 86400
 
 const MONTH_CODES = 'FGHJKMNQUVXZ'
 const MONTH_CODE_MAP: Record<string, number> = {
@@ -237,6 +251,8 @@ export function getTvCurve(
       currentCurve: [],
       lookbackCurve: [],
       availableDates: [],
+      trimmedStaleSymbols: [],
+      lastGoodContract: null,
     }
   }
 
@@ -253,6 +269,8 @@ export function getTvCurve(
       currentCurve: [],
       lookbackCurve: [],
       availableDates: [],
+      trimmedStaleSymbols: [],
+      lastGoodContract: null,
     }
   }
 
@@ -268,11 +286,26 @@ export function getTvCurve(
   // most recent close — the curve can mix dates if some contracts ticked
   // through and others got their stale tip removed.
   const currentRows = getLatestRowsAtOrBefore(globPattern, currentTs)
-  const currentCurve = buildCurveFromRows(currentRows, tickerPrefix, yearDigits, resolvedKey)
   const currentMaxTs = currentRows.length > 0
-    ? String(Math.max(...currentRows.map(r => parseInt(r.time, 10))))
-    : currentTs
-  const currentDate = tsToDate(currentMaxTs)
+    ? Math.max(...currentRows.map(r => parseInt(r.time, 10)))
+    : parseInt(currentTs, 10)
+  const currentDate = tsToDate(String(currentMaxTs))
+
+  // Drop contracts whose latest tick is more than CURVE_STALENESS_DAYS calendar
+  // days behind the curve's max-ts. This stops back-end contracts (e.g. SR3
+  // 2031 quarterlies that stopped updating weeks before the front of the
+  // curve) from painting a stale-price kink at the long end.
+  const trimmedStaleSymbols: string[] = []
+  const freshRows = currentRows.filter((r) => {
+    const ageSec = currentMaxTs - parseInt(r.time, 10)
+    if (ageSec > CURVE_STALENESS_SECONDS) {
+      trimmedStaleSymbols.push(r.symbol)
+      return false
+    }
+    return true
+  })
+
+  const currentCurve = buildCurveFromRows(freshRows, tickerPrefix, yearDigits, resolvedKey)
 
   const lookbackTs = getNthPriorTimestamp(timestamps, currentTs, Math.max(0, lookbackDays - 1))
   let lookbackCurve: TvFuturesContract[] = []
@@ -296,6 +329,10 @@ export function getTvCurve(
 
   const availableDates = timestamps.map(t => tsToDate(t))
 
+  const lastGoodContract = liveCurrentCurve.length > 0
+    ? liveCurrentCurve[liveCurrentCurve.length - 1].symbol
+    : null
+
   return {
     rootSymbol: resolvedKey,
     currentDate,
@@ -304,6 +341,8 @@ export function getTvCurve(
     currentCurve: liveCurrentCurve,
     lookbackCurve: liveLookbackCurve,
     availableDates,
+    trimmedStaleSymbols,
+    lastGoodContract,
   }
 }
 

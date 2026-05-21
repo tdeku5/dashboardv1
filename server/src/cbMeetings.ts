@@ -24,6 +24,11 @@ export const CB_MEETINGS: Record<CentralBank, string[]> = {
     // 2026
     '2026-02-05', '2026-03-19', '2026-04-30', '2026-06-18',
     '2026-07-30', '2026-09-17', '2026-11-05', '2026-12-17',
+    // 2027 (PROVISIONAL — BoE 2027 calendar not yet published; dates projected
+    // from the 2026 pattern shifted by 364 days to preserve weekday alignment.
+    // Replace with official dates once they are released.)
+    '2027-02-04', '2027-03-18', '2027-04-29', '2027-06-17',
+    '2027-07-29', '2027-09-16', '2027-11-04', '2027-12-16',
   ],
 
   ECB: [
@@ -33,6 +38,10 @@ export const CB_MEETINGS: Record<CentralBank, string[]> = {
     // 2026
     '2026-01-29', '2026-03-12', '2026-04-30', '2026-06-11',
     '2026-07-23', '2026-09-10', '2026-10-29', '2026-12-17',
+    // 2027 (PROVISIONAL — ECB 2027 calendar not yet published; dates projected
+    // from the 2026 pattern shifted by 364 days. Replace once published.)
+    '2027-01-28', '2027-03-11', '2027-04-29', '2027-06-10',
+    '2027-07-22', '2027-09-09', '2027-10-28', '2027-12-16',
   ],
 
   BOC: [
@@ -42,6 +51,10 @@ export const CB_MEETINGS: Record<CentralBank, string[]> = {
     // 2026
     '2026-01-28', '2026-03-18', '2026-04-29', '2026-06-10',
     '2026-07-15', '2026-09-02', '2026-10-28', '2026-12-09',
+    // 2027 (PROVISIONAL — BoC 2027 calendar not yet published; dates projected
+    // from the 2026 pattern shifted by 364 days. Replace once published.)
+    '2027-01-27', '2027-03-17', '2027-04-28', '2027-06-09',
+    '2027-07-14', '2027-09-01', '2027-10-27', '2027-12-08',
   ],
 
   BOJ: [
@@ -51,6 +64,10 @@ export const CB_MEETINGS: Record<CentralBank, string[]> = {
     // 2026
     '2026-01-23', '2026-03-19', '2026-04-28', '2026-06-16',
     '2026-07-31', '2026-09-18', '2026-10-30', '2026-12-18',
+    // 2027 (PROVISIONAL — BoJ 2027 calendar not yet published; dates projected
+    // from the 2026 pattern shifted by 364 days. Replace once published.)
+    '2027-01-22', '2027-03-18', '2027-04-27', '2027-06-15',
+    '2027-07-30', '2027-09-17', '2027-10-29', '2027-12-17',
   ],
 
   RBA: [
@@ -60,5 +77,9 @@ export const CB_MEETINGS: Record<CentralBank, string[]> = {
     // 2026
     '2026-02-03', '2026-03-17', '2026-05-05', '2026-06-16',
     '2026-08-11', '2026-09-29', '2026-11-03', '2026-12-08',
+    // 2027 (PROVISIONAL — RBA 2027 calendar not yet published; dates projected
+    // from the 2026 pattern shifted by 364 days. Replace once published.)
+    '2027-02-02', '2027-03-16', '2027-05-04', '2027-06-15',
+    '2027-08-10', '2027-09-28', '2027-11-02', '2027-12-07',
   ],
 }

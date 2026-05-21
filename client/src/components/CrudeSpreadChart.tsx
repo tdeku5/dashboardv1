@@ -126,95 +126,88 @@ export function CrudeSpreadChart() {
         />
       </div>
 
-      {stats && (
-        <div className={styles.statStrip}>
-          <div className={styles.statBlockLg}>
-            <div className={styles.statLabel}>Current</div>
-            <div className={styles.statValueLg}>{fmtUsd(stats.current)}</div>
-          </div>
-          <div className={styles.statBlockLg}>
-            <div className={styles.statLabel}>{STATS_LABEL[lookback]} Z-Score</div>
-            <div className={`${styles.statValueLg} ${zClass}`}>{fmtZ(stats.zscore)}</div>
-          </div>
-          <div className={styles.statBlockSm}>
-            <div className={styles.statLabel}>Min</div>
-            <div className={styles.statValueSm}>{fmtUsd(stats.min)}</div>
-          </div>
-          <div className={styles.statBlockSm}>
-            <div className={styles.statLabel}>Max</div>
-            <div className={styles.statValueSm}>{fmtUsd(stats.max)}</div>
-          </div>
-          <div className={styles.statBlockSm}>
-            <div className={styles.statLabel}>Mean</div>
-            <div className={styles.statValueSm}>{fmtUsd(stats.mean)}</div>
-          </div>
-          <div className={styles.statBlockSm}>
-            <div className={styles.statLabel}>Median</div>
-            <div className={styles.statValueSm}>{fmtUsd(stats.median)}</div>
-          </div>
-          <div className={styles.statBlockSm}>
-            <div className={styles.statLabel}>Stdev</div>
-            <div className={styles.statValueSm}>${stats.stdev.toFixed(2)}</div>
-          </div>
+      <div className={styles.spreadBody}>
+        <div className={styles.spreadChartWrap}>
+          {showErrorState ? (
+            <div className={styles.panelEmpty}>
+              {error || apiError || 'No spread data available'}
+            </div>
+          ) : loading && !data ? (
+            <div className={styles.panelEmpty}>Loading…</div>
+          ) : (
+            <ResponsiveContainer width="100%" height={360}>
+              <LineChart data={series} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
+                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#728197"
+                  tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                  tickFormatter={makeXTickFormatter(lookback)}
+                  minTickGap={40}
+                />
+                <YAxis
+                  stroke="#728197"
+                  tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                  tickFormatter={(v: number) => `$${v.toFixed(2)}`}
+                  label={{
+                    value: '$/bbl',
+                    position: 'top',
+                    offset: 10,
+                    style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
+                  }}
+                />
+                <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
+                <Tooltip content={<SpreadTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="spread"
+                  stroke={CURRENT_COLOR}
+                  strokeWidth={1.6}
+                  dot={false}
+                  isAnimationActive={false}
+                  connectNulls={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
-      )}
 
-      {showErrorState ? (
-        <div className={styles.panelEmpty}>
-          {error || apiError || 'No spread data available'}
-        </div>
-      ) : loading && !data ? (
-        <div className={styles.panelEmpty}>Loading…</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={360}>
-          <LineChart data={series} margin={{ top: 16, right: 60, left: 8, bottom: 16 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-            <XAxis
-              dataKey="date"
-              stroke="#728197"
-              tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={makeXTickFormatter(lookback)}
-              minTickGap={40}
-            />
-            <YAxis
-              stroke="#728197"
-              tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={(v: number) => `$${v.toFixed(2)}`}
-              label={{
-                value: '$/bbl',
-                position: 'top',
-                offset: 10,
-                style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
-              }}
-            />
-            <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
-            {stats && (
-              <ReferenceLine
-                y={stats.mean}
-                stroke="rgba(148,163,184,0.45)"
-                strokeDasharray="4 4"
-                label={{
-                  value: `μ = $${stats.mean.toFixed(2)}`,
-                  position: 'right',
-                  fill: '#94A3B8',
-                  fontSize: 11,
-                  fontFamily: 'var(--font-mono)',
-                }}
-              />
-            )}
-            <Tooltip content={<SpreadTooltip />} />
-            <Line
-              type="monotone"
-              dataKey="spread"
-              stroke={CURRENT_COLOR}
-              strokeWidth={1.6}
-              dot={false}
-              isAnimationActive={false}
-              connectNulls={false}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
+        {stats && (
+          <aside className={styles.statsPanel}>
+            <div className={styles.statsPanelTitle}>Stats</div>
+            <div className={`${styles.statsRow} ${styles.statsRowLg}`}>
+              <span className={styles.statsLabelLg}>Current</span>
+              <span className={styles.statsValueLg}>{fmtUsd(stats.current)}</span>
+            </div>
+            <div className={`${styles.statsRow} ${styles.statsRowLg}`}>
+              <span className={styles.statsLabelLg}>{STATS_LABEL[lookback]} Z-Score</span>
+              <span className={`${styles.statsValueLg} ${zClass}`}>{fmtZ(stats.zscore)}</span>
+            </div>
+            <div className={styles.statsDivider} />
+            <div className={styles.statsRow}>
+              <span className={styles.statsLabel}>Min</span>
+              <span className={styles.statsValue}>{fmtUsd(stats.min)}</span>
+            </div>
+            <div className={styles.statsRow}>
+              <span className={styles.statsLabel}>Max</span>
+              <span className={styles.statsValue}>{fmtUsd(stats.max)}</span>
+            </div>
+            <div className={styles.statsDivider} />
+            <div className={styles.statsRow}>
+              <span className={styles.statsLabel}>Mean</span>
+              <span className={styles.statsValue}>{fmtUsd(stats.mean)}</span>
+            </div>
+            <div className={styles.statsRow}>
+              <span className={styles.statsLabel}>Median</span>
+              <span className={styles.statsValue}>{fmtUsd(stats.median)}</span>
+            </div>
+            <div className={styles.statsRow}>
+              <span className={styles.statsLabel}>Stdev</span>
+              <span className={styles.statsValue}>${stats.stdev.toFixed(2)}</span>
+            </div>
+          </aside>
+        )}
+      </div>
     </div>
   )
 }

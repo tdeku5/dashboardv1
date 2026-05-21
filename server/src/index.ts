@@ -39,8 +39,16 @@ import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
 import { ukFundamentalRouter } from './routes/ukFundamental'
 import { commoditiesRouter } from './routes/commodities'
+import { equitiesRouter } from './routes/equities'
+import { fxRouter } from './routes/fx'
+import { macroRouter } from './routes/macro'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 import { runStaleTipCleanup } from './migrations/cleanStaleTips'
+import { syncIncrementalFredOvernight } from './overnightFred'
+import { syncIncrementalBocOvernight } from './overnightBoc'
+import { syncIncrementalBojOvernight } from './overnightBoj'
+import { syncIncrementalRbaOvernight } from './overnightRba'
+import { overnightRatesRouter } from './routes/overnightRates'
 
 dotenv.config({ path: '../.env' })
 
@@ -71,6 +79,10 @@ app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
 app.use('/api/uk/fundamental', ukFundamentalRouter)
 app.use('/api/commodities',  commoditiesRouter)
+app.use('/api/equities',     equitiesRouter)
+app.use('/api/fx',           fxRouter)
+app.use('/api/macro',        macroRouter)
+app.use('/api/overnight-rates', overnightRatesRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -193,6 +205,36 @@ async function startup(): Promise<void> {
       console.error('[startup] Census trade ingestion error:', err)
     )
   }
+
+  // Overnight rates (SONIA, ECBDFR, CORRA, TONA, AONIA) — non-blocking.
+  // syncIncremental* collectors fall back to a full backfill when the table
+  // is empty for that series, so this single call covers both cases.
+  syncIncrementalFredOvernight().catch(err =>
+    console.error('[startup] FRED overnight sync error:', err)
+  )
+  syncIncrementalBocOvernight().catch(err =>
+    console.error('[startup] BoC overnight sync error:', err)
+  )
+  syncIncrementalBojOvernight().catch(err =>
+    console.error('[startup] BoJ overnight sync error:', err)
+  )
+  syncIncrementalRbaOvernight().catch(err =>
+    console.error('[startup] RBA overnight sync error:', err)
+  )
+
+  // Overnight rates: daily 03:00 UTC. Per the integration guide, this single
+  // slot catches the final values for all four sources:
+  //   • CORRA: final by 11:00 ET = 15:00–16:00 UTC of prior day — well stale by 03:00.
+  //   • TONA:  final at 10:00 JST = 01:00 UTC — fresh by 03:00.
+  //   • AONIA: published morning Sydney = ~22:00 UTC prior — fresh by 03:00.
+  //   • SONIA / ECBDFR: FRED publishes T+1, picked up here.
+  cron.schedule('0 3 * * *', () => {
+    console.log('[cron] 03:00 — refreshing overnight rates…')
+    syncIncrementalFredOvernight().catch(err => console.error('[cron] FRED overnight error:', err))
+    syncIncrementalBocOvernight().catch(err => console.error('[cron] BoC overnight error:', err))
+    syncIncrementalBojOvernight().catch(err => console.error('[cron] BoJ overnight error:', err))
+    syncIncrementalRbaOvernight().catch(err => console.error('[cron] RBA overnight error:', err))
+  })
 
   // FRED: full refresh every day at 06:00 UTC (including on-demand series)
   cron.schedule('0 6 * * *', () => {
