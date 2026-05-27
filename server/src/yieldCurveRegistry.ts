@@ -1,4 +1,4 @@
-export type YieldCurvePageKey = 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
+export type YieldCurvePageKey = 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb' | 'egb'
 
 export interface TenorConfig {
   key: string       // tv_series symbol, e.g. 'GB10Y'
@@ -100,6 +100,17 @@ export const YIELD_CURVE_COUNTRIES: YieldCurveCountry[] = [
       { suffix: '20Y', label: '20Y', years: 20 },
       { suffix: '30Y', label: '30Y', years: 30 },
     ]),
+  },
+  // EU aggregate European Government Bond (EGB) curve — composite synthetic
+  // tenors ingested from TradingView under the EU prefix. Used by the EU
+  // POLICY RATE tab (the existing EU rates section keeps its country-specific
+  // BUND / OAT / BTP tabs separately).
+  {
+    country: 'EU',
+    pageKey: 'egb',
+    displayName: 'EGB Yield Curve',
+    prefix: 'EU',
+    tenors: buildTenors('EU', FULL_TENORS),
   },
 ]
 

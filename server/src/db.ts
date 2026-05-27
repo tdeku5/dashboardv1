@@ -734,6 +734,266 @@ export function isOnsSeriesStale(cdid: string, datasetId: string, maxAgeHours: n
   return ageMs > maxAgeHours * 60 * 60 * 1000
 }
 
+// ── ECB Data Portal (euro area HICP + unemployment) ─────────────────────────
+// Dedicated per-source table, consistent with ons_observations / boe_observations
+// / overnight_rates (the dashboard stores each external macro source in its own
+// table rather than a single unified macro_series table). Series codes:
+// HICP_HEADLINE, HICP_CORE, HICP_SUPERCORE (index, unit='index'); UNRATE_EA
+// (unit='percent'). obs_status carries ECB's A/E/P flags.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ecb_observations (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    obs_status  TEXT,
+    source      TEXT NOT NULL DEFAULT 'ECB',
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_ecb_observations_code_date
+    ON ecb_observations(series_code, date ASC);
+`)
+
+export function storeEcbObservations(
+  seriesCode: string,
+  unit: string,
+  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO ecb_observations (date, series_code, value, unit, obs_status, source, ingested_at)
+    VALUES (?, ?, ?, ?, ?, 'ECB', datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      obs_status = excluded.obs_status,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsStatus ?? null)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getEcbObservations(seriesCode: string): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM ecb_observations
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number }>
+}
+
+export function getEcbLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM ecb_observations WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
+// ── Statistics Canada (StatCan WDS) ──────────────────────────────────────────
+// Canadian macro series for the CAD rates fundamental model. Same per-source
+// table pattern as ecb_observations / ons_observations (the dashboard keeps each
+// external source in its own table rather than a unified macro_series table).
+// Series codes (unit):
+//   CPI_HEADLINE (index, 2002=100), CPI_XFE (index, 2002=100, ex food & energy)
+//   CPI_TRIM / CPI_MEDIAN / CPI_COMMON (percent — BoC core measures, YoY % only)
+//   UNRATE_CA (percent, SA). obs_status carries StatCan's status/symbol flags.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS statcan_observations (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    obs_status  TEXT,
+    source      TEXT NOT NULL DEFAULT 'StatCan',
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_statcan_observations_code_date
+    ON statcan_observations(series_code, date ASC);
+`)
+
+export function storeStatcanObservations(
+  seriesCode: string,
+  unit: string,
+  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO statcan_observations (date, series_code, value, unit, obs_status, source, ingested_at)
+    VALUES (?, ?, ?, ?, ?, 'StatCan', datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      obs_status = excluded.obs_status,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsStatus ?? null)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getStatcanObservations(seriesCode: string): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM statcan_observations
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number }>
+}
+
+export function getStatcanLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM statcan_observations WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
+// ── Statistics Bureau of Japan (e-Stat WDS) ──────────────────────────────────
+// Japanese macro series for the JPY rates fundamental model. Same per-source
+// table pattern as ecb_observations / statcan_observations (each external source
+// keeps its own table; there is no unified macro_series table). Series codes:
+//   CPI_HEADLINE_JP / CPI_CORE_JP / CPI_CORECORE_JP (index, 2020=100 — Japan
+//     "core" = ex fresh food, "core-core" = ex fresh food & energy)
+//   UNRATE_JP (percent, NSA monthly unemployment rate). obs_status optional.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS estat_observations (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    obs_status  TEXT,
+    source      TEXT NOT NULL DEFAULT 'eStat',
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_estat_observations_code_date
+    ON estat_observations(series_code, date ASC);
+`)
+
+export function storeEstatObservations(
+  seriesCode: string,
+  unit: string,
+  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO estat_observations (date, series_code, value, unit, obs_status, source, ingested_at)
+    VALUES (?, ?, ?, ?, ?, 'eStat', datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      obs_status = excluded.obs_status,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsStatus ?? null)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getEstatObservations(seriesCode: string): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM estat_observations
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number }>
+}
+
+export function getEstatLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM estat_observations WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
+// ── Australian Bureau of Statistics (ABS Data API, SDMX) ─────────────────────
+// Australian macro series for the AUD rates fundamental model. Same per-source
+// table pattern as the other macro collectors. Unlike the others, Australian CPI
+// is in a mixed monthly/quarterly transition window (Nov-2025 onward), so each
+// row carries its `frequency` ('M' | 'Q') — the dashboard renders the two
+// cadences differently. Series codes:
+//   AU_CPI_M_HEADLINE / AU_CPI_M_TRIMMED / AU_CPI_M_WGTMED  (monthly index, ~2023-24=100)
+//   AU_CPI_Q_HEADLINE / AU_CPI_Q_TRIMMED / AU_CPI_Q_WGTMED  (quarterly index)
+//   AU_UNRATE_SA / AU_UNRATE_TREND                          (percent, monthly)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS au_macro_series (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    frequency   TEXT,
+    source      TEXT NOT NULL DEFAULT 'ABS',
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_au_macro_series_code_date
+    ON au_macro_series(series_code, date ASC);
+`)
+
+export function storeAbsObservations(
+  seriesCode: string,
+  unit: string,
+  frequency: string,
+  observations: Array<{ date: string; value: number | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO au_macro_series (date, series_code, value, unit, frequency, source, ingested_at)
+    VALUES (?, ?, ?, ?, ?, 'ABS', datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      frequency = excluded.frequency,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit, frequency)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getAbsObservations(seriesCode: string): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM au_macro_series
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number }>
+}
+
+export function getAbsLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM au_macro_series WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
 // ── Bank of England IADB ─────────────────────────────────────────────────────
 
 db.exec(`

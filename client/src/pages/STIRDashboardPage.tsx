@@ -20,10 +20,15 @@ import { CountrySelector, type CountryCode } from '../components/CountrySelector
 import { AssetSubRibbon } from '../components/AssetSubRibbon'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { UKFundamentalModelPanel } from '../components/UKFundamentalModelPanel'
+import { EUFundamentalModelPanel } from '../components/EUFundamentalModelPanel'
+import { CAFundamentalModelPanel } from '../components/CAFundamentalModelPanel'
+import { JPFundamentalModelPanel } from '../components/JPFundamentalModelPanel'
+import { AUFundamentalModelPanel } from '../components/AUFundamentalModelPanel'
 import { fetchBEASeries } from '../lib/bea'
 import { useFedWatch } from '../hooks/useFedWatch'
 import { useOvernightRates } from '../hooks/useOvernightRates'
 import { PolicyRatePage } from './PolicyRatePage'
+import { CountryTermStructure, COUNTRY_TERM_STRUCTURE_CONFIGS } from './CountryTermStructure'
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
@@ -36,6 +41,8 @@ const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m
 import { CountryCurvePage } from './CountryCurvePage'
 import { GlobalRatesPage } from './GlobalRatesPage'
 import { CrudeOilPage } from './CrudeOilPage'
+import { MetalsPage } from './MetalsPage'
+import { EnergyReturnsSection } from '../components/EnergyReturnsSection'
 import { IndexComparisonPage } from './IndexComparisonPage'
 import { SectorAttributionPage } from './SectorAttributionPage'
 import { BreadthPage } from './BreadthPage'
@@ -141,6 +148,7 @@ function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string 
     return [
       { key: 'strips', label: 'STIR STRIPS' },
       { key: 'pricing', label: 'FORWARD PRICING' },
+      { key: 'policy', label: 'POLICY RATE' },
       { key: 'bund', label: 'BUND CURVE' },
       { key: 'oat', label: 'OAT CURVE' },
       { key: 'btp', label: 'BTP CURVE' },
@@ -155,6 +163,7 @@ function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string 
   return [
     { key: 'strips', label: 'STIR STRIPS' },
     { key: 'pricing', label: 'FORWARD PRICING' },
+    { key: 'policy', label: 'POLICY RATE' },
     curveTabMap[country],
   ]
 }
@@ -2726,6 +2735,7 @@ export function STIRDashboardPage() {
             />
             {commodityCategory === 'energy' ? (
               <>
+                <EnergyReturnsSection />
                 <AssetSubRibbon
                   items={ENERGY_PRODUCTS}
                   value={energyProduct}
@@ -2733,6 +2743,8 @@ export function STIRDashboardPage() {
                 />
                 {energyProduct === 'crude-oil' && <CrudeOilPage />}
               </>
+            ) : commodityCategory === 'metals' ? (
+              <MetalsPage />
             ) : (
               <div className={styles.comingSoon}>
                 {COMMODITY_CATEGORIES.find((c) => c.key === commodityCategory)?.label} models coming soon
@@ -2781,8 +2793,8 @@ export function STIRDashboardPage() {
           </div>
         )}
 
-        <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK') ? styles.twoPanel : styles.fullPanel}>
-          <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK') ? styles.leftPanel : undefined}>
+        <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY') ? styles.twoPanel : styles.fullPanel}>
+          <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY') ? styles.leftPanel : undefined}>
         {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.ffrBand}>
             {activeMarket.rateLabel}{' '}
@@ -3213,6 +3225,15 @@ export function STIRDashboardPage() {
         {activeView === 'policy' && country === 'US' && (
           <section className={styles.section}>
             <PolicyRatePage />
+          </section>
+        )}
+
+        {activeView === 'policy' && country !== 'US' && (
+          <section className={styles.section}>
+            <CountryTermStructure
+              countryLabel={country}
+              {...COUNTRY_TERM_STRUCTURE_CONFIGS[country]}
+            />
           </section>
         )}
 
@@ -5101,6 +5122,30 @@ export function STIRDashboardPage() {
           {(activeView === 'strips' || activeView === 'pricing') && country === 'UK' && (
             <div className={styles.rightPanel}>
               <UKFundamentalModelPanel />
+            </div>
+          )}
+
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'EU' && (
+            <div className={styles.rightPanel}>
+              <EUFundamentalModelPanel />
+            </div>
+          )}
+
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'CAD' && (
+            <div className={styles.rightPanel}>
+              <CAFundamentalModelPanel />
+            </div>
+          )}
+
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'JPY' && (
+            <div className={styles.rightPanel}>
+              <JPFundamentalModelPanel />
+            </div>
+          )}
+
+          {(activeView === 'strips' || activeView === 'pricing') && country === 'AUS' && (
+            <div className={styles.rightPanel}>
+              <AUFundamentalModelPanel />
             </div>
           )}
         </div>

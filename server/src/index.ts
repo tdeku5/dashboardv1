@@ -44,11 +44,20 @@ import { fxRouter } from './routes/fx'
 import { macroRouter } from './routes/macro'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 import { runStaleTipCleanup } from './migrations/cleanStaleTips'
+import { runEcbHicpDatasetMigration } from './migrations/migrateEcbHicpDataset'
 import { syncIncrementalFredOvernight } from './overnightFred'
 import { syncIncrementalBocOvernight } from './overnightBoc'
 import { syncIncrementalBojOvernight } from './overnightBoj'
 import { syncIncrementalRbaOvernight } from './overnightRba'
 import { overnightRatesRouter } from './routes/overnightRates'
+import { euFundamentalRouter } from './routes/euFundamental'
+import { syncIncremental as syncIncrementalEcb } from './collectors/ecbCollector'
+import { caFundamentalRouter } from './routes/caFundamental'
+import { syncIncremental as syncIncrementalStatcan } from './collectors/statcanCollector'
+import { jpFundamentalRouter } from './routes/jpFundamental'
+import { syncIncremental as syncIncrementalEstat } from './collectors/estatCollector'
+import { auFundamentalRouter } from './routes/auFundamental'
+import { syncIncremental as syncIncrementalAbs } from './collectors/absCollector'
 
 dotenv.config({ path: '../.env' })
 
@@ -78,6 +87,10 @@ app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
 app.use('/api/uk/fundamental', ukFundamentalRouter)
+app.use('/api/eu/fundamental', euFundamentalRouter)
+app.use('/api/ca/fundamental', caFundamentalRouter)
+app.use('/api/jp/fundamental', jpFundamentalRouter)
+app.use('/api/au/fundamental', auFundamentalRouter)
 app.use('/api/commodities',  commoditiesRouter)
 app.use('/api/equities',     equitiesRouter)
 app.use('/api/fx',           fxRouter)
@@ -89,11 +102,18 @@ app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 // ── Startup ───────────────────────────────────────────────────────────────────
 
 async function startup(): Promise<void> {
-  // One-time data migrations (gated by PRAGMA user_version, safe to call every start)
+  // One-time data migrations (gated by PRAGMA user_version, safe to call every start).
+  // Order matters: each sets an absolute user_version, so lower-versioned
+  // migrations must run first or they'd be skipped on a fresh DB.
   try {
     runStaleTipCleanup()
   } catch (err) {
     console.error('[startup] Stale-tip cleanup error:', err)
+  }
+  try {
+    runEcbHicpDatasetMigration()
+  } catch (err) {
+    console.error('[startup] ECB HICP dataset migration error:', err)
   }
 
   if (isDatabaseEmpty()) {
@@ -194,6 +214,35 @@ async function startup(): Promise<void> {
     console.error('[startup] Gilt yield curve sync error:', err)
   )
 
+  // ECB euro-area HICP + unemployment sync (non-blocking). syncIncremental
+  // falls back to a full 2000-01 backfill when the table is empty for a series,
+  // so this single call covers both first-run and steady-state.
+  syncIncrementalEcb().catch(err =>
+    console.error('[startup] ECB sync error:', err)
+  )
+
+  // StatCan Canadian CPI (headline + ex food/energy + BoC core trio) +
+  // unemployment sync (non-blocking). syncIncremental falls back to a full
+  // backfill when the table is empty, so this single call covers both
+  // first-run and steady-state.
+  syncIncrementalStatcan().catch(err =>
+    console.error('[startup] StatCan sync error:', err)
+  )
+
+  // e-Stat Japanese CPI (headline + core + core-core) + unemployment sync
+  // (non-blocking). syncIncremental falls back to a full backfill when the table
+  // is empty, so this single call covers both first-run and steady-state.
+  syncIncrementalEstat().catch(err =>
+    console.error('[startup] e-Stat sync error:', err)
+  )
+
+  // ABS Australian CPI (monthly + quarterly headline/trimmed/weighted-median) +
+  // unemployment (SA + trend) sync (non-blocking). syncIncremental falls back to
+  // a full backfill when the table is empty, so this covers first-run + steady-state.
+  syncIncrementalAbs().catch(err =>
+    console.error('[startup] ABS sync error:', err)
+  )
+
   // BoE gilt yield curve historical backfill (non-blocking, skips if data exists)
   backfillGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve backfill error:', err)
@@ -245,6 +294,19 @@ async function startup(): Promise<void> {
     syncAllOnsSeries().catch(err => console.error('[cron] ONS error:', err))
     syncAllBoeSeries().catch(err => console.error('[cron] BoE error:', err))
     syncGiltYieldCurves().catch(err => console.error('[cron] Gilt YC error:', err))
+    // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
+    // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
+    // overnight rates. Incremental sync is a no-op on days with no ECB release.)
+    syncIncrementalEcb().catch(err => console.error('[cron] ECB error:', err))
+    // StatCan (Canadian CPI + unemployment) — macro collector, shares the 06:00
+    // slot. CPI publishes mid-month for the prior month, so most days are no-ops.
+    syncIncrementalStatcan().catch(err => console.error('[cron] StatCan error:', err))
+    // e-Stat (Japanese CPI + unemployment) — macro collector, shares the 06:00
+    // slot. CPI publishes mid-late month for the prior month; no-op most days.
+    syncIncrementalEstat().catch(err => console.error('[cron] e-Stat error:', err))
+    // ABS (Australian CPI monthly + quarterly + unemployment) — macro collector,
+    // shares the 06:00 slot. CPI/LFS publish with multi-week lags; no-op most days.
+    syncIncrementalAbs().catch(err => console.error('[cron] ABS error:', err))
   })
 
   // News: refresh at 06:00 and 21:00 UTC

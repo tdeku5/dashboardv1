@@ -14,13 +14,26 @@ interface FredResponse {
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations'
 
 interface FredSeriesSpec {
-  fredId: string       // FRED series ID, e.g. 'IUDSOIA'
-  seriesCode: string   // overnight_rates.series_code, e.g. 'SONIA'
+  fredId: string             // FRED series ID, e.g. 'IUDSOIA'
+  seriesCode: string         // overnight_rates.series_code, e.g. 'SONIA'
+  /** When true the rows are written with is_provisional=1 to flag that this
+   *  isn't the canonical (daily) overnight series — used for TONA where the
+   *  intended daily source (bojdata / BoJ direct API) is unavailable and we
+   *  stand in with FRED's BIS-sourced monthly Japan rate. */
+  isProvisional?: boolean
 }
 
 const SERIES: FredSeriesSpec[] = [
-  { fredId: 'IUDSOIA', seriesCode: 'SONIA' },
-  { fredId: 'ECBDFR',  seriesCode: 'ECBDFR' },
+  { fredId: 'IUDSOIA',           seriesCode: 'SONIA' },
+  { fredId: 'ECBDFR',            seriesCode: 'ECBDFR' },
+  // TONA — long-history monthly context. BoJ's own daily files (scraped by
+  // overnightBoj.ts) cover 2025-01 to present; this FRED BIS-sourced monthly
+  // series (1985-07 onward) populates the chart's MAX-range view with a
+  // pre-2025 backdrop. The two cadences coexist: BoJ rows have source='BoJ'
+  // / is_provisional=0; these rows have source='FRED' / is_provisional=1.
+  // On date overlap the BoJ upsert wins because its ON CONFLICT also rewrites
+  // the source column.
+  { fredId: 'IRSTCI01JPM156N',   seriesCode: 'TONA', isProvisional: true },
 ]
 
 function getLatestDate(seriesCode: string): string | null {
@@ -59,15 +72,17 @@ async function fetchFromFred(fredId: string, startDate: string): Promise<{ date:
 
 const upsert = db.prepare(`
   INSERT INTO overnight_rates (date, series_code, value, is_provisional, source, ingested_at)
-  VALUES (?, ?, ?, 0, 'FRED', datetime('now'))
+  VALUES (?, ?, ?, ?, 'FRED', datetime('now'))
   ON CONFLICT(date, series_code) DO UPDATE SET
     value = excluded.value,
+    is_provisional = excluded.is_provisional,
     ingested_at = excluded.ingested_at
 `)
 
-function writeAll(seriesCode: string, rows: { date: string; value: number }[]): number {
+function writeAll(seriesCode: string, rows: { date: string; value: number }[], provisional: boolean): number {
+  const flag = provisional ? 1 : 0
   const tx = db.transaction((batch: typeof rows) => {
-    for (const r of batch) upsert.run(r.date, seriesCode, r.value)
+    for (const r of batch) upsert.run(r.date, seriesCode, r.value, flag)
   })
   tx(rows)
   return rows.length
@@ -77,7 +92,7 @@ export async function backfillFredOvernight(): Promise<void> {
   for (const spec of SERIES) {
     try {
       const rows = await fetchFromFred(spec.fredId, '1900-01-01')
-      const n = writeAll(spec.seriesCode, rows)
+      const n = writeAll(spec.seriesCode, rows, !!spec.isProvisional)
       console.log(`[overnight-fred] backfill ${spec.seriesCode} (${spec.fredId}): ${n} obs`)
     } catch (err) {
       console.error(`[overnight-fred] backfill ${spec.seriesCode} failed:`, err)
@@ -94,7 +109,7 @@ export async function syncIncrementalFredOvernight(): Promise<void> {
         ? new Date(new Date(latest).getTime() - 14 * 86_400_000).toISOString().slice(0, 10)
         : '1900-01-01'
       const rows = await fetchFromFred(spec.fredId, start)
-      const n = writeAll(spec.seriesCode, rows)
+      const n = writeAll(spec.seriesCode, rows, !!spec.isProvisional)
       console.log(`[overnight-fred] sync ${spec.seriesCode}: ${n} obs from ${start}`)
     } catch (err) {
       console.error(`[overnight-fred] sync ${spec.seriesCode} failed:`, err)

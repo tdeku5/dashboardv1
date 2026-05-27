@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  Area,
   Brush,
   CartesianGrid,
+  ComposedChart,
   Line,
   LineChart,
   ReferenceArea,
@@ -319,16 +321,32 @@ export function PolicyRatePage() {
     for (const d of bundle.dgs10.keys())     if (d >= cutoff) grid.add(d)
     for (const d of bundle.dgs30.keys())     if (d >= cutoff) grid.add(d)
     const dates = Array.from(grid).sort()
-    const rows = dates.map(d => ({
-      date: d,
-      effr: bundle.effrDaily.get(d) ?? null,
-      dgs2: bundle.dgs2.get(d) ?? null,
-      dgs5: bundle.dgs5.get(d) ?? null,
-      dgs10: bundle.dgs10.get(d) ?? null,
-      dgs30: bundle.dgs30.get(d) ?? null,
-    }))
+    const rows = dates.map(d => {
+      const effr  = bundle.effrDaily.get(d) ?? null
+      const dgs2  = bundle.dgs2.get(d)  ?? null
+      const dgs5  = bundle.dgs5.get(d)  ?? null
+      const dgs10 = bundle.dgs10.get(d) ?? null
+      const dgs30 = bundle.dgs30.get(d) ?? null
+      const sp = (y: number | null) => effr != null && y != null ? +(y - effr).toFixed(4) : null
+      return {
+        date: d, effr, dgs2, dgs5, dgs10, dgs30,
+        spread_dgs2:  sp(dgs2),
+        spread_dgs5:  sp(dgs5),
+        spread_dgs10: sp(dgs10),
+        spread_dgs30: sp(dgs30),
+      }
+    })
     return { rows, bands: clipBands(buildRecessionBands(bundle.usrec), cutoff, dates) }
   }, [bundle, rangeTerm])
+
+  // Spread sub-chart selection (default 2Y).
+  const [selectedSpreads, setSelectedSpreads] = useState<Set<string>>(new Set(['dgs2']))
+  const toggleSpread = (key: string) =>
+    setSelectedSpreads(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
 
   if (loading) return <div style={{ padding: 16, color: '#94a3b8' }}>Loading FRED series…</div>
   if (error)   return <div style={{ padding: 16, color: '#f87171' }}>Failed to load: {error}</div>
@@ -422,8 +440,9 @@ export function PolicyRatePage() {
           onToggle={k => toggle(k, setToggle2)}
         />
         <div className={styles.chartArea}>
-          <ResponsiveContainer width="100%" height={520}>
-            <LineChart data={termData.rows} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
+          {/* Main term-structure chart */}
+          <ResponsiveContainer width="100%" height={380}>
+            <LineChart data={termData.rows} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
               <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
               <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
               <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
@@ -440,11 +459,99 @@ export function PolicyRatePage() {
               <Line type="monotone" dataKey="dgs5"  name="5Y"   stroke={COLOR_5Y}   strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle2, 'dgs5')} />
               <Line type="monotone" dataKey="dgs10" name="10Y"  stroke={COLOR_10Y}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle2, 'dgs10')} />
               <Line type="monotone" dataKey="dgs30" name="30Y"  stroke={COLOR_30Y}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle2, 'dgs30')} />
-              <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
             </LineChart>
           </ResponsiveContainer>
+
+          {/* Spread sub-chart: tenor − EFFR */}
+          <SpreadSubChartUS
+            data={termData.rows}
+            selected={selectedSpreads}
+            onToggle={toggleSpread}
+          />
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Spread sub-chart (US — tenor minus EFFR) ────────────────────────────────
+
+const US_SPREAD_TENORS: Array<{ key: string; label: string; color: string }> = [
+  { key: 'dgs2',  label: '2Y',  color: COLOR_2Y },
+  { key: 'dgs5',  label: '5Y',  color: COLOR_5Y },
+  { key: 'dgs10', label: '10Y', color: COLOR_10Y },
+  { key: 'dgs30', label: '30Y', color: COLOR_30Y },
+]
+
+interface SpreadSubChartUSProps {
+  data: Array<Record<string, number | null | string>>
+  selected: Set<string>
+  onToggle: (key: string) => void
+}
+function SpreadSubChartUS({ data, selected, onToggle }: SpreadSubChartUSProps) {
+  const visible = US_SPREAD_TENORS.filter(t => selected.has(t.key))
+  const singleMode = visible.length === 1
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px 6px' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', color: '#94a3b8' }}>
+          SPREAD VS CASH RATE
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {US_SPREAD_TENORS.map(t => {
+            const on = selected.has(t.key)
+            return (
+              <button
+                key={t.key}
+                onClick={() => onToggle(t.key)}
+                style={{
+                  padding: '3px 9px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: on ? '#0f172a' : t.color,
+                  background: on ? t.color : 'transparent',
+                  border: `1px solid ${t.color}`,
+                  borderRadius: 999,
+                  cursor: 'pointer',
+                }}
+                title={`${t.label} − EFFR`}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={180}>
+        <ComposedChart data={data} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
+          <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+          <Tooltip
+            contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
+            labelStyle={{ color: '#cbd5e1' }}
+            formatter={(v: unknown, name: unknown) => [`${Number(v).toFixed(2)}pp`, String(name)]}
+          />
+          <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+          {singleMode && visible.map(t => (
+            <Area
+              key={t.key} type="monotone" dataKey={`spread_${t.key}`} name={`${t.label} − EFFR`}
+              stroke={t.color} strokeWidth={1.75} fill={t.color} fillOpacity={0.18}
+              dot={false} connectNulls baseValue={0} isAnimationActive={false}
+            />
+          ))}
+          {!singleMode && visible.map(t => (
+            <Line
+              key={t.key} type="monotone" dataKey={`spread_${t.key}`} name={`${t.label} − EFFR`}
+              stroke={t.color} strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false}
+            />
+          ))}
+          {/* Brush controls only the sub-chart (range buttons remain the
+            * primary cross-panel sync). Same tradeoff documented in
+            * CountryTermStructure.SpreadSubChart. */}
+          <Brush dataKey="date" height={18} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+        </ComposedChart>
+      </ResponsiveContainer>
     </div>
   )
 }

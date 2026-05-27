@@ -59,3 +59,31 @@ overnightRatesRouter.get('/latest', (req: Request, res: Response) => {
 
   res.json(out)
 })
+
+// ── GET /api/overnight-rates/history?series=SONIA[,CORRA,...]&start=YYYY-MM-DD
+//
+// Returns the full daily series for each requested series_code (ascending).
+// Used by the non-USD Policy Rate tabs to plot the overnight cash rate
+// alongside sovereign yields on a shared time axis.
+
+overnightRatesRouter.get('/history', (req: Request, res: Response) => {
+  const rawList = String(req.query.series ?? '')
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean)
+  const start = String(req.query.start ?? '1900-01-01')
+
+  const stmt = db.prepare(`
+    SELECT date, value FROM overnight_rates
+    WHERE series_code = ? AND date >= ?
+    ORDER BY date ASC
+  `)
+
+  const out: Record<string, Array<{ date: string; value: number }>> = {}
+  for (const code of rawList) {
+    if (!KNOWN_CODES.has(code)) { out[code] = []; continue }
+    const rows = stmt.all(code, start) as Array<{ date: string; value: number }>
+    out[code] = rows.filter(r => r.value != null)
+  }
+  res.json(out)
+})

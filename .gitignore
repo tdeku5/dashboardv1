@@ -21,6 +21,10 @@ npm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+*:Zone.Identifier
+
+# Python virtual environment (local — for one-off data scripts)
+python_env/
 
 # Editor
 .vscode/

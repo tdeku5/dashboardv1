@@ -26,6 +26,9 @@ interface Props {
   showOffset1: boolean
   showOffset2: boolean
   deltaUnit: '$' | '%'
+  // Per-unit suffix for the price axes (e.g. 'bbl' for crude, 'oz' for metals).
+  // Defaults to 'bbl' so existing crude usage is unchanged.
+  priceUnit?: string
 }
 
 interface DeltaRow {
@@ -154,6 +157,7 @@ export function CrudeCurvePanel({
   showOffset1,
   showOffset2,
   deltaUnit,
+  priceUnit = 'bbl',
 }: Props) {
   if (error) {
     return (
@@ -193,7 +197,8 @@ export function CrudeCurvePanel({
   const deltaRows = buildDeltaRows(data, deltaUnit, showOffset1, showOffset2)
   const deltaTickFormatter = (v: number) =>
     deltaUnit === '$' ? v.toFixed(2) : `${v.toFixed(1)}%`
-  const deltaAxisLabel = deltaUnit === '$' ? '$/bbl' : '%'
+  const priceAxisLabel = `$/${priceUnit}`
+  const deltaAxisLabel = deltaUnit === '$' ? priceAxisLabel : '%'
 
   return (
     <div className={styles.panel}>
@@ -225,7 +230,7 @@ export function CrudeCurvePanel({
               domain={curveDomain ?? ['auto', 'auto']}
               allowDataOverflow
               label={{
-                value: '$/bbl',
+                value: priceAxisLabel,
                 position: 'top',
                 offset: 10,
                 style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },

@@ -18,6 +18,8 @@ import { getCellColor } from '../lib/cellColor'
 import { REGIME_COLORS } from '../lib/curveRegime'
 import { ReferenceLine } from 'recharts'
 import { DailyChangeModal } from '../components/DailyChangeModal'
+import { GlobalPolicyTermStructureSection } from './GlobalPolicyTermStructureSection'
+import { GlobalForwardCurvesSection } from './GlobalForwardCurvesSection'
 import styles from './STIRDashboardPage.module.css'
 
 const COUNTRY_COLORS: Record<string, string> = {
@@ -580,6 +582,12 @@ export function GlobalRatesPage() {
           </>
         )}
       </div>
+
+      {/* ═══ Global Policy Rate & Term Structure (2x3) ═══ */}
+      <GlobalPolicyTermStructureSection />
+
+      {/* ═══ Global Forward Curves (2x3 — STIR forward curve + delta bars) ═══ */}
+      <GlobalForwardCurvesSection />
 
       {/* ═══ Global Calendar Spreads ═══ */}
       <div className={styles.spreadsDashboardFullWidth}>
