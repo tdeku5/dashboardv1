@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import path from 'path'
+import type { EconomicRelease, CategorizedRelease, StoredEconomicRelease, SurpriseLabel, SurpriseRule } from './economicCalendar/types'
 
 // DB lives at the project root (two levels up from server/src/)
 const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '..', '..', 'fred_data.db')
@@ -1236,4 +1237,198 @@ try {
   }
 } catch {
   // table doesn't exist yet — will be created above
+}
+
+// ── Economic Data Log (Trading Economics calendar) ───────────────────────────
+// One row per release. Upsert keyed on (release_date, country, event) so re-runs
+// fill in `actual` as it publishes without duplicating, and back-fills are safe.
+// `surprise` is written by the classifier after persistence (NULL = a rule
+// exists but the surprise isn't computable yet; 'unclassified' = no rule).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS economic_releases (
+    release_date     TEXT NOT NULL,
+    day_of_week      TEXT,
+    country          TEXT NOT NULL,
+    event            TEXT NOT NULL,    -- base event name; suffix lives in reference_period
+    reference_period TEXT,             -- e.g. "APR", "MAY/23", "Q1 2026"; null if none
+    category         TEXT,
+    expected         TEXT,
+    actual           TEXT,
+    previous         TEXT,
+    importance       INTEGER,
+    surprise         TEXT,
+    scraped_at       TEXT NOT NULL,
+    PRIMARY KEY (release_date, country, event)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_economic_releases_date
+    ON economic_releases(release_date DESC);
+`)
+
+// Migrations: ALTER TABLE columns onto pre-existing tables (CREATE TABLE IF NOT
+// EXISTS won't add columns to a table that already exists). Idempotent.
+try {
+  const cols = (db.pragma('table_info(economic_releases)') as { name: string }[]).map(c => c.name)
+  if (!cols.includes('category'))         db.exec('ALTER TABLE economic_releases ADD COLUMN category TEXT')
+  if (!cols.includes('reference_period')) db.exec('ALTER TABLE economic_releases ADD COLUMN reference_period TEXT')
+} catch { /* fresh DB — columns already present from CREATE */ }
+
+// Upserts release rows incl. ingestion-time `category`. Leaves `surprise`
+// untouched (the classifier owns it) — but clears it when `actual` changes so a
+// stale label can't survive a revised/late print until the classifier re-runs.
+export function upsertEconomicReleases(rows: CategorizedRelease[]): number {
+  // The PK uses the BASE event name (no reference-period suffix) so a later
+  // pull that carries "Core PCE Price Index MoM APR" matches the earlier
+  // "Core PCE Price Index MoM" row and updates it, instead of inserting a
+  // duplicate. The reference_period is stored alongside, preferring whichever
+  // value is non-null (so an early pull with no period doesn't clobber a later
+  // pull's "APR").
+  const stmt = db.prepare(`
+    INSERT INTO economic_releases
+      (release_date, day_of_week, country, event, reference_period, category, expected, actual, previous, importance, scraped_at)
+    VALUES
+      (@release_date, @day_of_week, @country, @event, @reference_period, @category, @expected, @actual, @previous, @importance, @scraped_at)
+    ON CONFLICT(release_date, country, event) DO UPDATE SET
+      day_of_week      = excluded.day_of_week,
+      reference_period = COALESCE(excluded.reference_period, economic_releases.reference_period),
+      category         = excluded.category,
+      expected         = excluded.expected,
+      previous         = excluded.previous,
+      importance       = excluded.importance,
+      scraped_at       = excluded.scraped_at,
+      surprise         = CASE WHEN economic_releases.actual IS NOT excluded.actual THEN NULL ELSE economic_releases.surprise END,
+      actual           = excluded.actual
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const r of rows) { stmt.run(r); n += 1 }
+  })
+  tx()
+  return n
+}
+
+// Rows missing a category (ingested before the category column existed). Used
+// by the startup backfill so the column is populated without waiting for a scrape.
+export function getReleasesMissingCategory(): Array<{ release_date: string; country: string; event: string }> {
+  return db.prepare(`
+    SELECT release_date, country, event FROM economic_releases WHERE category IS NULL
+  `).all() as Array<{ release_date: string; country: string; event: string }>
+}
+
+export function setReleaseCategory(release_date: string, country: string, event: string, category: string): void {
+  db.prepare('UPDATE economic_releases SET category = ? WHERE release_date = ? AND country = ? AND event = ?')
+    .run(category, release_date, country, event)
+}
+
+export function updateReleaseSurprise(
+  release_date: string, country: string, event: string, surprise: SurpriseLabel | null,
+): void {
+  db.prepare(`
+    UPDATE economic_releases SET surprise = ?
+    WHERE release_date = ? AND country = ? AND event = ?
+  `).run(surprise, release_date, country, event)
+}
+
+export interface EconomicReleaseFilter {
+  countries?: string[]
+  minImportance?: number
+  startDate?: string   // inclusive ISO date
+  endDate?: string     // inclusive ISO date
+  eventSearch?: string // case-insensitive substring on event name
+}
+
+export function getEconomicReleases(filter: EconomicReleaseFilter = {}): StoredEconomicRelease[] {
+  const where: string[] = []
+  const params: Record<string, unknown> = {}
+  if (filter.countries && filter.countries.length > 0) {
+    where.push(`country IN (${filter.countries.map((_, i) => `@c${i}`).join(', ')})`)
+    filter.countries.forEach((c, i) => { params[`c${i}`] = c })
+  }
+  if (filter.minImportance != null) { where.push('importance >= @minImportance'); params.minImportance = filter.minImportance }
+  if (filter.startDate) { where.push('release_date >= @startDate'); params.startDate = filter.startDate }
+  if (filter.endDate)   { where.push('release_date <= @endDate');   params.endDate = filter.endDate }
+  if (filter.eventSearch) { where.push('LOWER(event) LIKE @eventSearch'); params.eventSearch = `%${filter.eventSearch.toLowerCase()}%` }
+
+  const sql = `
+    SELECT release_date, day_of_week, country, event, reference_period, category, expected, actual, previous, importance, surprise, scraped_at
+    FROM economic_releases
+    ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
+    ORDER BY release_date ASC, country ASC, event ASC
+  `
+  return db.prepare(sql).all(params) as StoredEconomicRelease[]
+}
+
+export function getLatestReleaseScrapedAt(): string | null {
+  const row = db.prepare('SELECT MAX(scraped_at) AS t FROM economic_releases').get() as { t: string | null } | undefined
+  return row?.t ?? null
+}
+
+// ── User-added surprise rules (Phase 3 triage) ───────────────────────────────
+// Runtime-editable rules that augment/override the static TS seed config
+// (config/economicSurpriseRules.ts). The classifier merges these over the seeds
+// (see economicCalendar/ruleLookup.ts) so the triage UI can classify events
+// without a code change/redeploy.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS economic_surprise_rules (
+    event             TEXT PRIMARY KEY,
+    in_line_threshold REAL NOT NULL,
+    warm_threshold    REAL NOT NULL,
+    hot_threshold     REAL NOT NULL,
+    direction         INTEGER NOT NULL,
+    unit              TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`)
+
+export interface StoredSurpriseRule extends SurpriseRule { event: string }
+
+export function upsertSurpriseRule(event: string, rule: SurpriseRule): void {
+  db.prepare(`
+    INSERT INTO economic_surprise_rules (event, in_line_threshold, warm_threshold, hot_threshold, direction, unit)
+    VALUES (@event, @in_line_threshold, @warm_threshold, @hot_threshold, @direction, @unit)
+    ON CONFLICT(event) DO UPDATE SET
+      in_line_threshold = excluded.in_line_threshold,
+      warm_threshold    = excluded.warm_threshold,
+      hot_threshold     = excluded.hot_threshold,
+      direction         = excluded.direction,
+      unit              = excluded.unit
+  `).run({ event, ...rule })
+}
+
+export function getSurpriseRulesFromDb(): StoredSurpriseRule[] {
+  return db.prepare(`
+    SELECT event, in_line_threshold, warm_threshold, hot_threshold, direction, unit
+    FROM economic_surprise_rules
+    ORDER BY event ASC
+  `).all() as StoredSurpriseRule[]
+}
+
+export function deleteSurpriseRule(event: string): void {
+  db.prepare('DELETE FROM economic_surprise_rules WHERE event = ?').run(event)
+}
+
+export interface UnclassifiedEventSummary {
+  event: string
+  count: number
+  sampleCountry: string
+  sampleExpected: string | null
+  sampleActual: string | null
+}
+
+// Distinct events with no matching rule (surprise = 'unclassified'), with a
+// sample expected/actual so the triage UI can show the value format and the
+// user can pick a sensible unit/thresholds. MAX() skips NULLs to surface a
+// non-empty sample where one exists.
+export function getUnclassifiedEvents(): UnclassifiedEventSummary[] {
+  return db.prepare(`
+    SELECT event,
+           COUNT(*)       AS count,
+           MIN(country)   AS sampleCountry,
+           MAX(expected)  AS sampleExpected,
+           MAX(actual)    AS sampleActual
+    FROM economic_releases
+    WHERE surprise = 'unclassified'
+    GROUP BY event
+    ORDER BY count DESC, event ASC
+  `).all() as UnclassifiedEventSummary[]
 }

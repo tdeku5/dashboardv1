@@ -75,3 +75,56 @@ export function buildSpreadChartData(
     }
   })
 }
+
+export interface CreditRegimePoint {
+  date: string
+  oas: number
+  yield2y: number
+  yield10y: number
+  roc: number | null
+  regime: CurveRegime | null
+}
+
+// Aligns a credit-spread (OAS) series to a 2Y/10Y yield pair and tags each
+// session with the prevailing 2s10s curve regime over `regimeLookback`
+// sessions, plus the point change in OAS (bps) over `rocLookback` sessions.
+// Both the level chart (dataKey="oas") and the rate-of-change chart
+// (dataKey="roc") read the same array. Sessions without enough prior history
+// carry regime=null (rendered neutral) / roc=null (no bar). Output is filtered
+// to dates >= `cutoff` (pass null for no cutoff). Reuses classifyRegime so the
+// EU Credit tab stays identical to the US one — only the inputs differ.
+export function buildCreditRegimeData(
+  hyOas: { date: string; value: number }[],
+  short: { date: string; value: number }[],
+  long: { date: string; value: number }[],
+  regimeLookback: number,
+  rocLookback: number,
+  cutoff: string | null,
+): CreditRegimePoint[] {
+  const map2 = new Map(short.map(p => [p.date, p.value]))
+  const map10 = new Map(long.map(p => [p.date, p.value]))
+
+  const aligned = hyOas
+    .filter(p => map2.has(p.date) && map10.has(p.date))
+    .map(p => ({ date: p.date, oas: p.value, yield2y: map2.get(p.date)!, yield10y: map10.get(p.date)! }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  return aligned
+    .map((point, idx) => {
+      let regime: CurveRegime | null = null
+      const regimeIdx = idx - regimeLookback
+      if (regimeIdx >= 0) {
+        const prior = aligned[regimeIdx]
+        regime = classifyRegime(
+          point.yield2y - prior.yield2y,
+          point.yield10y - prior.yield10y,
+          (point.yield10y - point.yield2y) - (prior.yield10y - prior.yield2y),
+        )
+      }
+      let roc: number | null = null
+      const rocIdx = idx - rocLookback
+      if (rocIdx >= 0) roc = (point.oas - aligned[rocIdx].oas) * 100
+      return { ...point, regime, roc }
+    })
+    .filter(p => !cutoff || p.date >= cutoff)
+}

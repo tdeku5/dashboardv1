@@ -41,7 +41,10 @@ tvRouter.get('/series/:symbol', (req: Request, res: Response) => {
   const symbol = String(req.params.symbol)
   const from = req.query.from ? String(req.query.from) : undefined
   const to = req.query.to ? String(req.query.to) : undefined
-  const limit = Math.min(parseInt(String(req.query.limit || '500')), 5000)
+  // Cap raised to 50000 so the VOL tab can pull SPX/VIX full history at once
+  // (SPX has ~18k daily bars in tv_series; the old 5000-row ASC cap clipped the
+  // most recent data — exactly the part every chart needs).
+  const limit = Math.min(parseInt(String(req.query.limit || '500')), 50000)
 
   const params: (string | number)[] = [symbol]
   let sql = 'SELECT time, close FROM tv_series WHERE symbol = ?'

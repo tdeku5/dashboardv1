@@ -34,6 +34,10 @@ Inflation expectations data (1-year, 3-year, and 5-year ahead medians). Download
 
 RSS feeds from Bloomberg and Reuters (via Google News RSS proxy). Articles are fetched twice daily by the server and classified into topics using Claude Haiku via the Anthropic API.
 
+### Trading Economics (Economic Calendar)
+
+Daily economic data releases scraped from the Trading Economics calendar via the Firecrawl API, parsed into structured rows by Claude (`claude-opus-4-7`), stored in SQLite, and classified by "surprise" (cold/cool/in line/warm/hot) against a configurable rule set. Scraped daily at 23:00 UTC (and on demand). Requires `FIRECRAWL_API_KEY` and `ANTHROPIC_API_KEY`. See [`docs/economic-data-log-guide.md`](docs/economic-data-log-guide.md) for the pipeline, surprise rules, and the scrape-failure runbook.
+
 ---
 
 ## Application Sections
@@ -292,7 +296,9 @@ The server makes outbound requests to these domains:
 | `www.sca.isr.umich.edu` | UMich expectations CSV download |
 | `feeds.bloomberg.com` | Bloomberg RSS |
 | `news.google.com` | Reuters via Google News RSS proxy |
-| `api.anthropic.com` | Claude API (news classification) |
+| `api.anthropic.com` | Claude API (news classification + economic calendar parsing) |
+| `api.firecrawl.dev` | Firecrawl API (Trading Economics calendar scrape) |
+| `tradingeconomics.com` | Economic calendar (scraped via Firecrawl) |
 
 ---
 
@@ -309,4 +315,8 @@ The server makes outbound requests to these domains:
 | `GET` | `/api/sce/inflation-expectations` | NY Fed SCE inflation expectations |
 | `GET` | `/api/umich/inflation-expectations` | UMich 5-year inflation expectations |
 | `GET` | `/api/news/articles` | News articles with topic tags |
+| `GET` | `/api/economic-calendar` | Economic releases (filters: `countries`, `minImportance`, `startDate`, `endDate`, `eventSearch`) |
+| `POST` | `/api/economic-calendar/refresh` | Trigger an on-demand calendar scrape |
+| `GET` | `/api/economic-calendar/unclassified` | Events with no surprise rule (triage queue) |
+| `GET`/`POST` | `/api/economic-calendar/rules` | List / add a surprise-classification rule |
 | `GET` | `/api/health` | Server health check |

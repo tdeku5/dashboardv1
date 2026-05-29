@@ -32,7 +32,7 @@ import { CountryTermStructure, COUNTRY_TERM_STRUCTURE_CONFIGS } from './CountryT
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
-import { buildSpreadChartData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
+import { buildSpreadChartData, buildCreditRegimeData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
 import { getCellColor } from '../lib/cellColor'
 import { HIST_LOOKBACKS, histLookbackChange } from '../lib/historicalChanges'
 import styles from './STIRDashboardPage.module.css'
@@ -46,9 +46,15 @@ import { EnergyReturnsSection } from '../components/EnergyReturnsSection'
 import { IndexComparisonPage } from './IndexComparisonPage'
 import { SectorAttributionPage } from './SectorAttributionPage'
 import { BreadthPage } from './BreadthPage'
+import { VolPage } from './VolPage'
 import { CrossAssetVolPage } from './CrossAssetVolPage'
 import { CountryReturnsPage } from './CountryReturnsPage'
-import { PairReturnsPage } from './PairReturnsPage'
+import { UsFxPage } from './UsFxPage'
+import { UkFxPage } from './UkFxPage'
+import { EuFxPage } from './EuFxPage'
+import { CadFxPage } from './CadFxPage'
+import { JpyFxPage } from './JpyFxPage'
+import { AusFxPage } from './AusFxPage'
 
 type ViewTab = 'strips' | 'pricing' | 'policy' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
 
@@ -77,12 +83,13 @@ const ENERGY_PRODUCTS: ReadonlyArray<{ key: EnergyProduct; label: string }> = [
   { key: 'crude-oil', label: 'CRUDE OIL' },
 ]
 
-type EquitySection = 'index-comparison' | 'sector-attribution' | 'breadth'
+type EquitySection = 'index-comparison' | 'sector-attribution' | 'breadth' | 'vol'
 
 const EQUITY_SECTIONS: ReadonlyArray<{ key: EquitySection; label: string }> = [
   { key: 'index-comparison',   label: 'INDEX COMPARISON' },
   { key: 'sector-attribution', label: 'SECTOR ATTRIBUTION' },
   { key: 'breadth',            label: 'BREADTH' },
+  { key: 'vol',                label: 'VOL' },
 ]
 
 type MacroSection = 'regimes' | 'cross-asset-vol'
@@ -98,11 +105,8 @@ const GLOBAL_EQUITY_SECTIONS: ReadonlyArray<{ key: GlobalEquitySection; label: s
   { key: 'country-returns', label: 'COUNTRY RETURNS' },
 ]
 
-type GlobalFxSection = 'pair-returns'
-
-const GLOBAL_FX_SECTIONS: ReadonlyArray<{ key: GlobalFxSection; label: string }> = [
-  { key: 'pair-returns', label: 'PAIR RETURNS' },
-]
+// (Old GlobalFxSection / GLOBAL_FX_SECTIONS deleted — FX no longer has a
+// Global sub-tab. Pair Returns lives on the US FX page now via <UsFxPage />.)
 
 type ProductKey = 'fedfunds' | 'sofr'
 
@@ -149,6 +153,7 @@ function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string 
       { key: 'strips', label: 'STIR STRIPS' },
       { key: 'pricing', label: 'FORWARD PRICING' },
       { key: 'policy', label: 'POLICY RATE' },
+      { key: 'credit', label: 'CREDIT' },
       { key: 'bund', label: 'BUND CURVE' },
       { key: 'oat', label: 'OAT CURVE' },
       { key: 'btp', label: 'BTP CURVE' },
@@ -915,7 +920,6 @@ export function STIRDashboardPage() {
   const [energyProduct, setEnergyProduct] = useState<EnergyProduct>('crude-oil')
   const [equitySection, setEquitySection] = useState<EquitySection>('index-comparison')
   const [globalEquitySection, setGlobalEquitySection] = useState<GlobalEquitySection>('country-returns')
-  const [globalFxSection, setGlobalFxSection] = useState<GlobalFxSection>('pair-returns')
   const [macroSection, setMacroSection] = useState<MacroSection>('regimes')
   const viewTabs = useMemo(() => getViewTabs(country), [country])
 
@@ -926,6 +930,13 @@ export function STIRDashboardPage() {
       setActiveView(validKeys[0])
     }
   }, [country, viewTabs, activeView])
+
+  // FX no longer has a Global tab. If the user lands on FX while country was
+  // Global (e.g. coming from Rates/Equities Global), snap to US so the strip
+  // and the rendered page agree.
+  useEffect(() => {
+    if (assetClass === 'fx' && country === 'Global') setCountry('US')
+  }, [assetClass, country])
 
   const [product, setProduct] = useState<ProductKey>('sofr')
 
@@ -990,6 +1001,9 @@ export function STIRDashboardPage() {
     'BAMLC0A1CAAA': true, 'BAMLC0A4CBBB': true, 'BAMLH0A0HYM2': true, 'BAMLH0A3HYC': true, 'TRASH': true,
   })
   const [creditOverviewRange, setCreditOverviewRange] = useState<string>('1y')
+  // EU CREDIT tab inputs (HY OAS from FRED + EGB 2Y/10Y for the 2s10s regime).
+  const [euCreditData, setEuCreditData] = useState<{ hyOas: YieldData[]; eu2y: YieldData[]; eu10y: YieldData[] }>({ hyOas: [], eu2y: [], eu10y: [] })
+  const [euCreditLoading, setEuCreditLoading] = useState(false)
   const [attrLookback, setAttrLookback] = useState(20)
   const [attrChartRange, setAttrChartRange] = useState<string>('1y')
   const [mmRange1, setMmRange1] = useState<string>('2y')
@@ -1530,6 +1544,34 @@ export function STIRDashboardPage() {
       .then((data) => setFedFundsHistory(data.map((d: FredObservation) => ({ date: d.date, value: Number(d.value) })).filter((d: { value: number }) => !isNaN(d.value))))
       .catch(() => {})
   }, [])
+
+  // EU CREDIT tab data: ICE BofA Euro HY OAS (BAMLHE00EHYIOAS) from FRED plus
+  // the EGB 2Y/10Y benchmarks from the TradingView yield-curve store, for the
+  // 2s10s curve-regime overlay. Fetched lazily when the EU section is active.
+  // The FRED proxy auto-ingests the series into series_observations on first
+  // request — the same ingestion path used by the US HY OAS series.
+  useEffect(() => {
+    if (country !== 'EU') return
+    let cancelled = false
+    setEuCreditLoading(true)
+    Promise.all([
+      fetchFredSeries('BAMLHE00EHYIOAS'),
+      fetch('/api/tv/yield-curve/egb').then((r) => r.json()),
+    ])
+      .then(([hyRaw, curve]) => {
+        if (cancelled) return
+        const tenorMap: Record<string, YieldData[]> = {}
+        for (const t of (curve?.tenors ?? [])) tenorMap[t.key] = t.data
+        setEuCreditData({
+          hyOas: parseObs(hyRaw),
+          eu2y: tenorMap['EU02Y'] ?? [],
+          eu10y: tenorMap['EU10Y'] ?? [],
+        })
+        setEuCreditLoading(false)
+      })
+      .catch(() => { if (!cancelled) setEuCreditLoading(false) })
+    return () => { cancelled = true }
+  }, [country])
 
   useEffect(() => {
     let cancelled = false
@@ -2546,6 +2588,27 @@ export function STIRDashboardPage() {
     })
   }, [ustData, creditChartRange, creditRocLookback, creditRegimeLookback])
 
+  // EU equivalent of creditChartData + creditRocChartData in one pass: HY OAS
+  // tagged with the EGB 2s10s regime (creditRegimeLookback) plus a creditRocLookback
+  // bps change. Shares classifyRegime with the US tab via buildCreditRegimeData.
+  const euCreditChartData = useMemo(() => buildCreditRegimeData(
+    euCreditData.hyOas,
+    euCreditData.eu2y,
+    euCreditData.eu10y,
+    creditRegimeLookback,
+    creditRocLookback,
+    getDateCutoff(creditChartRange),
+  ), [euCreditData, creditRegimeLookback, creditRocLookback, creditChartRange])
+
+  // Country-aware bindings so the regime-charts section is shared between the
+  // US and EU Credit tabs (the US-only multi-series overview is rendered above).
+  const isEuCredit = country === 'EU'
+  const creditLevelData = isEuCredit ? euCreditChartData : creditChartData
+  const creditRocData = isEuCredit ? euCreditChartData : creditRocChartData
+  const creditTabLoading = isEuCredit ? euCreditLoading : ustLoading
+  const creditOasLabel = isEuCredit ? 'EU HY OAS' : 'US HY OAS'
+  const creditRegimeSectionLabel = isEuCredit ? 'HY SPREAD W EGB CURVE REGIMES' : 'HY SPREAD W UST CURVE REGIMES'
+
   const realChartData = useMemo(() => {
     if (realSelection.type !== 'realYield') return []
     const cutoff = getDateCutoff(realChartRange)
@@ -2664,7 +2727,13 @@ export function STIRDashboardPage() {
 
         {/* ═══ Country Selector — visible for rates, equities, fx ═══ */}
         {(assetClass === 'rates' || assetClass === 'equities' || assetClass === 'fx') && (
-          <CountrySelector value={country} onChange={setCountry} />
+          <CountrySelector
+            value={country}
+            onChange={setCountry}
+            /* FX no longer has a Global tab — the Pair Returns dashboards moved
+               to the US FX page. Rates / Equities still expose Global. */
+            exclude={assetClass === 'fx' ? ['Global'] : undefined}
+          />
         )}
 
         {/* ═══ Macro View ═══ */}
@@ -2694,6 +2763,7 @@ export function STIRDashboardPage() {
               {equitySection === 'index-comparison' && <IndexComparisonPage />}
               {equitySection === 'sector-attribution' && <SectorAttributionPage />}
               {equitySection === 'breadth' && <BreadthPage />}
+              {equitySection === 'vol' && <VolPage />}
             </>
           ) : country === 'Global' ? (
             <>
@@ -2709,20 +2779,19 @@ export function STIRDashboardPage() {
           )
         )}
 
-        {/* ═══ FX View ═══ */}
+        {/* ═══ FX View ═══
+            Each country tab routes to its model-currency page. US gets the
+            full treatment (pair-returns heatmaps + DXY-spread + DM crosses);
+            the other five share the ModelCurrencyFxPage shell (returns table
+            for the model-currency's crosses + the combined-crosses chart). */}
         {assetClass === 'fx' && (
-          country === 'Global' ? (
-            <>
-              <AssetSubRibbon
-                items={GLOBAL_FX_SECTIONS}
-                value={globalFxSection}
-                onChange={setGlobalFxSection}
-              />
-              {globalFxSection === 'pair-returns' && <PairReturnsPage />}
-            </>
-          ) : (
-            <div className={styles.comingSoon}>{country} FX coming soon</div>
-          )
+          country === 'US'  ? <UsFxPage  /> :
+          country === 'UK'  ? <UkFxPage  /> :
+          country === 'EU'  ? <EuFxPage  /> :
+          country === 'CAD' ? <CadFxPage /> :
+          country === 'JPY' ? <JpyFxPage /> :
+          country === 'AUS' ? <AusFxPage /> :
+          <div className={styles.comingSoon}>{country} FX coming soon</div>
         )}
 
         {/* ═══ Commodities View ═══ */}
@@ -2793,8 +2862,8 @@ export function STIRDashboardPage() {
           </div>
         )}
 
-        <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY') ? styles.twoPanel : styles.fullPanel}>
-          <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY') ? styles.leftPanel : undefined}>
+        <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY' || country === 'AUS') ? styles.twoPanel : styles.fullPanel}>
+          <div className={(activeView === 'strips' || activeView === 'pricing') && (country === 'US' || country === 'UK' || country === 'EU' || country === 'CAD' || country === 'JPY' || country === 'AUS') ? styles.leftPanel : undefined}>
         {(activeView === 'strips' || activeView === 'pricing') && (
           <div className={styles.ffrBand}>
             {activeMarket.rateLabel}{' '}
@@ -4234,6 +4303,7 @@ export function STIRDashboardPage() {
 
         {activeView === 'credit' && (
           <div>
+            {country === 'US' && (
             <div className={styles.ustDashboard} style={{ marginBottom: '12px' }}>
               <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
                 CREDIT SPREADS
@@ -4334,10 +4404,11 @@ export function STIRDashboardPage() {
                 </>
               )}
             </div>
+            )}
 
             <div className={styles.ustDashboard}>
               <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
-                HY SPREAD W UST CURVE REGIMES
+                {creditRegimeSectionLabel}
               </div>
             <div className={styles.creditControlsRow}>
               <div className={styles.ustRangeBar}>
@@ -4382,17 +4453,17 @@ export function STIRDashboardPage() {
               ))}
             </div>
 
-            {ustLoading ? (
+            {creditTabLoading ? (
               <div className={styles.loading}>Loading credit data…</div>
             ) : (
               <div className={styles.creditChartGrid}>
                 <div>
-                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>US HY OAS</div>
+                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>{creditOasLabel}</div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
                     w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
                   </div>
                   <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={creditChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                    <ComposedChart data={creditLevelData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
                       <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
                       <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
                       <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} />
@@ -4402,7 +4473,7 @@ export function STIRDashboardPage() {
                         formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(2)}%` : '—', name === 'oas' ? 'HY OAS' : '']}
                       />
                       <Bar dataKey="oas" barSize={3}>
-                        {creditChartData.map((point, idx) => (
+                        {creditLevelData.map((point, idx) => (
                           <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
                         ))}
                       </Bar>
@@ -4413,12 +4484,12 @@ export function STIRDashboardPage() {
                 </div>
 
                 <div>
-                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>US HY OAS — {creditRocLookback}D RATE OF CHANGE</div>
+                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>{creditOasLabel} — {creditRocLookback}D RATE OF CHANGE</div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
                     w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
                   </div>
                   <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={creditRocChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                    <ComposedChart data={creditRocData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
                       <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
                       <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
                       <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
@@ -4429,7 +4500,7 @@ export function STIRDashboardPage() {
                       />
                       <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
                       <Bar dataKey="roc" barSize={3}>
-                        {creditRocChartData.map((point, idx) => (
+                        {creditRocData.map((point, idx) => (
                           <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
                         ))}
                       </Bar>

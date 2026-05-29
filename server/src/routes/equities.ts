@@ -12,6 +12,7 @@ import {
   getUsIndexReturns,
   type IndexRangeKey,
 } from '../usIndices'
+import { getVixFuturesCurve } from '../vixCurve'
 
 export const equitiesRouter = Router()
 
@@ -87,6 +88,23 @@ equitiesRouter.get('/us/breadth', (req: Request, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected breadth error'
     console.error('[equities] breadth error:', msg)
+    res.status(500).json({ error: msg })
+  }
+})
+
+// ── GET /api/equities/us/vix-futures-curve ───────────────────────────────────
+// Spot VIX + dated VX contracts in chronological expiry order, with current
+// and t−offset closes. Single offset (the VOL-tab chart shows just one
+// benchmark line). Drops contracts that have already expired by as-of date.
+
+equitiesRouter.get('/us/vix-futures-curve', (req: Request, res: Response) => {
+  try {
+    const offsetRaw = parseInt(String(req.query.offset ?? '5'), 10)
+    const offset = Number.isFinite(offsetRaw) ? Math.max(1, Math.min(1260, offsetRaw)) : 5
+    res.json(getVixFuturesCurve(offset))
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unexpected vix-futures-curve error'
+    console.error('[equities] vix-futures-curve error:', msg)
     res.status(500).json({ error: msg })
   }
 })

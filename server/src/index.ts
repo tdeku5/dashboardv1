@@ -58,6 +58,8 @@ import { jpFundamentalRouter } from './routes/jpFundamental'
 import { syncIncremental as syncIncrementalEstat } from './collectors/estatCollector'
 import { auFundamentalRouter } from './routes/auFundamental'
 import { syncIncremental as syncIncrementalAbs } from './collectors/absCollector'
+import { syncEconomicCalendar, backfillMissingCategories, mergeDuplicateReleases } from './economicCalendar'
+import { economicCalendarRouter } from './routes/economicCalendar'
 
 dotenv.config({ path: '../.env' })
 
@@ -96,6 +98,7 @@ app.use('/api/equities',     equitiesRouter)
 app.use('/api/fx',           fxRouter)
 app.use('/api/macro',        macroRouter)
 app.use('/api/overnight-rates', overnightRatesRouter)
+app.use('/api/economic-calendar', economicCalendarRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
@@ -142,6 +145,23 @@ async function startup(): Promise<void> {
     fetchAndIngestNews().catch(err =>
       console.error('[startup] Initial news fetch error:', err)
     )
+  }
+
+  // Economic Data Log: only scrape on first run (empty table) to avoid burning
+  // Firecrawl/Claude credits on every restart — steady-state refresh is the
+  // 23:00 UTC cron below. Non-blocking; a failed scrape logs but never aborts
+  // startup (the standalone runner is the entrypoint that exits non-zero).
+  const releaseCount = (db.prepare('SELECT COUNT(*) as n FROM economic_releases').get() as { n: number }).n
+  if (releaseCount === 0) {
+    console.log('[startup] Economic releases table empty — running initial calendar scrape…')
+    syncEconomicCalendar().catch(err =>
+      console.error('[startup] Initial economic calendar sync error:', err)
+    )
+  } else {
+    // Backfill `category` for rows ingested before the column existed (idempotent).
+    try { backfillMissingCategories() } catch (err) { console.error('[startup] Category backfill error:', err) }
+    // One-shot dedup sweep for rows split by TE's reference-period suffix (idempotent).
+    try { mergeDuplicateReleases() } catch (err) { console.error('[startup] Duplicate-merge error:', err) }
   }
 
   // Treasury auction data sync (non-blocking)
@@ -317,6 +337,15 @@ async function startup(): Promise<void> {
   cron.schedule('0 21 * * *', () => {
     console.log('[cron] 21:00 — running news ingest…')
     fetchAndIngestNews().catch(err => console.error('[cron] News error:', err))
+  })
+
+  // Economic Data Log: daily scrape of the Trading Economics calendar at 23:00
+  // UTC (matches the repo's UTC cron convention). Idempotent — fills in `actual`
+  // values for releases that printed during the day. Non-fatal on failure here;
+  // the standalone runner is what surfaces a hard failure (exit non-zero).
+  cron.schedule('0 23 * * *', () => {
+    console.log('[cron] 23:00 — running economic calendar scrape…')
+    syncEconomicCalendar().catch(err => console.error('[cron] Economic calendar error:', err))
   })
 
   app.listen(PORT, () => {

@@ -16,6 +16,7 @@ import { PCEDashboardPage }    from './pages/PCEDashboardPage'
 import { PCEProjectionsPage }  from './pages/PCEProjectionsPage'
 import { PPIDashboardPage }    from './pages/PPIDashboardPage'
 import { NewsAggregatorPage }        from './pages/NewsAggregatorPage'
+import { EconomicDataLogPage }       from './pages/EconomicDataLogPage'
 import { TreasuryAuctionPage }      from './pages/TreasuryAuctionPage'
 import { OtherInflationPage }      from './pages/OtherInflationPage'
 import { FiscalPage }              from './pages/FiscalPage'
@@ -79,6 +80,7 @@ function App() {
         <Route path="/stir"                         element={<STIRDashboardPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
+        <Route path="/economic-log"                 element={<EconomicDataLogPage />} />
       </Routes>
     </BrowserRouter>
   )

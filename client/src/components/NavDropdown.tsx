@@ -7,6 +7,7 @@ const NAV_OPTIONS = [
   { path: '/models',       label: 'Economic Data Models'     },
   { path: '/stir',         label: 'Asset Class Models'        },
   { path: '/news',         label: 'News Aggregator'          },
+  { path: '/economic-log', label: 'Economic Calendar'        },
 ]
 
 export function NavDropdown() {

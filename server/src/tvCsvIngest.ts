@@ -55,6 +55,17 @@ const ERROR_FOLDER = path.join(DROP_FOLDER, 'errors')
 const SKIP_STALE_TIPS =
   (process.env.TV_INGEST_SKIP_STALE_TIPS ?? 'true').toLowerCase() !== 'false'
 
+// Known TradingView export prefixes. Only files whose names begin with one of
+// these are processed; anything else in the drop folder is left in place (not
+// parsed, not archived). The watcher/poll itself still scans every CSV — the
+// filter only gates handing files off to processFile(). Adding a new TV export
+// later is a one-line addition to this array.
+const TV_EXPORT_PREFIXES = ['TVC_US03MY', 'TVC_US01MY'] as const
+
+function isKnownTvExport(filename: string): boolean {
+  return TV_EXPORT_PREFIXES.some(p => filename.startsWith(p))
+}
+
 // ── Prepared statements ──────────────────────────────────────────────────────
 
 const upsertStmt = db.prepare(`
@@ -404,6 +415,9 @@ function delay(ms: number): Promise<void> {
 let watcher: FSWatcher | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 const seenFiles = new Set<string>()
+// Files that look like CSVs but don't match a known TV export prefix. Tracked
+// separately so the 10-second poll doesn't log the same skip on every tick.
+const seenUnknown = new Set<string>()
 
 function scanFolder(): void {
   let entries: string[]
@@ -418,6 +432,13 @@ function scanFolder(): void {
     if (seenFiles.has(filePath) || processing.has(filePath)) continue
     // Verify it's a file (not a directory)
     try { if (!fs.statSync(filePath).isFile()) continue } catch { continue }
+    if (!isKnownTvExport(name)) {
+      if (!seenUnknown.has(filePath)) {
+        seenUnknown.add(filePath)
+        console.log(`[tv-ingest] Ignoring unknown CSV (prefix not in [${TV_EXPORT_PREFIXES.join(', ')}]): ${name}`)
+      }
+      continue
+    }
     seenFiles.add(filePath)
     console.log(`[tv-ingest] Poll scan found: ${name}`)
     processFile(filePath).catch(err =>
@@ -442,6 +463,14 @@ export function startTvCsvWatcher(): void {
 
   watcher.on('add', (filePath: string) => {
     if (path.dirname(filePath) !== DROP_FOLDER) return
+    const name = path.basename(filePath)
+    if (!isKnownTvExport(name)) {
+      if (!seenUnknown.has(filePath)) {
+        seenUnknown.add(filePath)
+        console.log(`[tv-ingest] Ignoring unknown CSV (prefix not in [${TV_EXPORT_PREFIXES.join(', ')}]): ${name}`)
+      }
+      return
+    }
     seenFiles.add(filePath)
     processFile(filePath).catch(err =>
       console.error(`[tv-ingest] Unhandled error processing ${filePath}:`, err)
@@ -463,6 +492,7 @@ export function startTvCsvWatcher(): void {
   }
 
   console.log(`[tv-ingest] TV CSV watcher started, watching: ${DROP_FOLDER}`)
+  console.log(`[tv-ingest] Accepting prefixes: [${TV_EXPORT_PREFIXES.join(', ')}]`)
 }
 
 export function stopTvCsvWatcher(): void {

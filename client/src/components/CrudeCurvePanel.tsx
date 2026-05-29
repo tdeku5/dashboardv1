@@ -29,6 +29,22 @@ interface Props {
   // Per-unit suffix for the price axes (e.g. 'bbl' for crude, 'oz' for metals).
   // Defaults to 'bbl' so existing crude usage is unchanged.
   priceUnit?: string
+
+  // ── Optional formatter / label overrides (backward-compatible) ─────────────
+  // Reusing this panel for non-dollar instruments (VIX futures = vol points,
+  // not $/bbl). When unset, the existing $-prefixed crude/metals formatting
+  // applies. When set, these override the y-axis tick formatter, the tooltip
+  // value rendering, and the y-axis label on the relevant panel.
+  valueFormat?: (v: number) => string       // curve y-axis ticks + curve tooltip
+  deltaFormat?: (v: number) => string       // delta y-axis ticks + delta tooltip
+  valueAxisLabel?: string                   // curve y-axis label (default `$/${priceUnit}`)
+  deltaAxisLabel?: string                   // delta y-axis label (default `$/${priceUnit}` for $, '%' for %)
+
+  // Per-chart heights for callers that need to fit the panel in a constrained
+  // cell (e.g. the VIX futures panel stacked beneath VIX3M−VIX in the Vol-tab
+  // top-right). Defaults match the original crude/metals dimensions.
+  curveHeight?: number   // default 480
+  deltaHeight?: number   // default 240
 }
 
 interface DeltaRow {
@@ -66,10 +82,11 @@ interface CurveTooltipPayloadEntry {
   color?: string
 }
 
-function CurveTooltip({ active, payload, label }: {
+function CurveTooltip({ active, payload, label, valueFormat }: {
   active?: boolean
   payload?: CurveTooltipPayloadEntry[]
   label?: string
+  valueFormat: (v: number) => string
 }) {
   if (!active || !payload || payload.length === 0) return null
   return (
@@ -81,7 +98,7 @@ function CurveTooltip({ active, payload, label }: {
           <div key={String(entry.dataKey ?? entry.name)} className={styles.tooltipRow}>
             <span className={styles.tooltipDot} style={{ background: entry.color }} />
             <span className={styles.tooltipName}>{entry.name}</span>
-            <span className={styles.tooltipVal}>${(entry.value as number).toFixed(2)}</span>
+            <span className={styles.tooltipVal}>{valueFormat(entry.value as number)}</span>
           </div>
         )
       })}
@@ -89,11 +106,11 @@ function CurveTooltip({ active, payload, label }: {
   )
 }
 
-function DeltaTooltip({ active, payload, label, unit }: {
+function DeltaTooltip({ active, payload, label, deltaFormat }: {
   active?: boolean
   payload?: CurveTooltipPayloadEntry[]
   label?: string
-  unit: '$' | '%'
+  deltaFormat: (v: number) => string
 }) {
   if (!active || !payload || payload.length === 0) return null
   return (
@@ -101,15 +118,11 @@ function DeltaTooltip({ active, payload, label, unit }: {
       <div className={styles.tooltipTitle}>{label}</div>
       {payload.map((entry) => {
         if (entry.value == null) return null
-        const v = entry.value as number
-        const text = unit === '$'
-          ? `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`
-          : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`
         return (
           <div key={String(entry.dataKey ?? entry.name)} className={styles.tooltipRow}>
             <span className={styles.tooltipDot} style={{ background: entry.color }} />
             <span className={styles.tooltipName}>{entry.name}</span>
-            <span className={styles.tooltipVal}>{text}</span>
+            <span className={styles.tooltipVal}>{deltaFormat(entry.value as number)}</span>
           </div>
         )
       })}
@@ -158,7 +171,21 @@ export function CrudeCurvePanel({
   showOffset2,
   deltaUnit,
   priceUnit = 'bbl',
+  valueFormat,
+  deltaFormat,
+  valueAxisLabel,
+  deltaAxisLabel,
+  curveHeight = 480,
+  deltaHeight = 240,
 }: Props) {
+  // Defaults preserve existing crude/metals `$X.XX` rendering. When callers
+  // pass overrides (e.g. VIX futures using "vol pts"), the new formatters take
+  // over; nothing else changes.
+  const fmtValue = valueFormat ?? ((v: number) => `$${v.toFixed(2)}`)
+  const fmtDelta = deltaFormat ?? ((v: number) =>
+    deltaUnit === '$' ? `${v >= 0 ? '+' : ''}$${v.toFixed(2)}` : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`)
+  const fmtValueTick = (v: number) => fmtValue(v)
+  const fmtDeltaTick = (v: number) => deltaFormat ? fmtDelta(v) : (deltaUnit === '$' ? v.toFixed(2) : `${v.toFixed(1)}%`)
   if (error) {
     return (
       <div className={styles.panel}>
@@ -195,10 +222,8 @@ export function CrudeCurvePanel({
   const subtitleSegments = buildSubtitleSegments(data, showOffset1, showOffset2)
   const curveDomain = computeCurveYDomain(data, showOffset1, showOffset2)
   const deltaRows = buildDeltaRows(data, deltaUnit, showOffset1, showOffset2)
-  const deltaTickFormatter = (v: number) =>
-    deltaUnit === '$' ? v.toFixed(2) : `${v.toFixed(1)}%`
-  const priceAxisLabel = `$/${priceUnit}`
-  const deltaAxisLabel = deltaUnit === '$' ? priceAxisLabel : '%'
+  const priceAxisLabelResolved = valueAxisLabel ?? `$/${priceUnit}`
+  const deltaAxisLabelResolved = deltaAxisLabel ?? (deltaUnit === '$' ? `$/${priceUnit}` : '%')
 
   return (
     <div className={styles.panel}>
@@ -215,7 +240,7 @@ export function CrudeCurvePanel({
       </div>
 
       <div className={styles.chartBlock}>
-        <ResponsiveContainer width="100%" height={480}>
+        <ResponsiveContainer width="100%" height={curveHeight}>
           <LineChart data={data.contracts} margin={{ top: 16, right: 24, left: 8, bottom: 4 }}>
             <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
             <XAxis
@@ -226,17 +251,17 @@ export function CrudeCurvePanel({
             <YAxis
               stroke="#728197"
               tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={(v: number) => `$${v.toFixed(2)}`}
+              tickFormatter={fmtValueTick}
               domain={curveDomain ?? ['auto', 'auto']}
               allowDataOverflow
               label={{
-                value: priceAxisLabel,
+                value: priceAxisLabelResolved,
                 position: 'top',
                 offset: 10,
                 style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
               }}
             />
-            <Tooltip content={<CurveTooltip />} />
+            <Tooltip content={<CurveTooltip valueFormat={fmtValue} />} />
             <Line
               type="monotone"
               dataKey="current"
@@ -278,7 +303,7 @@ export function CrudeCurvePanel({
       </div>
 
       <div className={styles.chartBlock}>
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={deltaHeight}>
           <BarChart data={deltaRows} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
             <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
             <XAxis
@@ -289,16 +314,16 @@ export function CrudeCurvePanel({
             <YAxis
               stroke="#728197"
               tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={deltaTickFormatter}
+              tickFormatter={fmtDeltaTick}
               label={{
-                value: deltaAxisLabel,
+                value: deltaAxisLabelResolved,
                 position: 'top',
                 offset: 10,
                 style: { fill: '#94A3B8', fontSize: 11, fontWeight: 600, fontFamily: 'var(--font-mono)' },
               }}
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.25)" />
-            <Tooltip content={<DeltaTooltip unit={deltaUnit} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+            <Tooltip content={<DeltaTooltip deltaFormat={fmtDelta} />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
             {showOffset1 && (
               <Bar dataKey="d1" name={`vs Offset 1 (${data.offset1Days}d)`} radius={[2, 2, 0, 0]}>
                 {deltaRows.map((r) => (

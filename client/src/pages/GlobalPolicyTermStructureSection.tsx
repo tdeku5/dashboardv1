@@ -299,6 +299,29 @@ interface MiniChartProps {
 }
 
 function MiniChart({ cfg, rows, bands, toggle }: MiniChartProps) {
+  // Auto-scale the y-axis to the data visible in the current window. `rows` is
+  // already clipped to [visibleStart, visibleEnd] upstream, so this recomputes
+  // on every range-button click and brush drag. Only legend-visible series
+  // count toward the min/max, and each chart computes its own domain — no
+  // shared scale across countries. A 5% pad keeps extremes off the edges.
+  const yDomain = useMemo<[number, number] | undefined>(() => {
+    const keys = (['cash', ...TENOR_ORDER] as const).filter(k => toggle[k] !== 'off')
+    let min = Infinity
+    let max = -Infinity
+    for (const row of rows) {
+      for (const k of keys) {
+        const v = row[k]
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          if (v < min) min = v
+          if (v > max) max = v
+        }
+      }
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined
+    const pad = max === min ? Math.max(Math.abs(max) * 0.05, 0.1) : (max - min) * 0.05
+    return [min - pad, max + pad]
+  }, [rows, toggle])
+
   return (
     <div
       style={{
@@ -352,6 +375,8 @@ function MiniChart({ cfg, rows, bands, toggle }: MiniChartProps) {
             tick={{ fontSize: 9, fill: '#94a3b8' }}
             tickFormatter={(v: number) => `${v.toFixed(1)}%`}
             width={36}
+            domain={yDomain ?? ['auto', 'auto']}
+            allowDataOverflow={false}
           />
           <Tooltip
             contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11 }}

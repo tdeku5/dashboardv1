@@ -19,10 +19,18 @@ export const FX_PAIRS: ReadonlyArray<string> = [
 // EM pairs grouped by region. Display order is intentional and matches the
 // frontend grouping expectation. SGD lives under Asia EM by FX dashboard
 // convention even though it's technically DM by some classifications.
+//
+// USDRUB caveat: the TradingView ruble feed is an offshore/synthetic rate that
+// has diverged from the Moscow fixing in the post-2022 sanctions regime — the
+// series is currently live and moving (verified end-2026-05), but treat its
+// returns as directional rather than exchange-precise.
 export const EM_FX_PAIRS: ReadonlyArray<{ region: string; pairs: string[] }> = [
-  { region: 'CEEMEA',  pairs: ['USDHUF', 'USDPLN', 'USDTRY', 'USDZAR'] },
-  { region: 'LatAm',   pairs: ['USDMXN', 'USDBRL', 'USDCOP'] },
-  { region: 'Asia EM', pairs: ['USDSGD', 'USDINR', 'USDIDR', 'USDKRW', 'USDMYR', 'USDTWD', 'USDPHP'] },
+  // CEEMEA: alphabetical by currency code. USDRUB slots between PLN and TRY.
+  { region: 'CEEMEA',  pairs: ['USDHUF', 'USDPLN', 'USDRUB', 'USDTRY', 'USDZAR'] },
+  // LatAm: curator order (not alphabetical). USDCLP appended at end.
+  { region: 'LatAm',   pairs: ['USDMXN', 'USDBRL', 'USDCOP', 'USDCLP'] },
+  // Asia EM: curator order (not alphabetical). USDTHB appended at end.
+  { region: 'Asia EM', pairs: ['USDSGD', 'USDINR', 'USDIDR', 'USDKRW', 'USDMYR', 'USDTWD', 'USDPHP', 'USDTHB'] },
 ]
 
 // Flattened view used internally for date-alignment calculations.

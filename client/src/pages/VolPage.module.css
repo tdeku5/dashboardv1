@@ -1,0 +1,125 @@
+.shell { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+
+/* 2×2 grid: equal-width columns, ~16px gap (matches the Global Rates grids).
+   Row heights auto-size to the tallest cell — Chart 1's main+sub stack defines
+   the top row's height; Chart 2 is bumped to fill that row more evenly. */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+}
+.grid > * { min-width: 0; }
+
+.pageHeader { display: flex; flex-direction: column; gap: 2px; }
+.pageTitle {
+  font-family: var(--font-mono);
+  font-size: 1.05rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #e2e8f0;
+}
+.pageSubtitle {
+  font-family: var(--font-mono);
+  font-size: 0.78rem; letter-spacing: 0.04em;
+  color: #94A3B8;
+}
+
+.panel {
+  display: flex; flex-direction: column; gap: 8px;
+  width: 100%;
+  /* No height:100% here — earlier I had it to make .chartFill (flex:1) resolve
+     to a real height. Problem: in the bottom row neither cell drives a natural
+     height, so .chartFill collapsed to 0 and the Correlation + Dispersion plots
+     disappeared. Now every panel sizes to its own content (with a sensible
+     min-height as a floor) and the grid rows auto-size to the taller cell. */
+  min-height: 220px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(9, 14, 21, 0.6);
+  padding: 14px 16px;
+}
+.panelHeader {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.panelTitle {
+  font-family: var(--font-mono);
+  font-size: 0.9rem; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: #e2e8f0;
+}
+.panelSubtitle {
+  font-family: var(--font-mono);
+  font-size: 0.74rem; letter-spacing: 0.04em;
+  color: #94A3B8; margin-top: 2px;
+}
+
+.rangeRow { display: flex; gap: 0; }
+.rangeBtn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem; letter-spacing: 0.04em;
+  color: #728197;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-right-width: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.rangeBtn:first-child { border-radius: 3px 0 0 3px; }
+.rangeBtn:last-child  { border-radius: 0 3px 3px 0; border-right-width: 1px; }
+.rangeBtn:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
+.rangeBtnOn { color: #22d3ee; background: rgba(34, 211, 238, 0.12); }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem; letter-spacing: 0.04em;
+  color: #94A3B8;
+}
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 3px; border-radius: 1px; display: inline-block; }
+
+.placeholder {
+  font-family: var(--font-mono);
+  font-size: 0.85rem; color: #4a5568;
+  text-align: center; padding: 60px 0;
+  letter-spacing: 0.06em;
+}
+
+.tooltip {
+  background: #0d1520;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 6px 9px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.tooltipDate { color: #cbd5e1; margin-bottom: 4px; }
+.tooltipRow { display: flex; justify-content: space-between; gap: 14px; }
+
+/* Vertical stack used inside the top-right grid cell: VIX3M−VIX line panel on
+   top, the futures curve (with offset control + delta bars) below it. Both
+   children have definite/min heights to avoid the prior collapse-to-0 bug. */
+.rightStack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.vixFuturesControls {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono);
+  padding: 4px 2px;
+}
+.controlLabel {
+  font-size: 0.74rem; color: #94A3B8;
+  letter-spacing: 0.04em;
+}
+.controlInput {
+  width: 72px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem; color: #e2e8f0;
+  background: #0c1118;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 2px;
+  padding: 3px 8px;
+  color-scheme: dark;
+}

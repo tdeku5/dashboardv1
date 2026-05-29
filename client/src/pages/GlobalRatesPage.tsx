@@ -19,6 +19,7 @@ import { REGIME_COLORS } from '../lib/curveRegime'
 import { ReferenceLine } from 'recharts'
 import { DailyChangeModal } from '../components/DailyChangeModal'
 import { GlobalPolicyTermStructureSection } from './GlobalPolicyTermStructureSection'
+import { GlobalPolicyPathRealRateSection } from './GlobalPolicyPathRealRateSection'
 import { GlobalForwardCurvesSection } from './GlobalForwardCurvesSection'
 import styles from './STIRDashboardPage.module.css'
 
@@ -582,6 +583,9 @@ export function GlobalRatesPage() {
           </>
         )}
       </div>
+
+      {/* ═══ Global Policy Paths & Real Rates (cross-country overlays) ═══ */}
+      <GlobalPolicyPathRealRateSection />
 
       {/* ═══ Global Policy Rate & Term Structure (2x3) ═══ */}
       <GlobalPolicyTermStructureSection />

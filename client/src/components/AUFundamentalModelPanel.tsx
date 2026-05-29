@@ -45,17 +45,17 @@ function mapToApiKey(freq: Freq, measure: Measure): AUFundamentalTab {
 function subtitleFor(freq: Freq, measure: Measure): string {
   if (measure === 'HEADLINE') {
     return freq === 'MONTHLY'
-      ? 'Monthly all-groups CPI (NSA) — RBA official headline target, band 2–3%'
-      : 'Quarterly all-groups CPI — continuity series (from 1948)'
+      ? 'Monthly all-groups CPI (from Apr 2024)'
+      : 'Quarterly all-groups CPI'
   }
   if (measure === 'TRIM') {
     return freq === 'MONTHLY'
-      ? 'Monthly trimmed mean (SA) — new underlying gauge, short history'
-      : 'Quarterly trimmed mean (SA) — RBA preferred underlying measure'
+      ? 'Monthly Trimmed mean (from Apr 2024)'
+      : "Quarterly Trimmed mean — RBA's preferred underlying measure"
   }
   return freq === 'MONTHLY'
-    ? 'Monthly weighted median (SA) — underlying cross-check'
-    : 'Quarterly weighted median (SA) — underlying cross-check'
+    ? 'Monthly Weighted median (from Apr 2024)'
+    : 'Quarterly Weighted median'
 }
 
 const RANGES = [
@@ -265,49 +265,50 @@ export function AUFundamentalModelPanel() {
 
   return (
     <div className={styles.fvmPanel}>
-      <div className={styles.fvmHeader}>
-        <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
+      <div className={styles.fvmHeader} style={isInflation ? { alignItems: 'flex-start' } : undefined}>
+        <div style={{ minWidth: 0 }}>
+          <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
+          {isInflation && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: '#5b6b7d', marginTop: '3px' }}>
+              {subtitleFor(freq, measure)}
+            </div>
+          )}
+        </div>
         {isInflation && (
-          <div className={styles.fvmMeasureToggle}>
-            {(['MONTHLY', 'QUARTERLY'] as Freq[]).map((f, idx) => (
-              <button
-                key={f}
-                className={`${styles.fvmMeasureBtn} ${freq === f ? styles.fvmMeasureBtnActive : ''}`}
-                onClick={() => setFreq(f)}
-                style={{
-                  border: `1px solid ${freq === f ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {f}
-              </button>
-            ))}
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: '10px', rowGap: '4px' }}>
+            <div className={styles.fvmMeasureToggle}>
+              {(['MONTHLY', 'QUARTERLY'] as Freq[]).map((f, idx) => (
+                <button
+                  key={f}
+                  className={`${styles.fvmMeasureBtn} ${freq === f ? styles.fvmMeasureBtnActive : ''}`}
+                  onClick={() => setFreq(f)}
+                  style={{
+                    border: `1px solid ${freq === f ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
+                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                  }}
+                >
+                  {f}
+                </button>
+              ))}
+            </div>
+            <div className={styles.fvmMeasureToggle}>
+              {MEASURES.map((m, idx) => (
+                <button
+                  key={m}
+                  className={`${styles.fvmMeasureBtn} ${measure === m ? styles.fvmMeasureBtnActive : ''}`}
+                  onClick={() => setMeasure(m)}
+                  style={{
+                    border: `1px solid ${measure === m ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
+                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                  }}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
-
-      {isInflation && (
-        <>
-          <div className={styles.fvmMeasureToggle} style={{ marginTop: '6px' }}>
-            {MEASURES.map((m, idx) => (
-              <button
-                key={m}
-                className={`${styles.fvmMeasureBtn} ${measure === m ? styles.fvmMeasureBtnActive : ''}`}
-                onClick={() => setMeasure(m)}
-                style={{
-                  border: `1px solid ${measure === m ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: '#5b6b7d', marginTop: '4px', marginBottom: '4px' }}>
-            {subtitleFor(freq, measure)}
-          </div>
-        </>
-      )}
 
       <div className={styles.fvmTabs}>
         {TABS.map((tab, idx) => (

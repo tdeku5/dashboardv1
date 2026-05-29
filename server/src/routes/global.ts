@@ -659,13 +659,13 @@ function getYieldPair(
   return { current, lookback }
 }
 
-function getDff(): number | null {
+function getLatestSeriesValue(seriesId: string): number | null {
   const row = db.prepare(`
     SELECT value FROM series_observations
-    WHERE series_id = 'DFF' AND value IS NOT NULL
+    WHERE series_id = ? AND value IS NOT NULL
     ORDER BY date DESC
     LIMIT 1
-  `).get() as { value: number } | undefined
+  `).get(seriesId) as { value: number } | undefined
   return row?.value ?? null
 }
 
@@ -673,9 +673,12 @@ function getAnchorRate(stirMarketKey: string): number | null {
   const market = getMarket(stirMarketKey)
   if (!market) return null
   if (market.anchorSource.type === 'static') return market.anchorSource.value
-  if (market.anchorSource.seriesId === 'DFF') return getDff()
-  // Other FRED-anchored markets aren't expected today; fall through to null.
-  return null
+  // FRED-anchored markets: US Fed Funds (FF) anchors on DFF; US SOFR (SR3) —
+  // the market this summary actually uses for US — anchors on SOFR. Both are
+  // just the latest observation of the registry's seriesId. Previously only
+  // DFF was handled, so SR3 fell through to null and the US Terminal−OCR cell
+  // rendered a dash while every other (static-anchored) country populated.
+  return getLatestSeriesValue(market.anchorSource.seriesId)
 }
 
 interface TerminalContractPick { impliedRate: number | null }

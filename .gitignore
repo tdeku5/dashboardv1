@@ -18,6 +18,9 @@ dist-ssr/
 *.log
 npm-debug.log*
 
+# Economic Data Log — runtime debug dumps (raw scrape saved on parse failure)
+econ-calendar-failed-scrape-*.md
+
 # OS
 .DS_Store
 Thumbs.db

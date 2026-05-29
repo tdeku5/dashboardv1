@@ -1,0 +1,529 @@
+/* Economic Data Log — reuses the shell/topBar/breadcrumb/viewTabs language from
+   STIRDashboardPage.module.css; cyan accent (matching the dropdown view chrome). */
+
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 46px;
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border-accent);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.barLeft { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.barCenter { flex: 1; }
+.barRight { flex-shrink: 0; }
+
+.logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+  border-left: 1px solid var(--border-accent);
+  padding-left: 10px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  height: 34px;
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.breadcrumbLink { color: #64748b; text-decoration: none; }
+.breadcrumbLink:hover { color: #94a3b8; }
+.breadcrumbSep { opacity: 0.4; }
+.breadcrumbCurrent { color: #94a3b8; }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+/* ── Sub-tab strip ─────────────────────────────────────────────────────────── */
+.viewTabs { display: flex; gap: 0; }
+
+.viewTab {
+  background: transparent;
+  color: #728197;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 8px 24px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.viewTab:first-child { border-radius: 3px 0 0 3px; }
+.viewTab:last-child  { border-radius: 0 3px 3px 0; }
+.viewTab:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.04); }
+.viewTabActive { color: #22d3ee; background: rgba(34, 211, 238, 0.12); }
+
+/* ── Stale banner ──────────────────────────────────────────────────────────── */
+.staleWarn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 3px;
+  padding: 6px 10px;
+}
+
+/* ── Surprise legend ───────────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+  text-transform: uppercase;
+}
+.legendItem { display: inline-flex; align-items: center; gap: 6px; }
+.legendSwatch {
+  width: 18px; height: 12px; border-radius: 2px; display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* ── Filtered-view controls ────────────────────────────────────────────────── */
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.controlRow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.controlLabel {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.chip:hover { color: #cbd5e1; }
+.chipOn {
+  color: #0f172a;
+  background: #22d3ee;
+  border-color: #22d3ee;
+}
+
+.segmented { display: flex; }
+.segBtn {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #728197;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.segBtn:first-child { border-radius: 3px 0 0 3px; }
+.segBtn:last-child  { border-radius: 0 3px 3px 0; }
+.segBtnOn { color: #22d3ee; background: rgba(34, 211, 238, 0.12); }
+
+.dateInput, .search {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #dde4f0;
+  background: #0c1118;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  padding: 3px 8px;
+}
+.dateInput { color-scheme: dark; }
+.search { min-width: 180px; flex: 1; }
+.search::placeholder { color: #475569; }
+
+/* ── Date-range bar ────────────────────────────────────────────────────────── */
+.rangeBar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.rangeBtn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #728197;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.rangeBtn:hover { color: #e2e8f0; background: rgba(255, 255, 255, 0.04); }
+.rangeBtnOn { color: #22d3ee; background: rgba(34, 211, 238, 0.12); border-color: #22d3ee; }
+.rangeSep { width: 1px; align-self: stretch; background: rgba(255,255,255,0.1); margin: 0 4px; }
+
+/* ── Calendar two-column layout (sidebar + table) ──────────────────────────── */
+.calendarLayout { display: flex; gap: 16px; align-items: flex-start; }
+.tableCol { flex: 1; min-width: 0; }
+
+.sidebar {
+  flex: 0 0 220px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+}
+.sidebarTitle {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e2e8f0;
+  padding-bottom: 2px;
+}
+.filterSection { border-top: 1px solid var(--border); padding-top: 6px; }
+.filterHeaderRow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.filterHeader {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  padding: 2px 0;
+}
+
+/* Per-group bulk Select All / Clear All. Subtle so it doesn't crowd the header. */
+.filterBulkBtn {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+  padding: 1px 4px;
+}
+.filterBulkBtn:hover { color: #22d3ee; }
+.caret { color: #64748b; font-size: 0.6rem; margin-right: 4px; }
+.filterItems { display: flex; flex-direction: column; gap: 3px; margin-top: 5px; max-height: 240px; overflow-y: auto; }
+.filterItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  cursor: pointer;
+}
+.filterItem input { accent-color: #22d3ee; cursor: pointer; }
+.filterSwatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.resetBtn {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 3px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.resetBtn:hover { color: #e2e8f0; background: rgba(255,255,255,0.04); }
+
+/* ── Table ─────────────────────────────────────────────────────────────────── */
+.tableWrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 3px; }
+
+/* Faint per-country row tint (set via inline --tint / --tint-hover CSS vars). */
+.tintRow { background: var(--tint, transparent); transition: background 0.1s; }
+.tintRow:hover { background: var(--tint-hover, rgba(255,255,255,0.04)); }
+
+.countryDot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+
+/* Temperature classification (cold/cool/in line/warm/hot/unclassified) — shown
+   as a tiny dot next to the event name. The legend at the top decodes the
+   colors. Deliberately NOT applied to the row background or to a cell pill. */
+.tempDot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 1px;
+  flex-shrink: 0;
+}
+.tdCategory { color: #94a3b8; font-size: 0.74rem; white-space: nowrap; }
+.thCategory { width: 1%; }
+.tdImpact, .thImpact { text-align: right; font-size: 0.72rem; white-space: nowrap; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  background: var(--surface-header);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-accent);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  color: #cbd5e1;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.thNum, .tdNum { text-align: right; }
+.tdWeek, .tdDay { color: #64748b; font-size: 0.72rem; white-space: nowrap; }
+.thWeek, .thDay { width: 1%; }
+.tdCountry { color: #94a3b8; }
+.tdEvent { color: #dde4f0; white-space: normal; }
+.tdNum { color: #e2e8f0; }
+
+/* The first row of each day group gets a slightly stronger top border so day
+   blocks read as groups (the per-day background banding is applied inline). */
+.dayStart td { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+
+.impDot {
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: middle;
+}
+
+/* SURPRISE column = signed delta (actual − expected). Numeric, right-aligned;
+   no directional green/red coloring (the prompt explicitly reserves that
+   ambiguity to the temperature dot). */
+.thSurprise, .tdSurprise {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tdSurprise { color: #e2e8f0; }
+
+/* Surprise cell shade — fixed intensity, no magnitude scaling. Same hue family
+   as the temperature classification (green = #22c55e, red = #ef4444). ~28%
+   opacity reads as a clear pop over the ~7% country row tint while keeping the
+   value text legible. */
+.surpriseHot  { background: rgba(34, 197, 94, 0.28); }
+.surpriseCold { background: rgba(239, 68, 68, 0.28); }
+
+/* Legacy badge style kept for compatibility — no longer rendered on the table. */
+.surpriseBadge {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 2px;
+  min-width: 52px;
+  text-align: center;
+}
+
+.loading, .empty, .error {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #64748b;
+  padding: 24px;
+  text-align: center;
+}
+.error { color: #f87171; }
+
+/* ── Manual refresh (header) ────────────────────────────────────────────────── */
+.barRight { display: flex; align-items: center; gap: 10px; }
+
+.refreshBtn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.10);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 3px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.refreshBtn:hover:not(:disabled) { background: rgba(34, 211, 238, 0.18); }
+.refreshBtn:disabled { opacity: 0.5; cursor: default; }
+
+.refreshNote {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #64748b;
+  animation: econFadeIn 0.2s ease-out;
+}
+.refreshNoteOk { color: #4ade80; }
+.refreshNoteError { color: #f87171; }
+
+.lastRefreshed {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: #64748b;
+  white-space: nowrap;
+  cursor: default;
+}
+.lastRel { color: #475569; }
+
+/* Spinner reused by the button and the status line (no UI library). */
+.spinner {
+  display: inline-block;
+  width: 9px; height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1.5px solid rgba(34, 211, 238, 0.3);
+  border-top-color: #22d3ee;
+  border-radius: 50%;
+  animation: econSpin 0.7s linear infinite;
+}
+@keyframes econSpin { to { transform: rotate(360deg); } }
+@keyframes econFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* In-progress status line under the tab strip. */
+.refreshStatus {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: #22d3ee;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 3px;
+  padding: 6px 10px;
+}
+
+/* ── Triage tab ────────────────────────────────────────────────────────────── */
+.triageWrap { display: flex; flex-direction: column; gap: 12px; }
+
+.triageHint {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.addRuleBtn {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #22d3ee;
+  background: transparent;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 2px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.addRuleBtn:hover { background: rgba(34, 211, 238, 0.12); }
+
+.ruleForm {
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  border-radius: 3px;
+  background: rgba(34, 211, 238, 0.04);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ruleFormTitle {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ruleFormEvent { color: #dde4f0; text-transform: none; }
+
+.ruleFormGrid { display: flex; flex-wrap: wrap; gap: 14px; }
+.ruleFormGrid label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+.ruleFormGrid input, .ruleFormGrid select { width: 130px; }
+
+.ruleFormActions { display: flex; gap: 8px; }
+.saveBtn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #0f172a;
+  background: #22d3ee;
+  border: 1px solid #22d3ee;
+  border-radius: 3px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.saveBtn:disabled { opacity: 0.5; cursor: default; }
+.cancelBtn {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+  padding: 5px 14px;
+  cursor: pointer;
+}

@@ -320,7 +320,19 @@
       "Bash(awk -F, 'NR>1{print \"  TSEST=\"$4\" REGION=\"$5\" FREQ=\"$6\" \"$7\"=\"$8}')",
       "Bash(awk -F, 'NR>1{print \"  M=\"$2\" INDEX=\"$3\" TSEST=\"$4\" REG=\"$5\" FREQ=\"$6\" \"$7\"=\"$8}')",
       "Bash(awk -F, 'NR==2{print $7\"=\"$8}')",
-      "Bash(echo \"\\(exit: $?\\)\")"
+      "Bash(echo \"\\(exit: $?\\)\")",
+      "Bash(awk -F: '$1 > 4400 && $1 < 4585')",
+      "Bash(sort -u -t\"'\" -k2)",
+      "Bash(echo \"---tsc done \\(exit $?\\)---\")",
+      "Bash(npm root *)",
+      "Read(//home/tdeku/.npm-global/lib/node_modules/playwright/**)",
+      "Read(//home/tdeku/.npm-global/lib/node_modules/**)",
+      "Bash(pkill -f chrome-headless-shell)",
+      "Bash(echo \"---tsc exit $?---\")",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright *)",
+      "Bash(sudo -n npx playwright install-deps chromium)",
+      "Bash(echo \"EXIT=$? \\(sudo/install-deps unavailable\\)\")"
     ]
   },
   "sandbox": {
