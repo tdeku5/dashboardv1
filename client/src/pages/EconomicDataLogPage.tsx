@@ -8,7 +8,6 @@ import {
   addSurpriseRule,
   surpriseStyle,
   categoryOf,
-  displayEventName,
   countryTint, countryHex,
   impactLabel, impactColor,
   isoDate, addDays, startOfWeekMonday, fmtMonthDay, hoursSince,
@@ -150,11 +149,16 @@ function endOfWeekSunday(monday: Date): Date { return addDays(monday, 6) }
 function startOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth(), 1) }
 function endOfMonth(d: Date): Date { return new Date(d.getFullYear(), d.getMonth() + 1, 0) }
 
-type RangeKey = 'week' | 'nextWeek' | 'month' | 'nextMonth' | 'thruJun30'
+type RangeKey = 'lastWeek' | 'week' | 'nextWeek' | 'month' | 'nextMonth' | 'thruJun30'
 
 function rangeFor(key: RangeKey): { from: string; to: string } {
   const now = new Date()
   switch (key) {
+    case 'lastWeek': {
+      // Same Mon-anchored week definition as `week`/`nextWeek`, shifted back 7d.
+      const mon = addDays(startOfWeekMonday(now), -7)
+      return { from: isoDate(mon), to: isoDate(endOfWeekSunday(mon)) }
+    }
     case 'week': {
       const mon = startOfWeekMonday(now)
       return { from: isoDate(mon), to: isoDate(endOfWeekSunday(mon)) }
@@ -175,6 +179,8 @@ function rangeFor(key: RangeKey): { from: string; to: string } {
 }
 
 const RANGE_BUTTONS: ReadonlyArray<{ key: RangeKey; label: string }> = [
+  // Chronological L→R: Last Week comes first so the buttons read as a timeline.
+  { key: 'lastWeek',  label: 'Last Week' },
   { key: 'week',      label: 'This Week' },
   { key: 'nextWeek',  label: 'Next Week' },
   { key: 'month',     label: 'This Month' },
@@ -187,6 +193,14 @@ const RANGE_BUTTONS: ReadonlyArray<{ key: RangeKey; label: string }> = [
 interface RenderRow extends EconomicRelease {
   showWeek: boolean
   showDay: boolean
+  // Boundary flags for the SEPARATOR LINES. Drawing the separator as a
+  // border-BOTTOM on the last row of a group beats the table's default
+  // 1px-solid border-bottom in the cascade (same property → simple override),
+  // whereas a border-TOP on the first row competes against the prior row's
+  // existing solid bottom and gets suppressed by border-collapse priority
+  // (solid > dotted at equal width). See the comment block in the CSS module.
+  isLastOfDay: boolean
+  isLastOfWeek: boolean
   isToday: boolean
 }
 
@@ -214,13 +228,23 @@ function toRenderRows(releases: EconomicRelease[], todayIso: string): RenderRow[
   )
   let prevDate = ''
   let prevWeek = ''
-  return sorted.map((r) => {
+  const withStartFlags = sorted.map((r) => {
     const week = isoDate(startOfWeekMonday(new Date(`${r.release_date}T00:00:00`)))
     const showDay = r.release_date !== prevDate
     const showWeek = week !== prevWeek
     prevDate = r.release_date
     prevWeek = week
-    return { ...r, showWeek, showDay, isToday: r.release_date === todayIso }
+    return { ...r, week, showWeek, showDay, isToday: r.release_date === todayIso }
+  })
+  // Look-ahead pass: the LAST row of a day/week is the one whose successor
+  // has a different date/week (or which has no successor at all — we don't
+  // draw a separator below the final row of the table).
+  return withStartFlags.map((r, i) => {
+    const next = withStartFlags[i + 1]
+    const isLastOfDay = next != null && next.showDay
+    const isLastOfWeek = next != null && next.showWeek
+    const { week: _w, ...rest } = r
+    return { ...rest, isLastOfDay, isLastOfWeek }
   })
 }
 
@@ -242,6 +266,7 @@ function ReleaseTable({ rows }: { rows: RenderRow[] }) {
             <th className={styles.thCountry}>Country</th>
             <th className={styles.thCategory}>Category</th>
             <th className={styles.thEvent}>Event</th>
+            <th className={styles.thRefPeriod}>Reference Period</th>
             <th className={styles.thNum}>Expected</th>
             <th className={styles.thNum}>Actual</th>
             <th className={styles.thSurprise}>Surprise</th>
@@ -266,7 +291,13 @@ function ReleaseTable({ rows }: { rows: RenderRow[] }) {
               <tr
                 key={`${r.release_date}|${r.country}|${r.event}|${i}`}
                 style={rowStyle}
-                className={`${styles.tintRow} ${r.showDay ? styles.dayStart : ''}`}
+                // Separator goes on the LAST row of the group (border-bottom)
+                // not the first (border-top), so it overrides the table's
+                // default 1px solid border-bottom directly rather than
+                // competing with it in border-collapse priority.
+                // Week boundary still takes precedence: if a row ends both
+                // a day AND a week, only the solid week line is drawn.
+                className={`${styles.tintRow} ${r.isLastOfWeek ? styles.weekEnd : r.isLastOfDay ? styles.dayEnd : ''}`}
               >
                 <td className={styles.tdWeek}>{r.showWeek ? `wk ${fmtMonthDay(isoDate(startOfWeekMonday(new Date(`${r.release_date}T00:00:00`))))}` : ''}</td>
                 <td className={styles.tdDay}>{r.showDay ? dayLabel(r) : ''}</td>
@@ -277,8 +308,10 @@ function ReleaseTable({ rows }: { rows: RenderRow[] }) {
                 <td className={styles.tdCategory}>{categoryOf(r)}</td>
                 <td className={styles.tdEvent}>
                   <span className={styles.tempDot} style={{ background: tStyle.color }} title={`Surprise: ${tStyle.label}`} />
-                  {displayEventName(r)}
+                  {/* Bare base event — the period now lives in its own column */}
+                  {r.event}
                 </td>
+                <td className={styles.tdRefPeriod}>{r.reference_period ?? '—'}</td>
                 <td className={styles.tdNum}>{r.expected ?? '—'}</td>
                 <td className={styles.tdNum}>{r.actual ?? '—'}</td>
                 <td className={`${styles.tdSurprise} ${shadeClass}`}>{surpriseDeltaStr ?? '—'}</td>

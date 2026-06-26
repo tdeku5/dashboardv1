@@ -338,9 +338,35 @@
 .tdEvent { color: #dde4f0; white-space: normal; }
 .tdNum { color: #e2e8f0; }
 
-/* The first row of each day group gets a slightly stronger top border so day
-   blocks read as groups (the per-day background banding is applied inline). */
-.dayStart td { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+/* Row separators delineate day and week boundaries.
+   Day boundary  → thin white DOTTED border.
+   Week boundary → thicker white SOLID border.
+   The row className picks weekEnd when both apply, so the two never stack.
+
+   The separator is applied as a border-BOTTOM on the LAST row of each group.
+   This matters because:
+     (a) the table has `border-collapse: collapse` (above), so adjacent borders
+         at the same edge are merged by the browser using a fixed priority
+         (solid > dotted at equal width; wider wins on ties);
+     (b) every `<td>` already has a `border-bottom: 1px solid var(--border)`
+         (above), so a border-TOP on the next row competes against that solid
+         line and gets suppressed (solid beats dotted).
+   By overriding the border-bottom directly on the last-row cells, we replace
+   the faint default with the visible separator at exactly the same edge
+   instead of fighting for it. */
+.dayEnd  td { border-bottom: 1px dotted rgba(255, 255, 255, 0.25); }
+.weekEnd td { border-bottom: 2px   solid  rgba(255, 255, 255, 0.45); }
+
+/* Reference Period column — muted like the metadata cells (Week, Day, Country)
+   so the focus stays on Event / Expected / Actual / Surprise. */
+.thRefPeriod { width: 1%; white-space: nowrap; }
+.tdRefPeriod {
+  color: #94a3b8;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+  text-align: left;
+}
 
 .impDot {
   display: inline-block;

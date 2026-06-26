@@ -38,6 +38,7 @@ import { IPExplorerDashboardPage } from './pages/IPExplorerDashboardPage'
 import { CreditPage } from './pages/CreditPage'
 import { BankCreditDashboardPage } from './pages/BankCreditDashboardPage'
 import { HousingPage } from './pages/HousingPage'
+import { MiscChartsPage } from './pages/MiscChartsPage'
 
 function App() {
   return (
@@ -81,6 +82,7 @@ function App() {
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
         <Route path="/economic-log"                 element={<EconomicDataLogPage />} />
+        <Route path="/misc-charts"                   element={<MiscChartsPage />} />
       </Routes>
     </BrowserRouter>
   )

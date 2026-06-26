@@ -21,6 +21,7 @@ import { DailyChangeModal } from '../components/DailyChangeModal'
 import { GlobalPolicyTermStructureSection } from './GlobalPolicyTermStructureSection'
 import { GlobalPolicyPathRealRateSection } from './GlobalPolicyPathRealRateSection'
 import { GlobalForwardCurvesSection } from './GlobalForwardCurvesSection'
+import { Global2s10sRegimeSection } from './Global2s10sRegimeSection'
 import styles from './STIRDashboardPage.module.css'
 
 const COUNTRY_COLORS: Record<string, string> = {
@@ -710,6 +711,9 @@ export function GlobalRatesPage() {
           </div>
         )}
       </div>
+
+      {/* ═══ Global 2s10s Yield Curve Regimes (2x3) ═══ */}
+      <Global2s10sRegimeSection />
 
       {detailCell && (
         <DailyChangeModal

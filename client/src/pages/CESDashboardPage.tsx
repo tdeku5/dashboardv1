@@ -1056,6 +1056,7 @@ function SubDecompSection({
   lookback,
   onLookbackChange,
   yDomain,
+  fullWidth = false,
 }: {
   title:            string
   subtitle:         string
@@ -1070,9 +1071,10 @@ function SubDecompSection({
   lookback:         number
   onLookbackChange: (n: number) => void
   yDomain:          [number, number]
+  fullWidth?:       boolean
 }) {
   return (
-    <div className={styles.section}>
+    <div className={`${styles.section} ${fullWidth ? styles.fullSpan : ''}`}>
 
       {/* Header */}
       <div className={styles.sectionHeader}>
@@ -1737,8 +1739,8 @@ export function CESDashboardContent() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <>
-        <div>
+    <div className={styles.gridBody}>
+        <div className={styles.pageHead}>
           <div className={styles.pageTitle}>CES Dashboard</div>
           <div className={styles.pageSub}>
             Current Employment Statistics — monthly payroll employment by sector
@@ -1757,7 +1759,9 @@ export function CESDashboardContent() {
           ════════════════════════════════════════════════════════════════ */}
           <div className={styles.majorHeader}>Payrolls</div>
 
-          <div className={styles.section}>
+          {/* Densest chart on the page — 14-sector diverging stacked bars +
+              full legend. Kept full-width; unreadable at half-width. */}
+          <div className={`${styles.section} ${styles.fullSpan}`}>
 
             <div className={styles.sectionHeader}>
               <div>
@@ -1870,6 +1874,7 @@ export function CESDashboardContent() {
               Sub-decomposition charts
           ════════════════════════════════════════════════════════════════ */}
 
+          {/* 10-sector stacked bars — kept full-width (dense at half). */}
           <SubDecompSection
             title="Services Payrolls Decomposition"
             subtitle="1moΔ, thousands of persons"
@@ -1884,6 +1889,7 @@ export function CESDashboardContent() {
             lookback={svcLookback}
             onLookbackChange={setSvcLookback}
             yDomain={yDomainSvc}
+            fullWidth
           />
           <SubDecompSection
             title="Goods Payrolls Decomposition"
@@ -3331,7 +3337,7 @@ export function CESDashboardContent() {
           </div>
 
         </>)}
-    </>
+    </div>
   )
 }
 

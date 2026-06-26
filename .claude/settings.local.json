@@ -332,7 +332,10 @@
       "Bash(npx vitest *)",
       "Bash(npx playwright *)",
       "Bash(sudo -n npx playwright install-deps chromium)",
-      "Bash(echo \"EXIT=$? \\(sudo/install-deps unavailable\\)\")"
+      "Bash(echo \"EXIT=$? \\(sudo/install-deps unavailable\\)\")",
+      "Bash(npm run *)",
+      "Bash(echo \"started dev, pid $!\")",
+      "Bash(jobs -l)"
     ]
   },
   "sandbox": {

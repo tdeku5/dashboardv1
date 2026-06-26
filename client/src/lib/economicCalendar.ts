@@ -29,11 +29,10 @@ export interface EconomicRelease {
   scraped_at: string
 }
 
-// Full display name = base event + reference period (matches TE's convention
-// once the suffix has been appended). The base alone is the identity key.
-export function displayEventName(r: { event: string; reference_period: string | null }): string {
-  return r.reference_period ? `${r.event} ${r.reference_period}` : r.event
-}
+// The reference period is now rendered as its own column in the calendar
+// table; the page reads r.event (the base name) directly. The combined "event
+// + period" helper that used to live here has been removed — re-introduce it
+// only if a future consumer genuinely needs the joined form.
 
 // Normalizes a row's category to a known Category (null/unknown → 'Other').
 export function categoryOf(r: EconomicRelease): Category {

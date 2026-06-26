@@ -87,6 +87,33 @@
   min-height: 0;
 }
 
+/* ── Two-column chart grid ─────────────────────────────────────────────────
+   This wrapper lives INSIDE CESDashboardContent, so the 2-up grid travels
+   with the CES content no matter which parent renders it — the standalone
+   CESDashboardPage route OR the tabbed LaborMarketPage (which wraps the
+   content in ModelsPage.module.css's .body, a different element). Putting
+   the grid on the parent .body only worked for the standalone route, which
+   isn't the page the Labor → CES nav actually shows. */
+.gridBody {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;     /* each card keeps its natural height */
+  align-content: start;   /* rows stack at the top, don't stretch to fill */
+  min-width: 0;
+}
+
+/* Span both columns: starts a fresh row for section headers, full-width
+   charts, and blocks that already manage their own internal 2-up layout. */
+.fullSpan {
+  grid-column: 1 / -1;
+}
+
+/* Page title block spans the full width above the first section. */
+.pageHead {
+  grid-column: 1 / -1;
+}
+
 /* ── Page title ───────────────────────────────────────────────────────────── */
 
 .majorHeader {
@@ -96,6 +123,7 @@
   color: var(--text-primary);
   padding: 4px 2px 0;
   flex-shrink: 0;
+  grid-column: 1 / -1;
 }
 
 .pageTitle {
@@ -124,6 +152,7 @@
   font-family: var(--font-mono);
   letter-spacing: 0.06em;
   color: #64748B;
+  grid-column: 1 / -1;
 }
 
 .statusError {
@@ -344,6 +373,7 @@
   gap: 16px;
   flex-wrap: wrap;
   flex-shrink: 0;
+  grid-column: 1 / -1;
 }
 
 .sectorSelectWrap {
@@ -378,6 +408,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  grid-column: 1 / -1;
 }
 
 /* ── Mini chart wrap ──────────────────────────────────────────────────────── */
@@ -438,6 +469,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  grid-column: 1 / -1;
 }
 
 /* ── Recent payroll growth chart ──────────────────────────────────────────── */
