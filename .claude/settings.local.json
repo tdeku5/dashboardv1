@@ -335,7 +335,19 @@
       "Bash(echo \"EXIT=$? \\(sudo/install-deps unavailable\\)\")",
       "Bash(npm run *)",
       "Bash(echo \"started dev, pid $!\")",
-      "Bash(jobs -l)"
+      "Bash(jobs -l)",
+      "Bash(ls -la fred_data.db)",
+      "Bash(sqlite3 fred_data.db \".schema economic_releases\")",
+      "Bash(sqlite3 fred_data.db \"SELECT 'lastweek 06-22..06-28' AS rng, COUNT\\(*\\) FROM economic_releases WHERE release_date BETWEEN '2026-06-22' AND '2026-06-28' UNION ALL SELECT 'mon/tue 06-29..06-30', COUNT\\(*\\) FROM economic_releases WHERE release_date BETWEEN '2026-06-29' AND '2026-06-30' UNION ALL SELECT 'thisweek 07-01..07-05', COUNT\\(*\\) FROM economic_releases WHERE release_date BETWEEN '2026-07-01' AND '2026-07-05';\")",
+      "Bash(timeout 300 node_modules/.bin/tsx src/scripts/econDiag.ts \"This Week\")",
+      "Bash(timeout 300 ../node_modules/.bin/tsx src/scripts/econDiag.ts \"This Week\")",
+      "Bash(timeout 300 ../node_modules/.bin/tsx src/scripts/econDiag.ts \"Last Month\")",
+      "Bash(timeout 300 ../node_modules/.bin/tsx src/scripts/econDiag.ts \"Previous Month\")",
+      "Bash(break)",
+      "Bash(pkill -f \"backfillEconomicCalendar\")",
+      "Bash(pkill -f \"econ-backfill\")",
+      "Bash(awk '{print $2, $10, $11, $12, $13}')",
+      "Bash(awk '{print $5, $9}')"
     ]
   },
   "sandbox": {

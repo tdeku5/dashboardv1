@@ -19,8 +19,13 @@ const CALENDAR_BASE = 'https://tradingeconomics.com/calendar'
 const RETRY_BACKOFF_MS = 5 * 60_000   // 5 minutes
 const WAIT_FOR_MS = 3000
 
-// TE range dropdown labels we drive. 'This Week' is the default view (no action).
-export type CalendarRange = 'This Week' | 'This Month' | 'Next Month'
+// TE range dropdown labels we drive (verbatim, as they appear in TE's own range
+// dropdown: Recent, Today, Tomorrow, This Week, Next Week, This Month, Next
+// Month, Yesterday, Previous Week, Previous Month, Custom). 'This Week' is the
+// default view (no action). 'Previous Month' is the trailing range that lets a
+// run re-scrape recently-released events so their actuals get filled in — see
+// SCRAPE_RANGES in index.ts.
+export type CalendarRange = 'This Week' | 'This Month' | 'Next Month' | 'Previous Month'
 
 export interface ScrapeResult {
   markdown: string

@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "fetch": "tsx src/fetchAllSeries.ts",
     "econ-calendar": "tsx src/scripts/runEconomicCalendar.ts",
+    "econ-backfill": "tsx src/scripts/backfillEconomicCalendar.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

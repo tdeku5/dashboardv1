@@ -68,4 +68,22 @@ describe('economic_releases upsert', () => {
     expect(dbmod.getEconomicReleases({ minImportance: 3 }).every(r => r.importance >= 3)).toBe(true)
     expect(dbmod.getEconomicReleases({ startDate: '2026-05-27', endDate: '2026-05-27' }).every(r => r.release_date === '2026-05-27')).toBe(true)
   })
+
+  it('does NOT blank a populated actual/expected when a re-scrape returns null', () => {
+    // Fully-populated row (an already-released event).
+    dbmod.upsertEconomicReleases([row({
+      event: 'Retail Sales MoM', expected: '0.4%', actual: '0.7%',
+      scraped_at: '2026-05-28T08:00:00Z',
+    })])
+    // A later "Previous Month" re-scrape drops the forecast and actual (TE
+    // sometimes serves blanks for aged rows) — both must be preserved.
+    dbmod.upsertEconomicReleases([row({
+      event: 'Retail Sales MoM', expected: null, actual: null,
+      scraped_at: '2026-05-29T08:00:00Z',
+    })])
+    const r = dbmod.getEconomicReleases({ eventSearch: 'Retail Sales MoM' })[0]
+    expect(r.expected).toBe('0.4%')                     // preserved, not blanked
+    expect(r.actual).toBe('0.7%')                       // preserved, not blanked
+    expect(r.scraped_at).toBe('2026-05-29T08:00:00Z')   // metadata still refreshes
+  })
 })

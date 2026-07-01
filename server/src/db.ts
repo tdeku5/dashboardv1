@@ -1292,12 +1292,22 @@ export function upsertEconomicReleases(rows: CategorizedRelease[]): number {
       day_of_week      = excluded.day_of_week,
       reference_period = COALESCE(excluded.reference_period, economic_releases.reference_period),
       category         = excluded.category,
-      expected         = excluded.expected,
-      previous         = excluded.previous,
+      -- Non-destructive: a re-scrape that returns a blank value (common when
+      -- TE's "Previous Month" view drops the forecast/actual for an already-
+      -- released event) must NEVER clobber a populated value. Keep the stored
+      -- value unless the incoming one is non-empty.
+      expected         = COALESCE(NULLIF(excluded.expected, ''), economic_releases.expected),
+      previous         = COALESCE(NULLIF(excluded.previous, ''), economic_releases.previous),
       importance       = excluded.importance,
       scraped_at       = excluded.scraped_at,
-      surprise         = CASE WHEN economic_releases.actual IS NOT excluded.actual THEN NULL ELSE economic_releases.surprise END,
-      actual           = excluded.actual
+      -- Only clear the surprise (forcing re-classification) when a *non-blank*
+      -- actual actually differs from what's stored — a blank re-scrape leaves
+      -- both the actual and its surprise untouched.
+      surprise         = CASE
+                           WHEN NULLIF(excluded.actual, '') IS NOT NULL
+                                AND economic_releases.actual IS NOT excluded.actual
+                           THEN NULL ELSE economic_releases.surprise END,
+      actual           = COALESCE(NULLIF(excluded.actual, ''), economic_releases.actual)
   `)
   let n = 0
   const tx = db.transaction(() => {

@@ -23,10 +23,17 @@ import { buildRuleLookup } from './ruleLookup'
 import { splitReferencePeriod } from './referencePeriod'
 import type { EconomicRelease, CategorizedRelease } from './types'
 
-// Ranges scraped each run. "This Month" + "Next Month" give gap-free coverage
-// from the start of the current month through the end of the next (≈ today + 5
-// weeks, rolling) — see firecrawlScrape.ts for why we drive TE's native options.
-const SCRAPE_RANGES: CalendarRange[] = ['This Month', 'Next Month']
+// Ranges scraped each run. "Previous Month" is the TRAILING lookback: it re-
+// scrapes the whole prior month so recently-released events get their actuals
+// filled onto the existing rows (TE posts actuals after the print, and once a
+// date rolls out of the forward window it would otherwise never be re-pulled —
+// this was the cause of blank actuals for the days just before a month
+// boundary). "This Month" + "Next Month" are the forward window. Together they
+// give gap-free coverage from the start of last month through the end of next
+// (≈ today − 4 weeks … today + 5 weeks, rolling). See firecrawlScrape.ts for
+// why we drive TE's native dropdown options rather than URL date params.
+const TRAILING_RANGE: CalendarRange = 'Previous Month'
+const SCRAPE_RANGES: CalendarRange[] = [TRAILING_RANGE, 'This Month', 'Next Month']
 
 dotenv.config({ path: path.join(__dirname, '..', '..', '..', '.env') })
 
@@ -64,8 +71,14 @@ export interface SyncOptions {
 
 export interface SyncResult {
   upserted: number
+  inserted: number        // rows that did not exist before this run
+  updated: number         // rows that already existed (re-scraped in place)
+  actualsFilled: number   // rows whose actual went from blank → populated
+  parseLoss: number       // parsed rows whose expected/actual failed to land
   classified: number
   unclassified: number
+  rangesOk: number        // ranges that scraped+parsed successfully
+  rangesFailed: number    // ranges that failed (run continues on the rest)
 }
 
 // Scrapes + parses one TE range into validated, watchlist releases. On parse
@@ -82,27 +95,54 @@ async function scrapeAndParseRange(range: CalendarRange, opts: SyncOptions): Pro
   }
 }
 
+// Snapshot of stored expected/actual, keyed by (date|country|baseEvent), for the
+// scraped date window — used to compute inserted-vs-updated + actuals-newly-
+// filled stats and to detect parse loss, without a second write.
+function snapshotStored(minDate: string, maxDate: string): Map<string, { expected: string | null; actual: string | null }> {
+  const m = new Map<string, { expected: string | null; actual: string | null }>()
+  for (const row of getEconomicReleases({ startDate: minDate, endDate: maxDate })) {
+    m.set(`${row.release_date}|${row.country}|${row.event}`, { expected: row.expected, actual: row.actual })
+  }
+  return m
+}
+
+const hasVal = (v: string | null | undefined): boolean => v != null && v !== ''
+
 export async function syncEconomicCalendar(opts: SyncOptions = {}): Promise<SyncResult> {
   const ranges = opts.ranges ?? SCRAPE_RANGES
   console.log(`[econ-calendar] Sync starting (ranges=${ranges.join(' + ')})…`)
 
-  // 1+2. Scrape + parse each range, then merge on (release_date, country, event)
-  //      so the overlapping month windows don't duplicate. Ingestion is filtered
-  //      to **medium + high impact (importance ≥ 2)** only: the URL passes
-  //      importance=2 to TE (server-side filter) AND we re-filter post-parse —
-  //      TE occasionally returns low-tier events (energy stocks, mortgage rate)
-  //      under a 2+ request, and Claude can read those as 1-star. The post-parse
-  //      floor enforces the policy strictly.
-  const perRange = await Promise.all(ranges.map(r => scrapeAndParseRange(r, opts)))
+  // 1+2. Scrape + parse each range. Graceful degradation: a range that fails to
+  //      scrape/parse is logged and skipped rather than aborting the whole run,
+  //      so one bad TE pull can't wipe out the other ranges' updates. If EVERY
+  //      range fails we throw (nothing to persist — existing DB data is kept).
+  const settled = await Promise.allSettled(ranges.map(r => scrapeAndParseRange(r, opts)))
+  const perRange: EconomicRelease[][] = []
+  let rangesFailed = 0
+  settled.forEach((s, i) => {
+    if (s.status === 'fulfilled') {
+      perRange.push(s.value)
+      console.log(`[econ-calendar]   range "${ranges[i]}": ${s.value.length} releases parsed`)
+    } else {
+      rangesFailed++
+      console.error(`[econ-calendar]   range "${ranges[i]}" FAILED — skipped: ${s.reason instanceof Error ? s.reason.message : String(s.reason)}`)
+    }
+  })
+  const rangesOk = perRange.length
+  if (rangesOk === 0) {
+    throw new Error(`All ${ranges.length} calendar ranges failed to scrape/parse — keeping existing DB data`)
+  }
+
+  // Merge on (release_date, country, base event). Ingestion is filtered to
+  // **medium + high impact (importance ≥ 2)** only: the URL passes importance=2
+  // to TE AND we re-filter post-parse (TE occasionally returns 1-star energy/
+  // mortgage rows even under a 2+ request). Strip the trailing reference-period
+  // suffix ("APR", "MAY/23", "Q1") so the identity stays stable across pulls;
+  // the merge map and the upsert both key on the base name.
   const merged = new Map<string, EconomicRelease>()
   for (const list of perRange) {
     for (const r of list) {
       if (r.importance < 2) continue   // low-impact (1-star) — drop, per policy
-      // Strip the trailing reference-period suffix ("APR", "MAY/23", "Q1") so
-      // the identity stays stable across pulls — without this, the same event
-      // ends up on two rows (one blank, one with the actual) once TE appends
-      // the suffix. The merge map and the upsert both key on the base name.
-      // If a later scrape has a non-null suffix, prefer it on conflict.
       const { baseEvent, referencePeriod } = splitReferencePeriod(r.event)
       const key = `${r.release_date}|${r.country}|${baseEvent}`
       const prior = merged.get(key)
@@ -110,6 +150,11 @@ export async function syncEconomicCalendar(opts: SyncOptions = {}): Promise<Sync
         ...r,
         event: baseEvent,
         reference_period: referencePeriod ?? prior?.reference_period ?? null,
+        // Prefer a non-blank expected/actual across the overlapping ranges so
+        // a forward-range blank never shadows the trailing range's populated
+        // value (and vice-versa) before we even reach the upsert.
+        expected: hasVal(r.expected) ? r.expected : (prior?.expected ?? r.expected),
+        actual:   hasVal(r.actual)   ? r.actual   : (prior?.actual   ?? r.actual),
       })
     }
   }
@@ -117,11 +162,40 @@ export async function syncEconomicCalendar(opts: SyncOptions = {}): Promise<Sync
   // 3. Categorize (ingestion-time) + persist. Category classifies on the base
   //    event name — same answer whether or not TE has appended a suffix yet.
   const rows: CategorizedRelease[] = [...merged.values()].map(r => ({ ...r, category: classifyCategory(r.event) }))
+
+  // Stats: snapshot the affected window BEFORE upsert so we can report inserted
+  // vs updated and actuals newly filled — the numbers that tell you whether a
+  // run actually repaired anything.
+  const dates = rows.map(r => r.release_date).sort()
+  const before = snapshotStored(dates[0], dates[dates.length - 1])
+  let inserted = 0, updated = 0, actualsFilled = 0
+  for (const r of rows) {
+    const key = `${r.release_date}|${r.country}|${r.event}`
+    const prev = before.get(key)
+    if (!prev) inserted++
+    else updated++
+    if (hasVal(r.actual) && !hasVal(prev?.actual)) actualsFilled++
+  }
+
   const upserted = upsertEconomicReleases(rows)
 
+  // Parse-loss detection: a parsed row carried an expected/actual but, after the
+  // upsert, the stored row is still blank for that field. With the non-
+  // destructive upsert this should be 0; a non-zero count means a real bug
+  // (bad key, dropped write) and is logged loudly.
+  const after = snapshotStored(dates[0], dates[dates.length - 1])
+  let parseLoss = 0
+  for (const r of rows) {
+    const stored = after.get(`${r.release_date}|${r.country}|${r.event}`)
+    if (hasVal(r.expected) && !hasVal(stored?.expected)) parseLoss++
+    if (hasVal(r.actual)   && !hasVal(stored?.actual))   parseLoss++
+  }
+  if (parseLoss > 0) {
+    console.error(`[econ-calendar] ⚠ parse-loss: ${parseLoss} parsed expected/actual value(s) did not land in the DB`)
+  }
+
   // 4. Classify surprise (separate step, post-persistence). Unknown events →
-  //    'unclassified' + needs_classification.log triage queue. Uses the
-  //    DB-merged rule lookup so triage-added rules apply on every sync.
+  //    'unclassified' + needs_classification.log triage queue.
   const findRule = buildRuleLookup()
   let classified = 0
   let unclassified = 0
@@ -137,8 +211,13 @@ export async function syncEconomicCalendar(opts: SyncOptions = {}): Promise<Sync
     }
   }
 
-  console.log(`[econ-calendar] Sync complete — upserted=${upserted} classified=${classified} unclassified=${unclassified} (${loggedUnknown.size} distinct unknown events)`)
-  return { upserted, classified, unclassified }
+  console.log(
+    `[econ-calendar] Sync complete — window=${dates[0]}…${dates[dates.length - 1]} ` +
+    `ranges=${rangesOk} ok/${rangesFailed} failed · upserted=${upserted} (inserted=${inserted} updated=${updated}) ` +
+    `actualsFilled=${actualsFilled} parseLoss=${parseLoss} · classified=${classified} unclassified=${unclassified} ` +
+    `(${loggedUnknown.size} distinct unknown events)`
+  )
+  return { upserted, inserted, updated, actualsFilled, parseLoss, classified, unclassified, rangesOk, rangesFailed }
 }
 
 // One-shot cleanup of duplicate rows caused by TE's reference-period suffix

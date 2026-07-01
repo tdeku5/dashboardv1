@@ -1,6 +1,6 @@
 # Economic Calendar — Ingestion & Data Behavior
 
-_Last updated: 2026-05-28 by Claude Code_
+_Last updated: 2026-07-01 by Claude Code — added the `Previous Month` trailing range, a non-destructive upsert, and the `econ-backfill` script._
 
 A practical reference for how the Economic Calendar's data actually gets in, when, with what filters, and what's kept. Read this before changing the ingestion pipeline or wondering "where did that row come from."
 
@@ -21,13 +21,18 @@ So the pipeline runs **daily at 23:00 UTC**. This matches the repo's all-UTC cro
 if (releaseCount === 0) syncEconomicCalendar().catch(…)
 ```
 
-**Per-run window:** `syncEconomicCalendar` (in `server/src/economicCalendar/index.ts`) scrapes **two TE calendar ranges** and merges them:
+**Per-run window:** `syncEconomicCalendar` (in `server/src/economicCalendar/index.ts`) scrapes **three TE calendar ranges** and merges them:
 
 ```ts
-const SCRAPE_RANGES: CalendarRange[] = ['This Month', 'Next Month']
+const TRAILING_RANGE: CalendarRange = 'Previous Month'
+const SCRAPE_RANGES: CalendarRange[] = [TRAILING_RANGE, 'This Month', 'Next Month']
 ```
 
-This gives gap-free coverage from the start of the current month through the end of the next — roughly **today + ~5 weeks**, rolling forward automatically. The two ranges are scraped in parallel (`Promise.all`), each parsed by its own streaming Claude call, then merged on the `(release_date, country, event)` key. The "why two month ranges and not a URL date param" story is in [`economic-data-log-guide.md`](economic-data-log-guide.md#horizon-rolling-gap-free): TE ignores URL date params and resists synthetic datepicker events, but clicking its native "Next Month" dropdown option via a Firecrawl `executeJavascript` action reliably switches the rendered window.
+This gives gap-free coverage from the **start of last month** through the end of the next — roughly **today − 4 weeks … today + 5 weeks**, rolling forward automatically.
+
+**Why the trailing `Previous Month`:** `This Month + Next Month` alone is forward-only, so a released event's `actual` (which TE posts *after* the print) was only captured while the event was still in the forward window. At a **month boundary** — e.g. viewing on July 1, when `This Month`=July and `Next Month`=August — all of late June had already rolled out of scope, so its actuals (and any late-published forecasts) were never re-scraped and stayed blank. `Previous Month` is the **trailing lookback**: it re-scrapes the whole prior month every run so recently-released events get their actuals filled onto the existing rows. (TE's date-range dropdown really does offer `Previous Month` / `Previous Week` / `Yesterday` — the earlier forward-only design simply never used a backward one.)
+
+The three ranges are scraped in parallel (`Promise.allSettled` — a range that fails to scrape/parse is logged and **skipped**, not fatal, so one bad TE pull can't abort the run or blank good data; only if *all* ranges fail does the run throw and keep existing DB data), each parsed by its own streaming Claude call, then merged on the `(release_date, country, event)` key. The "why two month ranges and not a URL date param" story is in [`economic-data-log-guide.md`](economic-data-log-guide.md#horizon-rolling-gap-free): TE ignores URL date params and resists synthetic datepicker events, but clicking its native "Next Month" dropdown option via a Firecrawl `executeJavascript` action reliably switches the rendered window.
 
 **Volume per run (today's snapshot, 2026-05-28):**
 
@@ -48,22 +53,27 @@ INSERT INTO economic_releases
   (release_date, day_of_week, country, event, category, expected, actual, previous, importance, scraped_at)
 VALUES (…)
 ON CONFLICT(release_date, country, event) DO UPDATE SET
-  day_of_week = excluded.day_of_week,
-  category    = excluded.category,
-  expected    = excluded.expected,
-  previous    = excluded.previous,
-  importance  = excluded.importance,
-  scraped_at  = excluded.scraped_at,
-  surprise    = CASE WHEN economic_releases.actual IS NOT excluded.actual THEN NULL ELSE economic_releases.surprise END,
-  actual      = excluded.actual
+  day_of_week      = excluded.day_of_week,
+  reference_period = COALESCE(excluded.reference_period, economic_releases.reference_period),
+  category         = excluded.category,
+  -- Non-destructive: a blank re-scrape never clobbers a populated value.
+  expected         = COALESCE(NULLIF(excluded.expected, ''), economic_releases.expected),
+  previous         = COALESCE(NULLIF(excluded.previous, ''), economic_releases.previous),
+  importance       = excluded.importance,
+  scraped_at       = excluded.scraped_at,
+  surprise         = CASE WHEN NULLIF(excluded.actual, '') IS NOT NULL
+                           AND economic_releases.actual IS NOT excluded.actual
+                          THEN NULL ELSE economic_releases.surprise END,
+  actual           = COALESCE(NULLIF(excluded.actual, ''), economic_releases.actual)
 ```
 
 The key mechanics:
 
 - **Primary key `(release_date, country, event)`** uniquely identifies an event across re-pulls. Re-scraping the same event today vs. tomorrow lands on the same row, not a new one.
-- **The Actual flows forward.** When an event transitions from upcoming (no Actual) to released (Actual populated), the next sync's upsert sets `actual = excluded.actual`. Once captured, that Actual is what's stored.
-- **A changed Actual nulls `surprise`** on the same upsert (the `CASE … IS NOT` clause), so a revised actual triggers re-classification in the same sync rather than carrying a stale label.
-- **Past events stay frozen.** Once an event rolls out of the current `This Month + Next Month` scrape window, it isn't re-scraped — but its row remains in the DB indefinitely, with its captured `actual` and `surprise` intact.
+- **The Actual flows forward.** When an event transitions from upcoming (no Actual) to released (Actual populated), the next sync's upsert fills it. Once captured, that Actual is what's stored.
+- **Non-destructive.** `expected`/`actual`/`previous` use `COALESCE(NULLIF(excluded, ''), stored)` — a re-scrape that returns a **blank** value (common when TE's `Previous Month` view drops the forecast/actual for an aged row) **never blanks a populated value**. This is what makes the trailing `Previous Month` re-scrape safe.
+- **A changed non-blank Actual nulls `surprise`** on the same upsert (the `CASE` guards on `NULLIF(excluded.actual,'') IS NOT NULL`), so a *revised* actual triggers re-classification — but a blank re-scrape leaves both the actual and its surprise untouched.
+- **Recently-passed events are re-scraped** for up to a month (the `Previous Month` trailing range), so their actuals fill in even after the print. Events older than that roll out of scope and stay frozen with whatever was last captured.
 
 **Verification** (today): the table has rows back to 2026-05-01. A query for May 1–15 returns events with their final Actuals (e.g. US ISM Manufacturing PMI: expected 53, actual 52.7). The Calendar's date range controls (From/To pickers, "This Week"/"Next Week"/etc. buttons) can navigate to any window the user types — past or future — and the table will populate from whatever's stored. There is no future-only restriction in `getEconomicReleases` (the filter is just `release_date BETWEEN startDate AND endDate`).
 
@@ -111,7 +121,7 @@ Not to be confused with the `category` column, which is a separate single-functi
 
 The header's ↻ Refresh now button (top-right of the page) **runs the exact same pipeline as the cron**, on demand.
 
-Implementation: `handleRefresh` in `EconomicDataLogPage.tsx` calls `triggerEconomicRefresh()` (in `client/src/lib/economicCalendar.ts`), which `POST`s to `/api/economic-calendar/refresh`. That route handler simply calls `syncEconomicCalendar()` with no arguments — so it uses the same default `SCRAPE_RANGES = ['This Month', 'Next Month']` and the same `importance ≥ 2` floor as the cron. There's a single-flight guard (`refreshInProgress`) that returns HTTP 409 if a refresh is already running.
+Implementation: `handleRefresh` in `EconomicDataLogPage.tsx` calls `triggerEconomicRefresh()` (in `client/src/lib/economicCalendar.ts`), which `POST`s to `/api/economic-calendar/refresh`. That route handler simply calls `syncEconomicCalendar()` with no arguments — so it uses the same default `SCRAPE_RANGES = ['Previous Month', 'This Month', 'Next Month']` and the same `importance ≥ 2` floor as the cron. There's a single-flight guard (`refreshInProgress`) that returns HTTP 409 if a refresh is already running.
 
 So:
 
@@ -119,7 +129,17 @@ So:
 - **Volume:** identical — ~500–650 upserts per click (most are no-op updates of unchanged rows).
 - **What's different from the cron:** only the trigger (a click instead of 23:00 UTC) and the user feedback. The button disables and shows a spinner + status line ("Fetching latest events from Trading Economics…") while running, a 3-second auto-clearing toast on success ("Refreshed at HH:MM:SS · N events"), and a persistent red "Refresh failed: … — retry?" on failure. The "Last refreshed" timestamp beside the button reads from `MAX(scraped_at)` and updates on success.
 
-Because the windows are identical, a Refresh Now never narrows the visible data — it can only fill in newly-published Actuals or revise category/importance for events already in the window.
+Because the windows are identical, a Refresh Now never narrows the visible data — it can only fill in newly-published Actuals or revise category/importance for events already in the window. With the `Previous Month` trailing range now included, that window also covers all of last month, so a Refresh Now (or the nightly cron) **fills in actuals for recently-passed events** — including days that fell just before a month boundary.
+
+**Observability:** each run logs the window scraped, ranges ok/failed, `upserted` split into `inserted` vs `updated`, `actualsFilled` (rows whose actual went blank→populated), and `parseLoss` (a >0 count means a parsed expected/actual failed to land — should always be 0). Watch `updated`/`actualsFilled` to confirm a run actually repaired past rows.
+
+## One-off backfill script
+
+`npm run econ-backfill` (in `server/`) repairs rows that predate the trailing-range fix (e.g. events that were frozen blank at an earlier month boundary).
+
+- **Dry run (default):** scrapes `Previous Month`, parses, and prints the exact diff vs the DB (`would insert / update / fill actual / fill expected`) plus a sample — **writes nothing**. Review before applying.
+- **`--apply`:** upserts the scraped rows via the same non-destructive upsert as the cron, then re-runs surprise classification. Idempotent; never deletes, duplicates, or blanks a populated value.
+- **`--from-file <path>`:** parse+apply from a previously-captured TE markdown file instead of a live Firecrawl scrape — deterministic, and a fallback when Firecrawl's proxy is flaky.
 
 ## Data source
 
@@ -176,9 +196,9 @@ User rules merge over the static TS seeds at classify time (see [TRIAGE tab purp
 
 ## Known limitations / notes
 
-- **Late upstream revisions are not captured.** Once an event ages out of the `This Month + Next Month` scrape window, it stops being re-pulled — so a payrolls revision printed two months later isn't reflected. The DB shows the value that was current when the event was last in scope.
+- **Recent actuals now refresh; only *old* revisions are missed.** The scrape window is `Previous Month + This Month + Next Month`, so a released event is re-pulled for up to ~a month after its print and its actual fills in. A revision printed *two months* later (after the event ages out of `Previous Month`) still isn't captured — the DB shows the value current when the event was last in scope.
 - **The `Low` impact UI option will show until the 15 historical 1★ rows age out.** They're preserved per the "don't delete existing data" rule; no new 1★ rows enter from this run forward.
 - **TE date params don't work** — `?d1=…&d2=…` is ignored, and synthetic datepicker events don't trigger TE's AJAX. Driving its native dropdown options is the only reliable way to widen the window. If TE changes that DOM, the `rangeActions` JS in `firecrawlScrape.ts` is the place to fix.
 - **`max_tokens` headroom is the parse fragility point.** A run with importance=1 over a full month exceeds 32000 output tokens (we hit `stop_reason: max_tokens` in testing); at importance=2 we're comfortably under 64000. If TE radically expands its medium+high coverage, watch the orchestrator logs for parse failures with that signature.
-- **Past data is not backfilled.** The first ingestion run captures whatever TE's `This Month + Next Month` currently shows; events before that simply aren't in the DB. There's no historical backfill from TE because the public calendar doesn't expose a "give me April 2026" mode that the LLM-parse pipeline can drive.
-- **Refresh Now and the cron share the same volume.** A Refresh Now click does not give you a wider window than the daily cron — both are ~500–650 rows over the same ≈5-week forward span.
+- **Deep history is not backfilled automatically.** A run captures whatever TE's `Previous / This / Next Month` currently shows; events older than the start of last month aren't pulled. TE's dropdown only reaches one month back (`Previous Month`), so there's no way to drive the LLM-parse pipeline further into the past. The `npm run econ-backfill` script exists to repair the recent past (last month) on demand.
+- **Refresh Now and the cron share the same volume.** A Refresh Now click does not give you a wider window than the daily cron — both scrape the same `Previous + This + Next Month` span (~3 scrapes, ~750–950 rows, most no-op re-upserts).
