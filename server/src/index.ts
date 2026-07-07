@@ -40,6 +40,8 @@ import { hmrcReceiptsRouter } from './routes/hmrcReceipts'
 import { syncHmrcReceipts } from './hmrcReceipts'
 import { payeRtiRouter } from './routes/payeRti'
 import { syncPayeRti } from './payeRti'
+import { statcanRouter } from './routes/statcan'
+import { verifyStatcanMetadata, syncAllStatcanSeries } from './fetchAllStatcanSeries'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
@@ -94,6 +96,7 @@ app.use('/api/boe',          boeRouter)
 app.use('/api/uk-hpi',       ukHpiRouter)
 app.use('/api/hmrc-receipts', hmrcReceiptsRouter)
 app.use('/api/paye-rti',     payeRtiRouter)
+app.use('/api/statcan',      statcanRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
@@ -255,6 +258,13 @@ async function startup(): Promise<void> {
     console.error('[startup] PAYE RTI sync error:', err)
   )
 
+  // Canada econ-model StatCan series: metadata health check FIRST (vector
+  // renumbering defense — sync is skipped entirely if any PID/title mismatches),
+  // then incremental sync (falls back to full backfill on empty table).
+  verifyStatcanMetadata()
+    .then(() => syncAllStatcanSeries())
+    .catch(err => console.error('[startup] StatCan WDS sync error:', err))
+
   // BoE gilt yield curve sync (non-blocking)
   syncGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve sync error:', err)
@@ -345,6 +355,11 @@ async function startup(): Promise<void> {
     syncUkHpi().catch(err => console.error('[cron] UK HPI error:', err))
     syncHmrcReceipts().catch(err => console.error('[cron] HMRC receipts error:', err))
     syncPayeRti().catch(err => console.error('[cron] PAYE RTI error:', err))
+    // Canada econ-model StatCan series (health check then incremental; most
+    // days a no-op — CPI/LFS publish on fixed mid-month dates).
+    verifyStatcanMetadata()
+      .then(() => syncAllStatcanSeries())
+      .catch(err => console.error('[cron] StatCan WDS error:', err))
     // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
     // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
     // overnight rates. Incremental sync is a no-op on days with no ECB release.)

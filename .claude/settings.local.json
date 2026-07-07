@@ -352,7 +352,14 @@
       "Bash(echo \"tsc exit: $?\")",
       "Bash(echo \"exit: $?\")",
       "Bash(echo \"exit $?\")",
-      "Bash(echo \"tsc: $?\")"
+      "Bash(echo \"tsc: $?\")",
+      "Bash(tee weights.txt)",
+      "Bash(tee -a weights.txt)",
+      "Bash(echo \"server tsc: $?\")",
+      "Bash(echo \"client tsc: $?\")",
+      "Bash(ps -o pid,ppid,etime,cmd -p 3205)",
+      "Bash(kill 8164)",
+      "Bash(awk '{print $2, $9}')"
     ]
   },
   "sandbox": {
