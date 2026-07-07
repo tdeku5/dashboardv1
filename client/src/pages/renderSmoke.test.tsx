@@ -30,6 +30,30 @@ import { UKIoPContent } from './UKIoPContent'
 import { UKFiscalPSFContent } from './UKFiscalPSFContent'
 import { UKHMRCReceiptsContent } from './UKHMRCReceiptsContent'
 
+import { CACPIContent } from './CACPIContent'
+import { CACPIProjectionsContent } from './CACPIProjectionsContent'
+import { CAIPPIContent } from './CAIPPIContent'
+import { CAOtherInflationContent } from './CAOtherInflationContent'
+import { CALFSContent } from './CALFSContent'
+import { CAEIContent } from './CAEIContent'
+import { CAPayrollsContent } from './CAPayrollsContent'
+import { CAVacanciesContent } from './CAVacanciesContent'
+import { CAProductivityContent } from './CAProductivityContent'
+import { CALaborProjectionContent } from './CALaborProjectionContent'
+import { CAGDPContent } from './CAGDPContent'
+import { CAMonthlyGDPContent } from './CAMonthlyGDPContent'
+import { CARetailContent } from './CARetailContent'
+import { CATradeContent } from './CATradeContent'
+import { CAConsumptionContent } from './CAConsumptionContent'
+import { CAHouseholdIncomeContent } from './CAHouseholdIncomeContent'
+import { CAGDPIncomeContent } from './CAGDPIncomeContent'
+import { CAConsumerHealthContent } from './CAConsumerHealthContent'
+import { CAHousingContent } from './CAHousingContent'
+import { CAHouseholdCreditContent } from './CAHouseholdCreditContent'
+import { CAIndustrialContent } from './CAIndustrialContent'
+import { CAFiscalGFSContent } from './CAFiscalGFSContent'
+import { CAFiscalDebtContent } from './CAFiscalDebtContent'
+
 describe('US pages consuming refactored shared components', () => {
   it('RetailSalesDashboardPage renders', () => {
     const html = renderToStaticMarkup(<MemoryRouter><RetailSalesDashboardPage /></MemoryRouter>)
@@ -64,6 +88,42 @@ describe('UK content components render', () => {
     ['UKIoPContent', () => <UKIoPContent />],
     ['UKFiscalPSFContent', () => <UKFiscalPSFContent />],
     ['UKHMRCReceiptsContent', () => <UKHMRCReceiptsContent />],
+  ]
+  for (const [name, make] of cases) {
+    it(`${name} renders`, () => {
+      const html = renderToStaticMarkup(<MemoryRouter>{make()}</MemoryRouter>)
+      expect(html.length).toBeGreaterThan(0)
+    })
+  }
+})
+
+describe('Canada content components render', () => {
+  const cases: Array<[string, () => JSX.Element]> = [
+    ['CACPIContent', () => <CACPIContent />],
+    ['CACPIProjectionsContent', () => <CACPIProjectionsContent />],
+    ['CAIPPIContent', () => <CAIPPIContent />],
+    ['CAOtherInflationContent', () => <CAOtherInflationContent />],
+    ['CALFSContent', () => <CALFSContent />],
+    ['CAEIContent', () => <CAEIContent />],
+    ['CAPayrollsContent', () => <CAPayrollsContent />],
+    ['CAVacanciesContent', () => <CAVacanciesContent />],
+    ['CAProductivityContent', () => <CAProductivityContent />],
+    ['CALaborProjectionContent', () => <CALaborProjectionContent />],
+    ['CAGDPContent', () => <CAGDPContent />],
+    ['CAMonthlyGDPContent', () => <CAMonthlyGDPContent />],
+    ['CARetailContent', () => <CARetailContent />],
+    ['CATradeContent', () => <CATradeContent />],
+    ['CAConsumptionContent', () => <CAConsumptionContent />],
+    ['CAHouseholdIncomeContent', () => <CAHouseholdIncomeContent />],
+    ['CAGDPIncomeContent', () => <CAGDPIncomeContent />],
+    ['CAConsumerHealthContent', () => <CAConsumerHealthContent />],
+    ['CAHousingContent (supply)', () => <CAHousingContent section="supply" />],
+    ['CAHousingContent (prices)', () => <CAHousingContent section="prices" />],
+    ['CAHousingContent (credit)', () => <CAHousingContent section="credit" />],
+    ['CAHouseholdCreditContent', () => <CAHouseholdCreditContent />],
+    ['CAIndustrialContent', () => <CAIndustrialContent />],
+    ['CAFiscalGFSContent', () => <CAFiscalGFSContent />],
+    ['CAFiscalDebtContent', () => <CAFiscalDebtContent />],
   ]
   for (const [name, make] of cases) {
     it(`${name} renders`, () => {

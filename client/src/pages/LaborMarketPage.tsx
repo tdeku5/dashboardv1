@@ -18,6 +18,12 @@ const UKEarningsContent = lazy(() => import('./UKEarningsContent').then(m => ({ 
 const UKVacanciesContent = lazy(() => import('./UKVacanciesContent').then(m => ({ default: m.UKVacanciesContent })))
 const UKProductivityContent = lazy(() => import('./UKProductivityContent').then(m => ({ default: m.UKProductivityContent })))
 const UKLaborProjectionContent = lazy(() => import('./UKLaborProjectionContent').then(m => ({ default: m.UKLaborProjectionContent })))
+const CALFSContent = lazy(() => import('./CALFSContent').then(m => ({ default: m.CALFSContent })))
+const CAEIContent = lazy(() => import('./CAEIContent').then(m => ({ default: m.CAEIContent })))
+const CAPayrollsContent = lazy(() => import('./CAPayrollsContent').then(m => ({ default: m.CAPayrollsContent })))
+const CAVacanciesContent = lazy(() => import('./CAVacanciesContent').then(m => ({ default: m.CAVacanciesContent })))
+const CAProductivityContent = lazy(() => import('./CAProductivityContent').then(m => ({ default: m.CAProductivityContent })))
+const CALaborProjectionContent = lazy(() => import('./CALaborProjectionContent').then(m => ({ default: m.CALaborProjectionContent })))
 
 const LABOR_SECTIONS = [
   { key: 'projection', label: 'U-3 PROJECTION' },
@@ -37,10 +43,20 @@ const UK_LABOR_SECTIONS = [
   { key: 'projection', label: 'PROJECTION' },
 ] as const
 
+const CA_LABOR_SECTIONS = [
+  { key: 'lfs', label: 'LFS' },
+  { key: 'ei', label: 'EI BENEFICIARIES' },
+  { key: 'payrolls', label: 'PAYROLLS & EARNINGS' },
+  { key: 'vacancies', label: 'VACANCIES' },
+  { key: 'productivity', label: 'PRODUCTIVITY' },
+  { key: 'projection', label: 'PROJECTION' },
+] as const
+
 export function LaborMarketPage() {
   const [country, setCountry] = useCountryParam()
   const [section, setSection] = useTabParam(LABOR_SECTIONS.map(s => s.key), 'cps')
   const [ukSection, setUkSection] = useTabParam(UK_LABOR_SECTIONS.map(s => s.key), 'lfs')
+  const [caSection, setCaSection] = useTabParam(CA_LABOR_SECTIONS.map(s => s.key), 'lfs')
 
   return (
     <div className={styles.shell}>
@@ -58,10 +74,10 @@ export function LaborMarketPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="labor"
-          sections={country === 'us' ? LABOR_SECTIONS : country === 'uk' ? UK_LABOR_SECTIONS : undefined}
-          activeSection={country === 'us' ? section : ukSection}
-          onSelectSection={country === 'us' ? setSection : setUkSection}
-          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+          sections={country === 'us' ? LABOR_SECTIONS : country === 'uk' ? UK_LABOR_SECTIONS : country === 'ca' ? CA_LABOR_SECTIONS : undefined}
+          activeSection={country === 'us' ? section : country === 'uk' ? ukSection : caSection}
+          onSelectSection={country === 'us' ? setSection : country === 'uk' ? setUkSection : setCaSection}
+          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
         />
 
         {country === 'us' ? (
@@ -81,6 +97,15 @@ export function LaborMarketPage() {
             {ukSection === 'vacancies' && <UKVacanciesContent />}
             {ukSection === 'productivity' && <UKProductivityContent />}
             {ukSection === 'projection' && <UKLaborProjectionContent />}
+          </Suspense>
+        ) : country === 'ca' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {caSection === 'lfs' && <CALFSContent />}
+            {caSection === 'ei' && <CAEIContent />}
+            {caSection === 'payrolls' && <CAPayrollsContent />}
+            {caSection === 'vacancies' && <CAVacanciesContent />}
+            {caSection === 'productivity' && <CAProductivityContent />}
+            {caSection === 'projection' && <CALaborProjectionContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

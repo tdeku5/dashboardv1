@@ -83,6 +83,29 @@ describe('?tab= selects the sub-tab (refresh/deep-link restore)', () => {
   })
 })
 
+describe('Canada country param (Phase 3)', () => {
+  it('country=ca renders the Canada inflation branch (IPPI, no PCE)', () => {
+    const html = renderAt('/models/inflation?country=ca', '/models/inflation', <InflationPage />)
+    expect(html).toContain('IPPI')
+    expect(html).not.toContain('PCE PROJECTIONS')
+  })
+  it('categoryPath carries country=ca', () => {
+    expect(categoryPath('/models/fiscal', 'ca')).toBe('/models/fiscal?country=ca')
+  })
+  it('CA fiscal defaults to GFS BALANCE (invalid tab falls back)', () => {
+    const html = renderAt('/models/fiscal?country=ca&tab=zzz', '/models/fiscal', <FiscalPage />)
+    expect(activeSections(html)).toContain('GFS BALANCE')
+  })
+  it('CA fiscal tab=debt restores FEDERAL DEBT', () => {
+    const html = renderAt('/models/fiscal?country=ca&tab=debt', '/models/fiscal', <FiscalPage />)
+    expect(activeSections(html)).toContain('FEDERAL DEBT')
+  })
+  it('CA growth tab=gdpi restores GDP(I)', () => {
+    const html = renderAt('/models/growth?country=ca&tab=gdpi', '/models/growth', <GrowthPage />)
+    expect(activeSections(html)).toContain('GDP(I)')
+  })
+})
+
 describe('ModelsPage landing', () => {
   it('shows category bar for UK (navigable) without coming-soon', () => {
     const html = renderAt('/models?country=uk', '/models', <ModelsPage />)

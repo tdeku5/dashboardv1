@@ -1,16 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
-import {
-  ResponsiveContainer, AreaChart, Area, Brush,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-} from 'recharts'
 import { fetchOnsSeries } from '../lib/ons'
-import {
-  type WD, type ContribRow, computeChangePct,
-  fmtAxisDate, TICK, TOOLTIP_STYLE, BRUSH_STYLE,
-} from '../lib/seriesTransforms'
+import { type WD, type ContribRow } from '../lib/seriesTransforms'
 import { SeriesExplorer, type ExplorerItem } from '../components/charts/SeriesExplorer'
 import { RatesChart } from '../components/charts/RatesChart'
 import { ContribSection, type ContribItem } from '../components/charts/ContribSection'
+import {
+  DistributionSection, buildDistribution, DIST_BUCKETS_WIDE, DIST_BUCKETS_NARROW,
+} from '../components/charts/DistributionSection'
 import kit from '../components/charts/ChartKit.module.css'
 
 // UK CPI dashboard — mirrors the US CPI page (contribution / distribution /
@@ -173,113 +169,8 @@ function buildUkCpiContrib(allData: AllData, mode: 'yoy' | 'mom'): ContribRow[] 
   })
 }
 
-// ── Distribution panel (share of sub-indices by YoY bucket) ─────────────────
-
-const DIST_BUCKETS_WIDE = [
-  { key: 'lt-10', label: '< −10%', lo: -Infinity, hi: -10, color: '#1d4ed8' },
-  { key: '-10--5', label: '−10 to −5%', lo: -10, hi: -5, color: '#3b82f6' },
-  { key: '-5-0', label: '−5 to 0%', lo: -5, hi: 0, color: '#93c5fd' },
-  { key: '0-5', label: '0 to 5%', lo: 0, hi: 5, color: '#fbbf24' },
-  { key: '5-10', label: '5 to 10%', lo: 5, hi: 10, color: '#f97316' },
-  { key: 'gt10', label: '> 10%', lo: 10, hi: Infinity, color: '#ef4444' },
-] as const
-
-const DIST_BUCKETS_NARROW = [
-  { key: 'lt-2', label: '< −2%', lo: -Infinity, hi: -2, color: '#1d4ed8' },
-  { key: '-2-0', label: '−2 to 0%', lo: -2, hi: 0, color: '#93c5fd' },
-  { key: '0-2', label: '0 to 2%', lo: 0, hi: 2, color: '#4ade80' },
-  { key: '2-4', label: '2 to 4%', lo: 2, hi: 4, color: '#fbbf24' },
-  { key: '4-6', label: '4 to 6%', lo: 4, hi: 6, color: '#f97316' },
-  { key: 'gt6', label: '> 6%', lo: 6, hi: Infinity, color: '#ef4444' },
-] as const
-
-type DistBucket = { key: string; label: string; lo: number; hi: number; color: string }
-
-function buildDistribution(allData: AllData, cdids: readonly string[], buckets: readonly DistBucket[]) {
-  const yoyBySeries = cdids
-    .map(c => computeChangePct(allData[c] ?? [], 12))
-    .filter(s => s.length > 0)
-  const dates = new Set<string>()
-  for (const s of yoyBySeries) for (const p of s) if (p.value != null) dates.add(p.date)
-  const maps = yoyBySeries.map(s => new Map(s.map(p => [p.date, p.value])))
-
-  return [...dates].sort().map(date => {
-    const row: Record<string, number | string> = { date }
-    let total = 0
-    const counts = buckets.map(() => 0)
-    for (const m of maps) {
-      const v = m.get(date)
-      if (v == null) continue
-      total++
-      const bi = buckets.findIndex(b => v >= b.lo && v < b.hi)
-      if (bi >= 0) counts[bi]++
-    }
-    buckets.forEach((b, i) => { row[b.key] = total > 0 ? (counts[i] / total) * 100 : 0 })
-    return row
-  })
-}
-
-function DistributionPanel({
-  title, subtitle, data, buckets,
-}: {
-  title: string
-  subtitle: string
-  data: Array<Record<string, number | string>>
-  buckets: readonly DistBucket[]
-}) {
-  const [brush, setBrush] = useState<{ start: number; end: number }>({ start: 0, end: 0 })
-  useEffect(() => {
-    if (!data.length) return
-    setBrush({ start: Math.max(0, data.length - 240), end: data.length - 1 })
-  }, [data.length])
-
-  return (
-    <div className={kit.section}>
-      <div className={kit.sectionHeader}>
-        <div>
-          <div className={kit.sectionTitle}>{title}</div>
-          <div className={kit.sectionSubtitle}>{subtitle}</div>
-        </div>
-      </div>
-      <div className={kit.legendRow}>
-        <div className={kit.legend}>
-          {buckets.map(b => (
-            <span key={b.key} className={kit.legendItem} style={{ cursor: 'default' }}>
-              <span className={kit.legendSwatch} style={{ background: b.color }} />
-              {b.label}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className={kit.chartWrap}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 8 }} stackOffset="expand">
-            <CartesianGrid vertical={false} stroke="rgba(255,255,255,0.04)" />
-            <XAxis dataKey="date" tick={TICK} tickLine={false} axisLine={false}
-              tickFormatter={fmtAxisDate} minTickGap={60} />
-            <YAxis tick={TICK} tickLine={false} axisLine={false} width={48}
-              tickFormatter={(v: number) => `${Math.round(v * 100)}%`} />
-            <Tooltip {...TOOLTIP_STYLE}
-              formatter={(v: unknown, name: unknown) => {
-                const b = buckets.find(x => x.key === name)
-                return [typeof v === 'number' ? `${v.toFixed(1)}%` : '-', b?.label ?? String(name)] as [string, string]
-              }} />
-            {buckets.map(b => (
-              <Area key={b.key} type="monotone" dataKey={b.key} stackId="1"
-                stroke="none" fill={b.color} fillOpacity={0.85} isAnimationActive={false} />
-            ))}
-            <Brush dataKey="date"
-              startIndex={brush.start}
-              endIndex={brush.end}
-              onChange={({ startIndex, endIndex }) =>
-                setBrush(prev => ({ start: startIndex ?? prev.start, end: endIndex ?? prev.end }))}
-              {...BRUSH_STYLE} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
-  )
-}
+// Distribution panels now come from the shared
+// components/charts/DistributionSection (extracted for Canada Phase 3).
 
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -372,13 +263,13 @@ export function UKCPIContent() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, minWidth: 0 }}>
-        <DistributionPanel
+        <DistributionSection
           title="CPI Distribution — Wide Buckets"
           subtitle="Share of 37 COICOP group indices by YoY range"
           data={distWide}
           buckets={DIST_BUCKETS_WIDE}
         />
-        <DistributionPanel
+        <DistributionSection
           title="CPI Distribution — Narrow Buckets"
           subtitle="Share of 37 COICOP group indices by YoY range"
           data={distNarrow}

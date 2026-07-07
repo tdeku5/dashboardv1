@@ -8,6 +8,7 @@ import styles from './ModelsPage.module.css'
 
 const BankCreditDashboardContent = lazy(() => import('./BankCreditDashboardPage').then(m => ({ default: m.BankCreditDashboardContent })))
 const UKMoneyCreditContent = lazy(() => import('./UKMoneyCreditContent').then(m => ({ default: m.UKMoneyCreditContent })))
+const CAHouseholdCreditContent = lazy(() => import('./CAHouseholdCreditContent').then(m => ({ default: m.CAHouseholdCreditContent })))
 
 const CREDIT_SECTIONS = [
   { key: 'bank-credit', label: 'BANK CREDIT' },
@@ -15,6 +16,10 @@ const CREDIT_SECTIONS = [
 
 const UK_CREDIT_SECTIONS = [
   { key: 'money-credit', label: 'MONEY & CREDIT' },
+] as const
+
+const CA_CREDIT_SECTIONS = [
+  { key: 'household-credit', label: 'HOUSEHOLD CREDIT' },
 ] as const
 
 export function CreditPage() {
@@ -36,9 +41,9 @@ export function CreditPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="credit"
-          sections={country === 'us' ? CREDIT_SECTIONS : country === 'uk' ? UK_CREDIT_SECTIONS : undefined}
-          activeSection={country === 'us' ? 'bank-credit' : 'money-credit'}
-          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+          sections={country === 'us' ? CREDIT_SECTIONS : country === 'uk' ? UK_CREDIT_SECTIONS : country === 'ca' ? CA_CREDIT_SECTIONS : undefined}
+          activeSection={country === 'us' ? 'bank-credit' : country === 'uk' ? 'money-credit' : 'household-credit'}
+          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
         />
 
         {country === 'us' ? (
@@ -48,6 +53,10 @@ export function CreditPage() {
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <UKMoneyCreditContent />
+          </Suspense>
+        ) : country === 'ca' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <CAHouseholdCreditContent />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

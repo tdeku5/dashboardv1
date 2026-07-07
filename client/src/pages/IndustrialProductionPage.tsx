@@ -8,6 +8,7 @@ import styles from './ModelsPage.module.css'
 
 const IPExplorerDashboardContent = lazy(() => import('./IPExplorerDashboardPage').then(m => ({ default: m.IPExplorerDashboardContent })))
 const UKIoPContent = lazy(() => import('./UKIoPContent').then(m => ({ default: m.UKIoPContent })))
+const CAIndustrialContent = lazy(() => import('./CAIndustrialContent').then(m => ({ default: m.CAIndustrialContent })))
 
 const IP_SECTIONS = [
   { key: 'ip-explorer', label: 'IP EXPLORER' },
@@ -15,6 +16,10 @@ const IP_SECTIONS = [
 
 const UK_IP_SECTIONS = [
   { key: 'iop', label: 'IOP EXPLORER' },
+] as const
+
+const CA_IP_SECTIONS = [
+  { key: 'industrial', label: 'GDP BY INDUSTRY' },
 ] as const
 
 export function IndustrialProductionPage() {
@@ -36,9 +41,9 @@ export function IndustrialProductionPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="industrial"
-          sections={country === 'us' ? IP_SECTIONS : country === 'uk' ? UK_IP_SECTIONS : undefined}
-          activeSection={country === 'us' ? 'ip-explorer' : 'iop'}
-          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+          sections={country === 'us' ? IP_SECTIONS : country === 'uk' ? UK_IP_SECTIONS : country === 'ca' ? CA_IP_SECTIONS : undefined}
+          activeSection={country === 'us' ? 'ip-explorer' : country === 'uk' ? 'iop' : 'industrial'}
+          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
         />
 
         {country === 'us' ? (
@@ -48,6 +53,10 @@ export function IndustrialProductionPage() {
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <UKIoPContent />
+          </Suspense>
+        ) : country === 'ca' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <CAIndustrialContent />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

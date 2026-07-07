@@ -16,6 +16,10 @@ const UKCPIContent = lazy(() => import('./UKCPIContent').then(m => ({ default: m
 const UKCPIProjectionsContent = lazy(() => import('./UKCPIProjectionsContent').then(m => ({ default: m.UKCPIProjectionsContent })))
 const UKPPIContent = lazy(() => import('./UKPPIContent').then(m => ({ default: m.UKPPIContent })))
 const UKOtherInflationContent = lazy(() => import('./UKOtherInflationContent').then(m => ({ default: m.UKOtherInflationContent })))
+const CACPIContent = lazy(() => import('./CACPIContent').then(m => ({ default: m.CACPIContent })))
+const CACPIProjectionsContent = lazy(() => import('./CACPIProjectionsContent').then(m => ({ default: m.CACPIProjectionsContent })))
+const CAIPPIContent = lazy(() => import('./CAIPPIContent').then(m => ({ default: m.CAIPPIContent })))
+const CAOtherInflationContent = lazy(() => import('./CAOtherInflationContent').then(m => ({ default: m.CAOtherInflationContent })))
 
 const INFLATION_SECTIONS = [
   { key: 'cpi', label: 'CPI' },
@@ -35,10 +39,19 @@ const UK_INFLATION_SECTIONS = [
   { key: 'other', label: 'OTHER' },
 ] as const
 
+// No Canada PCE sections (no monthly consumption deflator — docs/ca-models-mapping.md).
+const CA_INFLATION_SECTIONS = [
+  { key: 'cpi', label: 'CPI' },
+  { key: 'cpi-proj', label: 'CPI PROJECTIONS' },
+  { key: 'ippi', label: 'IPPI' },
+  { key: 'other', label: 'OTHER' },
+] as const
+
 export function InflationPage() {
   const [country, setCountry] = useCountryParam()
   const [section, setSection] = useTabParam(INFLATION_SECTIONS.map(s => s.key), 'cpi')
   const [ukSection, setUkSection] = useTabParam(UK_INFLATION_SECTIONS.map(s => s.key), 'cpi')
+  const [caSection, setCaSection] = useTabParam(CA_INFLATION_SECTIONS.map(s => s.key), 'cpi')
 
   return (
     <div className={styles.shell}>
@@ -56,10 +69,10 @@ export function InflationPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="inflation"
-          sections={country === 'us' ? INFLATION_SECTIONS : country === 'uk' ? UK_INFLATION_SECTIONS : undefined}
-          activeSection={country === 'us' ? section : ukSection}
-          onSelectSection={country === 'us' ? setSection : setUkSection}
-          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+          sections={country === 'us' ? INFLATION_SECTIONS : country === 'uk' ? UK_INFLATION_SECTIONS : country === 'ca' ? CA_INFLATION_SECTIONS : undefined}
+          activeSection={country === 'us' ? section : country === 'uk' ? ukSection : caSection}
+          onSelectSection={country === 'us' ? setSection : country === 'uk' ? setUkSection : setCaSection}
+          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
         />
 
         {country === 'us' ? (
@@ -77,6 +90,13 @@ export function InflationPage() {
             {ukSection === 'cpi-proj' && <UKCPIProjectionsContent />}
             {ukSection === 'ppi' && <UKPPIContent />}
             {ukSection === 'other' && <UKOtherInflationContent />}
+          </Suspense>
+        ) : country === 'ca' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {caSection === 'cpi' && <CACPIContent />}
+            {caSection === 'cpi-proj' && <CACPIProjectionsContent />}
+            {caSection === 'ippi' && <CAIPPIContent />}
+            {caSection === 'other' && <CAOtherInflationContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

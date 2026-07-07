@@ -352,3 +352,53 @@ and 36-10-0112 (household accounts: compensation/disposable income/saving rate, 
 The long-running `tsx watch` dev server had a stalled file-watcher (WSL inotify) and did not
 pick up new code; its worker was replaced with a fresh `tsx watch` process during verification.
 If charts ever lag code changes, restart `npm run dev`.
+
+---
+
+## Phase 3 Addendum (2026-07-07) — Frontend Complete
+
+### Pages shipped (all under `country === 'ca'` in the hubs; accent #f59e0b; 23 content files)
+- **Inflation**: CPI (weights-based contribution from 18-10-0007, 33-item distribution, rates,
+  explorer, **dedicated BoC core trio panel** with published-YoY caption + `boc_core_rates`
+  badge per decision b) · CPI PROJECTIONS (same-month-prior-year MoM paces, caption, BoC-trio
+  exclusion noted) · IPPI (badged) · OTHER (SA-vs-NSA, mortgage interest cost, shelter split,
+  gasoline)
+- **Growth**: GDP (with **StatCan-published contribution charts** — no client math) · MONTHLY GDP ·
+  RETAIL (2017-history caption per decision e) · TRADE (merch_trade badges) · CONSUMPTION ·
+  HOUSEHOLD INCOME · GDP(I) (both per the (f) verification) · CONSUMER HEALTH (full DSR — DIRECT)
+- **Labor**: LFS · EI BENEFICIARIES (badged) · PAYROLLS & EARNINGS (SEPH vs LFS side-by-side,
+  distinct badges per decision d) · VACANCIES (incl. Beveridge curve) · PRODUCTIVITY · PROJECTION
+- **Housing**: SUPPLY (starts/permits — Canada has real supply data) · PRICES (NHPI, private-resale
+  note) · CREDIT (mortgage credit, badged). **No DEMAND tab** (decision c).
+- **Credit**: HOUSEHOLD CREDIT (all panels badged `household_credit`)
+- **Industrial**: GDP BY INDUSTRY (badged `monthly_gdp_ip`; real manufacturing sales unbadged)
+- **Fiscal**: GFS BALANCE (Apr–Mar FY quarterly cumulative overlay via FiscalYearOverlay) ·
+  FEDERAL DEBT (monthly, % of SAAR GDP)
+
+### Shared-component work
+One extraction: `components/charts/DistributionSection.tsx` (from UKCPIContent's inline
+distribution panel, when Canada needed the identical panel). Consumers: UKCPIContent (refit) +
+CACPIContent. New lib: `client/src/lib/statcan.ts`.
+
+### Regression results
+- Touched shared components → consumers checked: DistributionSection (UKCPIContent, CACPIContent),
+  CountryCategoryNav (8 hub pages via nav tests), ProxyBadge (all UK+CA badge pages via smoke
+  renders). US chart components (SeriesExplorer/RatesChart/ContribSection/FiscalYearOverlay)
+  unchanged this phase; RetailSalesDashboardPage + MtsPage still render in the smoke suite.
+- Test suite: **66/66** (18 nav URL→render cases incl. 5 new Canada cases: `?country=ca` branch,
+  categoryPath carry, invalid-tab fallback to GFS BALANCE, tab deep-links for debt/gdpi;
+  48 SSR smoke renders incl. all 25 CA component variants). `tsc --noEmit` strict clean both
+  workspaces; vite production build clean.
+- Diff scope: 8 hub pages + ModelsPage (CA wiring only), UKCPIContent (DistributionSection
+  consumption only), 2 test files; all other changes are new CA files.
+
+### Omitted (no placeholders)
+Housing DEMAND; inflation expectations; R1–R8; hires/quits/layoffs; sentiment/delinquencies/
+net-worth-level/gasoline-pump panels; retail store-type contributions; trade by product/partner;
+services trade; PNFC credit; deeper NAICS/IPPI explorers — all per the deferred list.
+
+### Notes for the next country (Japan)
+Scale-check units against live DB rows before writing formatters (CA retail is $ thousands while
+most other cubes are $ millions — caught by an agent during build). The per-country section
+state in hubs is now a 3-way ternary; a 4th country should prompt extracting a small
+country→sections map instead of extending the ternaries.

@@ -29,6 +29,15 @@ const UK_HOUSING_SECTIONS = [
 ] as const
 
 const UKHousingContent = lazy(() => import('./UKHousingContent').then(m => ({ default: m.UKHousingContent })))
+const CAHousingContent = lazy(() => import('./CAHousingContent').then(m => ({ default: m.CAHousingContent })))
+
+// Canada Housing has no DEMAND tab: no public transactions series exists
+// (CREA MLS / Teranet-NB are private — docs/ca-models-mapping.md decision c).
+const CA_HOUSING_SECTIONS = [
+  { key: 'supply', label: 'SUPPLY' },
+  { key: 'prices', label: 'PRICES' },
+  { key: 'credit', label: 'CREDIT' },
+] as const
 
 const HOUSING_SERIES = [
   'HOUST', 'HOUST1F', 'HOUST2F', 'HOUST5F',
@@ -169,6 +178,7 @@ export function HousingPage() {
   const [country, setCountry] = useCountryParam()
   const [section, setSection] = useTabParam(HOUSING_SECTIONS.map(s => s.key), 'supply')
   const [ukSection, setUkSection] = useTabParam(UK_HOUSING_SECTIONS.map(s => s.key), 'demand')
+  const [caSection, setCaSection] = useTabParam(CA_HOUSING_SECTIONS.map(s => s.key), 'supply')
 
   const [housingData, setHousingData] = useState<Record<string, D[]>>({})
   const [housingLoading, setHousingLoading] = useState(true)
@@ -438,10 +448,10 @@ export function HousingPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="housing"
-          sections={country === 'uk' ? UK_HOUSING_SECTIONS : HOUSING_SECTIONS}
-          activeSection={country === 'uk' ? ukSection : section}
-          onSelectSection={country === 'uk' ? setUkSection : setSection}
-          sectionAccent={country === 'uk' ? '#14b8a6' : '#f87171'}
+          sections={country === 'uk' ? UK_HOUSING_SECTIONS : country === 'ca' ? CA_HOUSING_SECTIONS : HOUSING_SECTIONS}
+          activeSection={country === 'uk' ? ukSection : country === 'ca' ? caSection : section}
+          onSelectSection={country === 'uk' ? setUkSection : country === 'ca' ? setCaSection : setSection}
+          sectionAccent={country === 'uk' ? '#14b8a6' : country === 'ca' ? '#f59e0b' : '#f87171'}
         />
 
         {country === 'us' ? (
@@ -927,6 +937,10 @@ export function HousingPage() {
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <UKHousingContent section={ukSection} />
+          </Suspense>
+        ) : country === 'ca' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <CAHousingContent section={caSection} />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>{COUNTRIES.find((c) => c.key === country)?.label} housing models coming soon</div>
