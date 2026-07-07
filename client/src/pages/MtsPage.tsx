@@ -1,19 +1,24 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Cell, LabelList
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
+import { FiscalYearOverlay, type FYStyle } from '../components/charts/FiscalYearOverlay'
 import styles from './MtsPage.module.css'
+
+// 2026-07 (UK models Phase 3): the multi-FY cumulative overlay section was
+// extracted into the shared <FiscalYearOverlay /> (components/charts), which
+// this page now consumes; the FYTD bar charts remain page-specific.
 
 const CURRENT_FY = '2026'
 const DISPLAY_FYS = new Set([
   '2016', '2017', '2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026',
 ])
 
-const FY_STYLES: Record<string, { color: string; width: number; opacity: number }> = {
+const FY_STYLES: Record<string, FYStyle> = {
   '2026': { color: '#ef4444', width: 2.5, opacity: 1 },
   '2020': { color: '#f97316', width: 1.5, opacity: 0.75 },
   '2021': { color: '#fbbf24', width: 1.5, opacity: 0.75 },
@@ -87,26 +92,11 @@ function renderBarValueLabel(format: (value: number) => string) {
   }
 }
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className={styles.tooltip}>
-      <p className={styles.tooltipLabel}>{MONTH_LABELS[(label as number) - 1] ?? label}</p>
-      {payload.map((p: any) => (
-        <p key={p.dataKey} style={{ color: p.color }}>
-          FY{String(p.name)}: {fmtBillionsExact(Number(p.value ?? 0))}
-        </p>
-      ))}
-    </div>
-  )
-}
-
 /* ── Content component (all hooks/state/effects live here) ──── */
 export function MtsContent() {
   const [data, setData] = useState<ApiResponse | null>(null)
   const [gdp, setGdp] = useState<FredObservation[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [hiddenFYs, setHiddenFYs] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -133,39 +123,16 @@ export function MtsContent() {
       .sort()
   }, [data])
 
-  /* Build chart data: array of { month_index, FY2026, FY2025, ... } */
-  const chartData = useMemo(() => {
-    if (!data) return []
-    const byMonth: Record<number, Record<string, number>> = {}
-    for (const [fy, rows] of Object.entries(data.fiscalYears)) {
-      for (const r of rows) {
-        if (!byMonth[r.month_index]) byMonth[r.month_index] = { month_index: r.month_index }
-        byMonth[r.month_index][fy] = r.cumulative / TO_BILLIONS
-      }
+  /* Scaled per-FY series for the shared overlay: { FY: [{periodIndex, value($B)}] } */
+  const overlayFYs = useMemo(() => {
+    if (!data) return {}
+    const out: Record<string, Array<{ periodIndex: number; value: number }>> = {}
+    for (const fy of fiscalYears) {
+      const rows = data.fiscalYears[fy]
+      if (!rows) continue
+      out[fy] = rows.map(r => ({ periodIndex: r.month_index, value: r.cumulative / TO_BILLIONS }))
     }
-    return Object.values(byMonth).sort((a, b) => a.month_index - b.month_index)
-  }, [data])
-
-  const stats = useMemo(() => {
-    if (!data) return null
-    const currentFY = CURRENT_FY
-    const currentRows = data.fiscalYears[currentFY]
-    if (!currentRows?.length) return null
-    const latest = currentRows[currentRows.length - 1]
-    const ytdB = latest.cumulative / TO_BILLIONS
-
-    const fy25Rows = data.fiscalYears['2025']
-    let delta: number | null = null
-    let deltaPct: number | null = null
-    if (fy25Rows) {
-      const match = fy25Rows.find(r => r.month_index === latest.month_index)
-      if (match) {
-        const matchB = match.cumulative / TO_BILLIONS
-        delta = ytdB - matchB
-        deltaPct = matchB !== 0 ? ((ytdB - matchB) / Math.abs(matchB)) * 100 : null
-      }
-    }
-    return { currentFY, monthIndex: latest.month_index, ytdB, delta, deltaPct }
+    return out
   }, [data, fiscalYears])
 
   const fytdBars = useMemo(() => {
@@ -208,123 +175,22 @@ export function MtsContent() {
       .filter((row): row is { fy: string; pct: number } => row != null)
   }, [fytdBars, gdp])
 
-  const toggleFY = (fy: string) => {
-    setHiddenFYs(prev => {
-      const next = new Set(prev)
-      next.has(fy) ? next.delete(fy) : next.add(fy)
-      return next
-    })
-  }
-
   return (
     <>
       {error && <p style={{ color: '#ef4444' }}>Error: {error}</p>}
 
-      <section className={styles.section}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <div className={styles.sectionTitle}>CUMULATIVE FISCAL BALANCE</div>
-            <div className={styles.sectionSub}>$ billions · Monthly Surplus/Deficit</div>
-          </div>
-        </div>
-
-        {stats && (
-          <div className={styles.statsRow}>
-            <div className={styles.stat}>
-              <span className={styles.statLabel}>FY{stats.currentFY} YTD (Month {stats.monthIndex})</span>
-              <span className={styles.statValue} style={{ color: stats.ytdB >= 0 ? '#22c55e' : '#ef4444' }}>
-                {fmtBillionsExact(stats.ytdB)}
-              </span>
-            </div>
-            {stats.delta !== null && (
-              <div className={styles.stat}>
-                <span className={styles.statLabel}>vs FY2025</span>
-                <span className={styles.statValue} style={{ color: stats.delta >= 0 ? '#22c55e' : '#ef4444' }}>
-                  {stats.delta > 0 ? '+' : ''}{fmtBillionsExact(stats.delta)}
-                  {stats.deltaPct !== null && (
-                    <span className={styles.statPct}> ({stats.deltaPct >= 0 ? '+' : ''}{stats.deltaPct.toFixed(1)}%)</span>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className={styles.legendRow}>
-          <div className={styles.legend}>
-            {fiscalYears.map(fy => {
-              const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
-              const hidden = hiddenFYs.has(fy)
-              return (
-                <div
-                  key={fy}
-                  className={styles.legendItem}
-                  style={{ opacity: hidden ? 0.35 : 1 }}
-                  onClick={() => toggleFY(fy)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') toggleFY(fy)
-                  }}
-                >
-                  <span
-                    className={styles.legendLine}
-                    style={{
-                      background: s.color,
-                      opacity: s.opacity,
-                      height: fy === CURRENT_FY ? 3 : 2,
-                    }}
-                  />
-                  FY{fy}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={520}>
-            <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis
-                dataKey="month_index"
-                tickFormatter={(v: number) => MONTH_LABELS[v - 1] ?? ''}
-                stroke="var(--text-primary)"
-                fontSize={12}
-              />
-              <YAxis
-                stroke="var(--text-primary)"
-                fontSize={12}
-                tickFormatter={fmtBillions}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              {fiscalYears.map(fy => {
-                if (hiddenFYs.has(fy)) return null
-                const s = FY_STYLES[fy] ?? { color: '#64748b', width: 1, opacity: 0.3 }
-                return (
-                  <Line
-                    key={fy}
-                    type="monotone"
-                    dataKey={fy}
-                    name={fy}
-                    stroke={s.color}
-                    strokeWidth={s.width}
-                    strokeOpacity={s.opacity}
-                    dot={false}
-                    connectNulls
-                  />
-                )
-              })}
-            </LineChart>
-          </ResponsiveContainer>
-        ) : !error && (
-          <div className={styles.loading} style={{ height: 520 }}>Loading…</div>
-        )}
-
-        {data?.lastUpdated && (
-          <p className={styles.lastUpdated}>Last updated: {data.lastUpdated}</p>
-        )}
-      </section>
+      <FiscalYearOverlay
+        title="CUMULATIVE FISCAL BALANCE"
+        subtitle="$ billions · Monthly Surplus/Deficit"
+        fiscalYears={overlayFYs}
+        currentFY={CURRENT_FY}
+        comparisonFY="2025"
+        monthLabels={[...MONTH_LABELS]}
+        valueFormatter={fmtBillions}
+        exactFormatter={fmtBillionsExact}
+        fyStyles={FY_STYLES}
+        lastUpdated={data?.lastUpdated}
+      />
 
       <section className={styles.gridSection}>
         <div className={styles.gridCard}>

@@ -6,9 +6,14 @@ import { COUNTRIES, CATEGORIES } from './modelNav'
 import styles from './ModelsPage.module.css'
 
 const IPExplorerDashboardContent = lazy(() => import('./IPExplorerDashboardPage').then(m => ({ default: m.IPExplorerDashboardContent })))
+const UKIoPContent = lazy(() => import('./UKIoPContent').then(m => ({ default: m.UKIoPContent })))
 
 const IP_SECTIONS = [
   { key: 'ip-explorer', label: 'IP EXPLORER' },
+] as const
+
+const UK_IP_SECTIONS = [
+  { key: 'iop', label: 'IOP EXPLORER' },
 ] as const
 
 export function IndustrialProductionPage() {
@@ -60,26 +65,47 @@ export function IndustrialProductionPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {IP_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {IP_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'ip-explorer' && <IPExplorerDashboardContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {UK_IP_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${styles.sectionBtnActive}`}
+                style={{
+                  border: '1px solid #14b8a6',
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <UKIoPContent />
+          </Suspense>
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} industrial production models coming soon

@@ -1,0 +1,361 @@
+/* Shared chart-section styles for the parameterized dashboard components
+   (SeriesExplorer, RatesChart, ContribSection, FiscalYearOverlay, ProxyBadge).
+   Copied from RetailSalesDashboardPage.module.css / MtsPage.module.css so the
+   shared components render identically to the pages they were extracted from. */
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border-accent);
+  border-radius: 3px;
+  min-width: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #94A3B8;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionSubtitle {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #4e6070;
+  font-family: var(--font-mono);
+  margin-top: 3px;
+}
+
+.legendRow {
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #94A3B8;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.legendItem:hover { opacity: 0.75; }
+.legendItemOff { opacity: 0.25; }
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.legendLine {
+  width: 18px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.chartWrap { height: 400px; }
+
+.brushWrap {
+  height: 58px;
+  border-top: 1px solid var(--border);
+}
+
+.explorerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-accent);
+  border-radius: 3px;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.sectorSelectWrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectorSelect {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 4px 8px;
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #CBD5E1;
+  cursor: pointer;
+  min-width: 210px;
+  color-scheme: dark;
+}
+
+.sectorSelect:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.seriesCode {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #4e6070;
+  letter-spacing: 0.06em;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lookbackWrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.lookbackLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4e6070;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+
+.lookbackInput {
+  width: 52px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #CBD5E1;
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.quickSelectRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.quickSelectLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #4e6070;
+  margin-right: 4px;
+  font-family: var(--font-sans);
+}
+
+.qsBtn {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  padding: 4px 11px;
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #64748B;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.qsBtn:hover {
+  color: #CBD5E1;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
+.qsBtnActive {
+  color: #CBD5E1;
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.statusBlock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #64748B;
+}
+
+/* ── Fiscal-year overlay ─────────────────────────────────────────────────── */
+
+.statsRow {
+  display: flex;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.stat {
+  flex: 1;
+  padding: 10px 16px;
+  border-right: 1px solid var(--border);
+}
+
+.stat:last-child { border-right: none; }
+
+.statLabel {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #4e6070;
+  margin-bottom: 3px;
+  display: block;
+}
+
+.statValue {
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.statPct {
+  color: #94A3B8;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.overlayTooltip {
+  background: #090e15;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 2px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 6px 10px;
+  max-width: 220px;
+}
+
+.overlayTooltipLabel {
+  color: #94A3B8;
+  margin: 0 0 4px;
+  letter-spacing: 0.05em;
+}
+
+.overlayTooltip p { margin: 1px 0; }
+
+.lastUpdated {
+  font-size: 10px;
+  color: #4e6070;
+  font-family: var(--font-mono);
+  padding: 8px 16px;
+  margin: 0;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* ── Proxy badge ─────────────────────────────────────────────────────────── */
+
+.proxyBadge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.proxyChip {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  border-radius: 2px;
+  background: rgba(251, 191, 36, 0.08);
+  padding: 1px 5px;
+  cursor: help;
+  text-transform: uppercase;
+}
+
+.proxyTip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1000;
+  width: 340px;
+  background: #090e15;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: 2px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-weight: 400;
+  color: #CBD5E1;
+}
+
+.proxyBadge:hover .proxyTip,
+.proxyBadge:focus-within .proxyTip {
+  display: block;
+}
+
+.proxyTipRow { margin-bottom: 6px; }
+.proxyTipRow:last-child { margin-bottom: 0; }
+
+.proxyTipTag {
+  color: #fbbf24;
+  font-weight: 700;
+  margin-right: 6px;
+}

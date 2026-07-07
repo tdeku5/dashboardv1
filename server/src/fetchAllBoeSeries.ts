@@ -50,37 +50,48 @@ export const ALL_BOE_SERIES = {
   ],
 
   // ─── Money Supply (monthly) ───
+  // NOTE 2026-07: 'LPMAUYL' (M4 lending) and 'LPMAUZD' (M4 annual growth) were
+  // invalid IADB codes — the IADB errors the ENTIRE request when any code is
+  // unknown, which silently blocked every monthly series in this config since
+  // inception. Removed; LPMVQJW covers M4 12m growth. M4-lending replacement
+  // is deferred (needs a verified code).
   money: [
     'LPMAUYN',   // M4 SA £m
-    'LPMAUYL',   // M4 lending SA £m
-    'LPMAUZD',   // M4 annual growth rate % SA
+    'LPMVQJW',   // M4 12-month growth rate % SA
   ],
 
   // ─── Lending to Individuals — Mortgages (monthly) ───
+  // NOTE 2026-07: comments below corrected against live IADB titles — several
+  // codes were valid but mislabeled. Removed invalid 'LPMVQCO'; 'LPMVTXK'
+  // (previously mislabeled "net lending to PNFCs") is the secured-lending-
+  // outstanding series and now lives here. Net mortgage lending FLOW series:
+  // deferred (needs a verified code). 'LPMBI2O'/'LPMBI2P' are consumer-credit
+  // series — moved to consumer_credit.
   mortgages: [
+    'LPMVTVX',   // Mortgage approvals for house purchase (number, SA)
     'LPMVTVF',   // Mortgage approvals for house purchase (000s, SA)
-    'LPMVTXN',   // Net mortgage lending £m SA
     'LPMVTVR',   // Mortgage approvals for remortgaging (000s)
-    'LPMBI2O',   // Gross mortgage lending £m
-    'LPMBI2P',   // Gross mortgage repayments £m
-    'LPMVQCO',   // Total secured lending outstanding £m
+    'LPMVTXK',   // Net secured lending to individuals, amounts outstanding £m SA
+    'LPMVTXN',   // Building societies' approvals for secured lending, outstanding £m SA
   ],
 
   // ─── Lending to Individuals — Consumer Credit (monthly) ───
+  // NOTE 2026-07: removed invalid codes 'LPMBL3A', 'LPMVQCG', 'LPMVQCJ',
+  // 'LPMVTXR', 'LPMVTXS' (credit-card/other-credit splits — replacements
+  // deferred, need verified codes). LPMBI2O covers total outstanding.
   consumer_credit: [
-    'LPMVTXY',   // Net consumer credit £m SA
-    'LPMBL3A',   // Consumer credit outstanding £m
-    'LPMVQCG',   // Credit card lending outstanding £m
-    'LPMVQCJ',   // Other consumer credit outstanding £m
-    'LPMVTXR',   // Net credit card lending £m
-    'LPMVTXS',   // Net other consumer credit £m
+    'LPMVTXY',   // 12m growth rate, net lending to individuals % NSA
+    'LPMBI2O',   // Consumer credit (ex SLC) amounts outstanding £m SA
+    'LPMBI2P',   // Net unsecured lending (ex SLC) amounts outstanding £m NSA
+    'LPMB3PS',   // Net consumer credit (ex SLC) monthly flow £m SA
+    'LPMB4TC',   // Consumer credit (ex SLC) 12-month growth rate % SA
   ],
 
   // ─── Lending to Businesses (monthly) ───
-  business_lending: [
-    'LPMVTXK',   // Net lending to PNFCs £m
-    'LPMBC47',   // Total lending to PNFCs outstanding £m
-  ],
+  // NOTE 2026-07: removed invalid 'LPMBC47'; 'LPMVTXK' turned out to be the
+  // secured-lending-outstanding series (moved to mortgages). PNFC lending
+  // codes: deferred (need verified codes).
+  business_lending: [],
 
   // ─── Mortgage Interest Rates (monthly) ───
   mortgage_rates: [
@@ -93,6 +104,7 @@ export const ALL_BOE_SERIES = {
 
   // ─── Effective Interest Rates (monthly) ───
   effective_rates: [
+    'CFMHSDE',   // Weighted avg rate, loans secured on dwellings (stock)
     'IUMTLMV',   // Effective rate on new mortgages
     'IUMBX67',   // Effective rate on outstanding mortgages
     'IUMHPTL',   // Effective rate on new HH time deposits
@@ -101,10 +113,9 @@ export const ALL_BOE_SERIES = {
   ],
 
   // ─── Household Deposits (monthly) ───
-  deposits: [
-    'LPMVQCP',   // HH deposits with banks & building societies £m
-    'LPMBI3I',   // HH deposits net flow £m
-  ],
+  // NOTE 2026-07: removed invalid codes 'LPMVQCP' and 'LPMBI3I' (household
+  // deposits — replacements deferred, need verified codes).
+  deposits: [],
 } as const
 
 // Daily series that should be fetched from 2000 (not 1960)
@@ -149,11 +160,14 @@ export async function syncAllBoeSeries(): Promise<void> {
   // Batch into groups of 50
   const batchSize = 50
 
-  // Fetch monthly series (from 1960)
+  // Fetch monthly series (from 1980 — the IADB errors the ENTIRE request when
+  // Datefrom predates its floor; 01/Jan/1960 always failed, which silently
+  // blocked every monthly series until 2026-07. 1980 verified working for the
+  // full monthly batch.)
   for (let i = 0; i < monthlyCodes.length; i += batchSize) {
     const batch = monthlyCodes.slice(i, i + batchSize)
     try {
-      await fetchBoeSeries(batch, { dateFrom: '01/Jan/1960' })
+      await fetchBoeSeries(batch, { dateFrom: '01/Jan/1980' })
     } catch (err) {
       console.error(`[BoE] Monthly batch error:`, err)
     }

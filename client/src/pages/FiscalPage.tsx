@@ -7,15 +7,25 @@ import styles from './ModelsPage.module.css'
 
 const FiscalFlowsContent = lazy(() => import('./FiscalFlowsPage').then(m => ({ default: m.FiscalFlowsContent })))
 const MtsContent = lazy(() => import('./MtsPage').then(m => ({ default: m.MtsContent })))
+const UKFiscalPSFContent = lazy(() => import('./UKFiscalPSFContent').then(m => ({ default: m.UKFiscalPSFContent })))
+const UKHMRCReceiptsContent = lazy(() => import('./UKHMRCReceiptsContent').then(m => ({ default: m.UKHMRCReceiptsContent })))
 
 const FISCAL_SECTIONS = [
   { key: 'dts', label: 'DTS FLOWS' },
   { key: 'mts', label: 'MTS BALANCE' },
 ] as const
 
+// UK fiscal is restructured around monthly Public Sector Finances — the UK
+// publishes no DTS-style daily flows (docs/uk-models-mapping.md).
+const UK_FISCAL_SECTIONS = [
+  { key: 'psf', label: 'PSF BORROWING' },
+  { key: 'receipts', label: 'HMRC RECEIPTS' },
+] as const
+
 export function FiscalPage() {
   const [country, setCountry] = useState('us')
   const [section, setSection] = useState<string>('dts')
+  const [ukSection, setUkSection] = useState<string>('psf')
   const navigate = useNavigate()
 
   return (
@@ -62,27 +72,50 @@ export function FiscalPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {FISCAL_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {FISCAL_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'dts' && <FiscalFlowsContent />}
             {section === 'mts' && <MtsContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {UK_FISCAL_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setUkSection(sec.key)}
+                style={{
+                  border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {ukSection === 'psf' && <UKFiscalPSFContent />}
+            {ukSection === 'receipts' && <UKHMRCReceiptsContent />}
+          </Suspense>
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} fiscal models coming soon

@@ -71,7 +71,9 @@ async function discoverUri(cdid: string, datasetId: string): Promise<string | nu
   if (cached) return cached
 
   try {
-    const searchUrl = `${ONS_SEARCH}?q=${cdid.toUpperCase()}&content_type=timeseries&limit=5`
+    // cdids= is an exact-match filter (unlike free-text q=, which can rank the
+    // target series out of the top results for ambiguous CDIDs like "UTIL").
+    const searchUrl = `${ONS_SEARCH}?cdids=${cdid.toUpperCase()}&content_type=timeseries&limit=5`
     const res = await fetch(searchUrl)
     if (!res.ok) {
       console.error(`[ONS] Search API returned ${res.status} for ${cdid}`)

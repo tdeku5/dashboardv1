@@ -11,6 +11,12 @@ const CESDashboardContent = lazy(() => import('./CESDashboardPage').then(m => ({
 const JOLTSDashboardContent = lazy(() => import('./JOLTSDashboardPage').then(m => ({ default: m.JOLTSDashboardContent })))
 const ClaimsDashboardContent = lazy(() => import('./ClaimsDashboardPage').then(m => ({ default: m.ClaimsDashboardContent })))
 const ProductivityContent = lazy(() => import('./ProductivityPage').then(m => ({ default: m.ProductivityContent })))
+const UKLFSContent = lazy(() => import('./UKLFSContent').then(m => ({ default: m.UKLFSContent })))
+const UKClaimantContent = lazy(() => import('./UKClaimantContent').then(m => ({ default: m.UKClaimantContent })))
+const UKEarningsContent = lazy(() => import('./UKEarningsContent').then(m => ({ default: m.UKEarningsContent })))
+const UKVacanciesContent = lazy(() => import('./UKVacanciesContent').then(m => ({ default: m.UKVacanciesContent })))
+const UKProductivityContent = lazy(() => import('./UKProductivityContent').then(m => ({ default: m.UKProductivityContent })))
+const UKLaborProjectionContent = lazy(() => import('./UKLaborProjectionContent').then(m => ({ default: m.UKLaborProjectionContent })))
 
 const LABOR_SECTIONS = [
   { key: 'projection', label: 'U-3 PROJECTION' },
@@ -21,9 +27,19 @@ const LABOR_SECTIONS = [
   { key: 'productivity', label: 'PRODUCTIVITY' },
 ] as const
 
+const UK_LABOR_SECTIONS = [
+  { key: 'lfs', label: 'LFS' },
+  { key: 'claimant', label: 'CLAIMANT COUNT' },
+  { key: 'earnings', label: 'EARNINGS & PAYROLLS' },
+  { key: 'vacancies', label: 'VACANCIES' },
+  { key: 'productivity', label: 'PRODUCTIVITY' },
+  { key: 'projection', label: 'PROJECTION' },
+] as const
+
 export function LaborMarketPage() {
   const [country, setCountry] = useState('us')
   const [section, setSection] = useState<string>('cps')
+  const [ukSection, setUkSection] = useState<string>('lfs')
   const navigate = useNavigate()
 
   return (
@@ -70,23 +86,23 @@ export function LaborMarketPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {LABOR_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {LABOR_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'projection' && <LaborModelsContent />}
             {section === 'cps' && <CPSDashboardContent />}
@@ -95,6 +111,33 @@ export function LaborMarketPage() {
             {section === 'claims' && <ClaimsDashboardContent />}
             {section === 'productivity' && <ProductivityContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {UK_LABOR_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setUkSection(sec.key)}
+                style={{
+                  border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {ukSection === 'lfs' && <UKLFSContent />}
+            {ukSection === 'claimant' && <UKClaimantContent />}
+            {ukSection === 'earnings' && <UKEarningsContent />}
+            {ukSection === 'vacancies' && <UKVacanciesContent />}
+            {ukSection === 'productivity' && <UKProductivityContent />}
+            {ukSection === 'projection' && <UKLaborProjectionContent />}
+          </Suspense>
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} labor models coming soon

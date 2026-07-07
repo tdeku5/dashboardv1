@@ -6,9 +6,14 @@ import { COUNTRIES, CATEGORIES } from './modelNav'
 import styles from './ModelsPage.module.css'
 
 const BankCreditDashboardContent = lazy(() => import('./BankCreditDashboardPage').then(m => ({ default: m.BankCreditDashboardContent })))
+const UKMoneyCreditContent = lazy(() => import('./UKMoneyCreditContent').then(m => ({ default: m.UKMoneyCreditContent })))
 
 const CREDIT_SECTIONS = [
   { key: 'bank-credit', label: 'BANK CREDIT' },
+] as const
+
+const UK_CREDIT_SECTIONS = [
+  { key: 'money-credit', label: 'MONEY & CREDIT' },
 ] as const
 
 export function CreditPage() {
@@ -60,26 +65,47 @@ export function CreditPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {CREDIT_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {CREDIT_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'bank-credit' && <BankCreditDashboardContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {UK_CREDIT_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${styles.sectionBtnActive}`}
+                style={{
+                  border: '1px solid #14b8a6',
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <UKMoneyCreditContent />
+          </Suspense>
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} credit models coming soon

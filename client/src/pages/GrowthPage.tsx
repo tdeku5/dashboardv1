@@ -19,6 +19,10 @@ const RPCEDashboardContent = lazy(() => import('./RPCEDashboardPage').then(m => 
 const GDIDashboardContent = lazy(() => import('./GDIDashboardPage').then(m => ({ default: m.GDIDashboardContent })))
 const ConsumerHealthDashboardContent = lazy(() => import('./ConsumerHealthDashboardPage').then(m => ({ default: m.ConsumerHealthDashboardContent })))
 const TradeDashboardContent = lazy(() => import('./TradeDashboardPage').then(m => ({ default: m.TradeDashboardContent })))
+const UKConsumptionContent = lazy(() => import('./UKConsumptionContent').then(m => ({ default: m.UKConsumptionContent })))
+const UKHouseholdIncomeContent = lazy(() => import('./UKHouseholdIncomeContent').then(m => ({ default: m.UKHouseholdIncomeContent })))
+const UKGDPIncomeContent = lazy(() => import('./UKGDPIncomeContent').then(m => ({ default: m.UKGDPIncomeContent })))
+const UKConsumerHealthContent = lazy(() => import('./UKConsumerHealthContent').then(m => ({ default: m.UKConsumerHealthContent })))
 
 const GROWTH_SECTIONS = [
   { key: 'ngdp', label: 'NOMINAL GDP' },
@@ -38,6 +42,10 @@ const UK_GROWTH_SECTIONS = [
   { key: 'mgdp', label: 'MONTHLY GDP' },
   { key: 'retail', label: 'RETAIL' },
   { key: 'trade', label: 'TRADE' },
+  { key: 'consumption', label: 'CONSUMPTION' },
+  { key: 'income', label: 'HOUSEHOLD INCOME' },
+  { key: 'gdpi', label: 'GDP(I)' },
+  { key: 'consumer', label: 'CONSUMER HEALTH' },
 ] as const
 
 export function GrowthPage() {
@@ -141,6 +149,12 @@ export function GrowthPage() {
             {ukSection === 'mgdp' && <UKMonthlyGDPContent />}
             {ukSection === 'retail' && <UKRetailContent />}
             {ukSection === 'trade' && <UKTradeContent />}
+            <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+              {ukSection === 'consumption' && <UKConsumptionContent />}
+              {ukSection === 'income' && <UKHouseholdIncomeContent />}
+              {ukSection === 'gdpi' && <UKGDPIncomeContent />}
+              {ukSection === 'consumer' && <UKConsumerHealthContent />}
+            </Suspense>
           </>
         ) : (
           <div className={styles.comingSoon}>

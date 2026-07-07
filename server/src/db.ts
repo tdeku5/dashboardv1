@@ -735,6 +735,167 @@ export function isOnsSeriesStale(cdid: string, datasetId: string, maxAgeHours: n
   return ageMs > maxAgeHours * 60 * 60 * 1000
 }
 
+// ── UK HPI (HM Land Registry) ────────────────────────────────────────────────
+// Monthly UK House Price Index by region, ingested from the Land Registry
+// full-file CSV (complete history republished monthly). Prices in £, index
+// Jan-2015=100, changes in %.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS uk_hpi (
+    region             TEXT NOT NULL,
+    date               TEXT NOT NULL,
+    average_price      REAL,
+    average_price_sa   REAL,
+    index_value        REAL,
+    index_sa           REAL,
+    annual_change      REAL,
+    monthly_change     REAL,
+    price_detached     REAL,
+    price_semi         REAL,
+    price_terraced     REAL,
+    price_flat         REAL,
+    sales_volume       REAL,
+    PRIMARY KEY (region, date)
+  );
+`)
+
+export interface UkHpiRow {
+  region: string
+  date: string
+  average_price: number | null
+  average_price_sa: number | null
+  index_value: number | null
+  index_sa: number | null
+  annual_change: number | null
+  monthly_change: number | null
+  price_detached: number | null
+  price_semi: number | null
+  price_terraced: number | null
+  price_flat: number | null
+  sales_volume: number | null
+}
+
+export function storeUkHpiRows(rows: UkHpiRow[]): void {
+  const stmt = db.prepare(`
+    INSERT INTO uk_hpi (
+      region, date, average_price, average_price_sa, index_value, index_sa,
+      annual_change, monthly_change, price_detached, price_semi, price_terraced,
+      price_flat, sales_volume
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(region, date) DO UPDATE SET
+      average_price = excluded.average_price,
+      average_price_sa = excluded.average_price_sa,
+      index_value = excluded.index_value,
+      index_sa = excluded.index_sa,
+      annual_change = excluded.annual_change,
+      monthly_change = excluded.monthly_change,
+      price_detached = excluded.price_detached,
+      price_semi = excluded.price_semi,
+      price_terraced = excluded.price_terraced,
+      price_flat = excluded.price_flat,
+      sales_volume = excluded.sales_volume
+  `)
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      stmt.run(
+        r.region, r.date, r.average_price, r.average_price_sa, r.index_value,
+        r.index_sa, r.annual_change, r.monthly_change, r.price_detached,
+        r.price_semi, r.price_terraced, r.price_flat, r.sales_volume
+      )
+    }
+  })
+  tx()
+}
+
+export function getUkHpi(region: string): UkHpiRow[] {
+  return db.prepare(
+    'SELECT * FROM uk_hpi WHERE region = ? ORDER BY date ASC'
+  ).all(region) as UkHpiRow[]
+}
+
+export function getUkHpiLatestDate(): string | null {
+  const row = db.prepare('SELECT MAX(date) AS d FROM uk_hpi').get() as { d: string | null }
+  return row?.d ?? null
+}
+
+// ── HMRC tax receipts (monthly, £m, cash basis) ─────────────────────────────
+// Ingested from the HMRC "tax receipts and NICs for the UK" ODS (monthly rows
+// from April 2017, one column per tax head).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS hmrc_receipts (
+    tax_head TEXT NOT NULL,
+    date     TEXT NOT NULL,
+    value    REAL,
+    PRIMARY KEY (tax_head, date)
+  );
+`)
+
+export function storeHmrcReceipts(rows: Array<{ taxHead: string; date: string; value: number }>): void {
+  const stmt = db.prepare(`
+    INSERT INTO hmrc_receipts (tax_head, date, value)
+    VALUES (?, ?, ?)
+    ON CONFLICT(tax_head, date) DO UPDATE SET value = excluded.value
+  `)
+  const tx = db.transaction(() => {
+    for (const r of rows) stmt.run(r.taxHead, r.date, r.value)
+  })
+  tx()
+}
+
+export function getHmrcReceipts(taxHead?: string): Array<{ tax_head: string; date: string; value: number }> {
+  if (taxHead) {
+    return db.prepare(
+      'SELECT tax_head, date, value FROM hmrc_receipts WHERE tax_head = ? ORDER BY date ASC'
+    ).all(taxHead) as Array<{ tax_head: string; date: string; value: number }>
+  }
+  return db.prepare(
+    'SELECT tax_head, date, value FROM hmrc_receipts ORDER BY tax_head, date ASC'
+  ).all() as Array<{ tax_head: string; date: string; value: number }>
+}
+
+export function getHmrcTaxHeads(): string[] {
+  return (db.prepare('SELECT DISTINCT tax_head FROM hmrc_receipts ORDER BY tax_head').all() as Array<{ tax_head: string }>)
+    .map(r => r.tax_head)
+}
+
+// ── PAYE RTI earnings & employment (monthly, UK, SA) ────────────────────────
+// Ingested from the ONS "Earnings and employment from PAYE RTI" reference
+// tables (seasonally adjusted). Metrics: payrolled_employees (count),
+// median_pay / mean_pay (£ per month), aggregate_pay (£m per month).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS paye_rti (
+    metric TEXT NOT NULL,
+    date   TEXT NOT NULL,
+    value  REAL,
+    PRIMARY KEY (metric, date)
+  );
+`)
+
+export function storePayeRti(rows: Array<{ metric: string; date: string; value: number }>): void {
+  const stmt = db.prepare(`
+    INSERT INTO paye_rti (metric, date, value)
+    VALUES (?, ?, ?)
+    ON CONFLICT(metric, date) DO UPDATE SET value = excluded.value
+  `)
+  const tx = db.transaction(() => {
+    for (const r of rows) stmt.run(r.metric, r.date, r.value)
+  })
+  tx()
+}
+
+export function getPayeRti(metric: string): Array<{ date: string; value: number }> {
+  return db.prepare(
+    'SELECT date, value FROM paye_rti WHERE metric = ? ORDER BY date ASC'
+  ).all(metric) as Array<{ date: string; value: number }>
+}
+
+export function getPayeRtiMetrics(): string[] {
+  return (db.prepare('SELECT DISTINCT metric FROM paye_rti ORDER BY metric').all() as Array<{ metric: string }>)
+    .map(r => r.metric)
+}
+
 // ── ECB Data Portal (euro area HICP + unemployment) ─────────────────────────
 // Dedicated per-source table, consistent with ons_observations / boe_observations
 // / overnight_rates (the dashboard stores each external macro source in its own

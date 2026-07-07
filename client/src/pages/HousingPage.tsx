@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, LineChart, Line, Bar, Area, XAxis, YAxis, CartesianGrid,
@@ -18,6 +18,16 @@ const HOUSING_SECTIONS = [
   { key: 'prices', label: 'PRICES' },
   { key: 'credit', label: 'CREDIT' },
 ] as const
+
+// UK Housing has no SUPPLY tab: the UK publishes no monthly starts/permits
+// data (quarterly DLUHC Excel is a deferred follow-up — docs/uk-models-mapping.md).
+const UK_HOUSING_SECTIONS = [
+  { key: 'demand', label: 'DEMAND' },
+  { key: 'prices', label: 'PRICES' },
+  { key: 'credit', label: 'CREDIT' },
+] as const
+
+const UKHousingContent = lazy(() => import('./UKHousingContent').then(m => ({ default: m.UKHousingContent })))
 
 const HOUSING_SERIES = [
   'HOUST', 'HOUST1F', 'HOUST2F', 'HOUST5F',
@@ -157,6 +167,7 @@ const RANGES = ['1y', '2y', '5y', '10y', 'all']
 export function HousingPage() {
   const [country, setCountry] = useState('us')
   const [section, setSection] = useState<string>('supply')
+  const [ukSection, setUkSection] = useState<'demand' | 'prices' | 'credit'>('demand')
   const navigate = useNavigate()
 
   const [housingData, setHousingData] = useState<Record<string, D[]>>({})
@@ -429,9 +440,15 @@ export function HousingPage() {
         <div className={styles.categoryBar}>
           {CATEGORIES.map((cat, i) => (<button key={cat.key} className={`${styles.categoryBtn} ${cat.key === 'housing' ? styles.categoryBtnActive : ''}`} onClick={() => { if (cat.key !== 'housing') navigate(cat.path) }} style={{ border: `1px solid ${cat.key === 'housing' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{cat.label}</button>))}
         </div>
-        <div className={styles.sectionBar}>
-          {HOUSING_SECTIONS.map((sec, i) => (<button key={sec.key} className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`} onClick={() => setSection(sec.key)} style={{ border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{sec.label}</button>))}
-        </div>
+        {country === 'uk' ? (
+          <div className={styles.sectionBar}>
+            {UK_HOUSING_SECTIONS.map((sec, i) => (<button key={sec.key} className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`} onClick={() => setUkSection(sec.key)} style={{ border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{sec.label}</button>))}
+          </div>
+        ) : (
+          <div className={styles.sectionBar}>
+            {HOUSING_SECTIONS.map((sec, i) => (<button key={sec.key} className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`} onClick={() => setSection(sec.key)} style={{ border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{sec.label}</button>))}
+          </div>
+        )}
 
         {country === 'us' ? (
           <>
@@ -913,6 +930,10 @@ export function HousingPage() {
               </div>
             )}
           </>
+        ) : country === 'uk' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <UKHousingContent section={ukSection} />
+          </Suspense>
         ) : (
           <div className={styles.comingSoon}>{COUNTRIES.find((c) => c.key === country)?.label} housing models coming soon</div>
         )}

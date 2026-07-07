@@ -347,7 +347,11 @@
       "Bash(pkill -f \"backfillEconomicCalendar\")",
       "Bash(pkill -f \"econ-backfill\")",
       "Bash(awk '{print $2, $10, $11, $12, $13}')",
-      "Bash(awk '{print $5, $9}')"
+      "Bash(awk '{print $5, $9}')",
+      "Bash(sort -t'|' -k3)",
+      "Bash(echo \"tsc exit: $?\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"exit $?\")"
     ]
   },
   "sandbox": {

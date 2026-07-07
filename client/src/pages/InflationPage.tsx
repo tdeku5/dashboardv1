@@ -11,6 +11,10 @@ const PCEDashboardContent = lazy(() => import('./PCEDashboardPage').then(m => ({
 const PCEProjectionsContent = lazy(() => import('./PCEProjectionsPage').then(m => ({ default: m.PCEProjectionsContent })))
 const PPIDashboardContent = lazy(() => import('./PPIDashboardPage').then(m => ({ default: m.PPIDashboardContent })))
 const OtherInflationContent = lazy(() => import('./OtherInflationPage').then(m => ({ default: m.OtherInflationContent })))
+const UKCPIContent = lazy(() => import('./UKCPIContent').then(m => ({ default: m.UKCPIContent })))
+const UKCPIProjectionsContent = lazy(() => import('./UKCPIProjectionsContent').then(m => ({ default: m.UKCPIProjectionsContent })))
+const UKPPIContent = lazy(() => import('./UKPPIContent').then(m => ({ default: m.UKPPIContent })))
+const UKOtherInflationContent = lazy(() => import('./UKOtherInflationContent').then(m => ({ default: m.UKOtherInflationContent })))
 
 const INFLATION_SECTIONS = [
   { key: 'cpi', label: 'CPI' },
@@ -21,9 +25,19 @@ const INFLATION_SECTIONS = [
   { key: 'other', label: 'OTHER' },
 ] as const
 
+// No UK PCE sections: the UK publishes no monthly consumption deflator
+// (docs/uk-models-mapping.md — PCE pages classified GAP, omitted by decision).
+const UK_INFLATION_SECTIONS = [
+  { key: 'cpi', label: 'CPI' },
+  { key: 'cpi-proj', label: 'CPI PROJECTIONS' },
+  { key: 'ppi', label: 'PPI' },
+  { key: 'other', label: 'OTHER' },
+] as const
+
 export function InflationPage() {
   const [country, setCountry] = useState('us')
   const [section, setSection] = useState<string>('cpi')
+  const [ukSection, setUkSection] = useState<string>('cpi')
   const navigate = useNavigate()
 
   return (
@@ -70,23 +84,23 @@ export function InflationPage() {
           ))}
         </div>
 
-        <div className={styles.sectionBar}>
-          {INFLATION_SECTIONS.map((sec, idx) => (
-            <button
-              key={sec.key}
-              className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-              onClick={() => setSection(sec.key)}
-              style={{
-                border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {sec.label}
-            </button>
-          ))}
-        </div>
-
         {country === 'us' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {INFLATION_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setSection(sec.key)}
+                style={{
+                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'cpi' && <CPIDashboardContent />}
             {section === 'cpi-proj' && <CPIProjectionsContent />}
@@ -95,6 +109,31 @@ export function InflationPage() {
             {section === 'ppi' && <PPIDashboardContent />}
             {section === 'other' && <OtherInflationContent />}
           </Suspense>
+          </>
+        ) : country === 'uk' ? (
+          <>
+          <div className={styles.sectionBar}>
+            {UK_INFLATION_SECTIONS.map((sec, idx) => (
+              <button
+                key={sec.key}
+                className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`}
+                onClick={() => setUkSection(sec.key)}
+                style={{
+                  border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`,
+                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
+                }}
+              >
+                {sec.label}
+              </button>
+            ))}
+          </div>
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {ukSection === 'cpi' && <UKCPIContent />}
+            {ukSection === 'cpi-proj' && <UKCPIProjectionsContent />}
+            {ukSection === 'ppi' && <UKPPIContent />}
+            {ukSection === 'other' && <UKOtherInflationContent />}
+          </Suspense>
+          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} inflation models coming soon

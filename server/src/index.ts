@@ -34,6 +34,12 @@ import { syncAllBoeSeries } from './fetchAllBoeSeries'
 import { boeYieldCurveRouter } from './routes/boeYieldCurve'
 import { syncGiltYieldCurves, backfillGiltYieldCurves } from './boeYieldCurve'
 import { syncMonthlyGDPContributions, backfillMonthlyGDPContributions } from './onsMonthlyGDPContribs'
+import { ukHpiRouter } from './routes/ukHpi'
+import { syncUkHpi } from './ukHpi'
+import { hmrcReceiptsRouter } from './routes/hmrcReceipts'
+import { syncHmrcReceipts } from './hmrcReceipts'
+import { payeRtiRouter } from './routes/payeRti'
+import { syncPayeRti } from './payeRti'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
@@ -85,6 +91,9 @@ app.use('/api/rde',          rdeRouter)
 app.use('/api/ons',          onsRouter)
 app.use('/api/boe/yield-curve', boeYieldCurveRouter)
 app.use('/api/boe',          boeRouter)
+app.use('/api/uk-hpi',       ukHpiRouter)
+app.use('/api/hmrc-receipts', hmrcReceiptsRouter)
+app.use('/api/paye-rti',     payeRtiRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
@@ -229,6 +238,23 @@ async function startup(): Promise<void> {
     console.error('[startup] BoE sync error:', err)
   )
 
+  // UK HPI (Land Registry) sync — full-file download covers backfill +
+  // refresh; internally skips unless a new reference month is due (non-blocking)
+  syncUkHpi().catch(err =>
+    console.error('[startup] UK HPI sync error:', err)
+  )
+
+  // HMRC tax receipts sync — ODS republishes full history monthly (non-blocking)
+  syncHmrcReceipts().catch(err =>
+    console.error('[startup] HMRC receipts sync error:', err)
+  )
+
+  // PAYE RTI earnings & employment sync — xlsx republishes full history
+  // monthly (non-blocking)
+  syncPayeRti().catch(err =>
+    console.error('[startup] PAYE RTI sync error:', err)
+  )
+
   // BoE gilt yield curve sync (non-blocking)
   syncGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve sync error:', err)
@@ -314,6 +340,11 @@ async function startup(): Promise<void> {
     syncAllOnsSeries().catch(err => console.error('[cron] ONS error:', err))
     syncAllBoeSeries().catch(err => console.error('[cron] BoE error:', err))
     syncGiltYieldCurves().catch(err => console.error('[cron] Gilt YC error:', err))
+    // UK sources with full-history republication — cheap no-ops until a new
+    // reference month is published (UK HPI gates internally on data age).
+    syncUkHpi().catch(err => console.error('[cron] UK HPI error:', err))
+    syncHmrcReceipts().catch(err => console.error('[cron] HMRC receipts error:', err))
+    syncPayeRti().catch(err => console.error('[cron] PAYE RTI error:', err))
     // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
     // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
     // overnight rates. Incremental sync is a no-op on days with no ECB release.)
