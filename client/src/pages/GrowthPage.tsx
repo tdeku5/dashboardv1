@@ -7,7 +7,7 @@ import { UKTradeContent } from './UKTradeContent'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
@@ -68,11 +68,14 @@ const CA_GROWTH_SECTIONS = [
   { key: 'consumer', label: 'CONSUMER HEALTH' },
 ] as const
 
+const GROWTH_NAV: Record<string, CountrySections> = {
+  us: { sections: GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#f87171' },
+  uk: { sections: UK_GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#14b8a6' },
+  ca: { sections: CA_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#f59e0b' },
+}
+
 export function GrowthPage() {
-  const [country, setCountry] = useCountryParam()
-  const [section, setSection] = useTabParam(GROWTH_SECTIONS.map(s => s.key), 'ngdp')
-  const [ukSection, setUkSection] = useTabParam(UK_GROWTH_SECTIONS.map(s => s.key), 'ngdp')
-  const [caSection, setCaSection] = useTabParam(CA_GROWTH_SECTIONS.map(s => s.key), 'gdp')
+  const { country, setCountry, cfg, section, setSection } = useCountrySections(GROWTH_NAV)
 
   return (
     <div className={styles.shell}>
@@ -90,10 +93,10 @@ export function GrowthPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="growth"
-          sections={country === 'us' ? GROWTH_SECTIONS : country === 'uk' ? UK_GROWTH_SECTIONS : country === 'ca' ? CA_GROWTH_SECTIONS : undefined}
-          activeSection={country === 'us' ? section : country === 'uk' ? ukSection : caSection}
-          onSelectSection={country === 'us' ? setSection : country === 'uk' ? setUkSection : setCaSection}
-          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
+          sections={cfg?.sections}
+          activeSection={section}
+          onSelectSection={setSection}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (
@@ -110,28 +113,28 @@ export function GrowthPage() {
           </Suspense>
         ) : country === 'uk' ? (
           <>
-            {ukSection === 'ngdp' && <UKNominalGDPContent />}
-            {ukSection === 'rgdp' && <UKRealGDPContent />}
-            {ukSection === 'mgdp' && <UKMonthlyGDPContent />}
-            {ukSection === 'retail' && <UKRetailContent />}
-            {ukSection === 'trade' && <UKTradeContent />}
+            {section === 'ngdp' && <UKNominalGDPContent />}
+            {section === 'rgdp' && <UKRealGDPContent />}
+            {section === 'mgdp' && <UKMonthlyGDPContent />}
+            {section === 'retail' && <UKRetailContent />}
+            {section === 'trade' && <UKTradeContent />}
             <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-              {ukSection === 'consumption' && <UKConsumptionContent />}
-              {ukSection === 'income' && <UKHouseholdIncomeContent />}
-              {ukSection === 'gdpi' && <UKGDPIncomeContent />}
-              {ukSection === 'consumer' && <UKConsumerHealthContent />}
+              {section === 'consumption' && <UKConsumptionContent />}
+              {section === 'income' && <UKHouseholdIncomeContent />}
+              {section === 'gdpi' && <UKGDPIncomeContent />}
+              {section === 'consumer' && <UKConsumerHealthContent />}
             </Suspense>
           </>
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {caSection === 'gdp' && <CAGDPContent />}
-            {caSection === 'mgdp' && <CAMonthlyGDPContent />}
-            {caSection === 'retail' && <CARetailContent />}
-            {caSection === 'trade' && <CATradeContent />}
-            {caSection === 'consumption' && <CAConsumptionContent />}
-            {caSection === 'income' && <CAHouseholdIncomeContent />}
-            {caSection === 'gdpi' && <CAGDPIncomeContent />}
-            {caSection === 'consumer' && <CAConsumerHealthContent />}
+            {section === 'gdp' && <CAGDPContent />}
+            {section === 'mgdp' && <CAMonthlyGDPContent />}
+            {section === 'retail' && <CARetailContent />}
+            {section === 'trade' && <CATradeContent />}
+            {section === 'consumption' && <CAConsumptionContent />}
+            {section === 'income' && <CAHouseholdIncomeContent />}
+            {section === 'gdpi' && <CAGDPIncomeContent />}
+            {section === 'consumer' && <CAConsumerHealthContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

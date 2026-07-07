@@ -67,3 +67,39 @@ export function useTabParam<K extends string>(
 export function categoryPath(path: string, country: string): string {
   return country === 'us' ? path : `${path}?country=${encodeURIComponent(country)}`
 }
+
+// ── Country→sections map (2026-07, Japan Phase 0) ───────────────────────────
+// Extracted per the Canada Phase 3 addendum: hub section wiring had grown into
+// 3-way country ternaries. Hubs now declare one country-keyed config and read
+// everything from this hook. One shared `tab` param serves all countries (it
+// is deleted on country switch and re-validated against the active country's
+// section list on read), so a single useTabParam call replaces the previous
+// per-country calls with identical rendered behavior.
+
+export interface CountrySections {
+  sections: ReadonlyArray<{ key: string; label: string }>
+  defaultKey: string
+  /** Active-section border color for this country's bar */
+  accent: string
+}
+
+export function useCountrySections(
+  byCountry: Record<string, CountrySections>,
+  /** cfg used when the country has no entry (HousingPage shows the US bar for
+   *  content-less countries; other hubs hide the bar — pass nothing). */
+  fallback?: CountrySections,
+): {
+  country: string
+  setCountry: (c: string) => void
+  cfg: CountrySections | undefined
+  section: string
+  setSection: (t: string) => void
+} {
+  const [country, setCountry] = useCountryParam()
+  const cfg = byCountry[country] ?? fallback
+  const [section, setSection] = useTabParam(
+    cfg?.sections.map(s => s.key) ?? [],
+    cfg?.defaultKey ?? '',
+  )
+  return { country, setCountry, cfg, section, setSection }
+}

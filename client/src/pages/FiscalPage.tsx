@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
@@ -32,11 +32,14 @@ const CA_FISCAL_SECTIONS = [
   { key: 'debt', label: 'FEDERAL DEBT' },
 ] as const
 
+const FISCAL_NAV: Record<string, CountrySections> = {
+  us: { sections: FISCAL_SECTIONS, defaultKey: 'dts', accent: '#f87171' },
+  uk: { sections: UK_FISCAL_SECTIONS, defaultKey: 'psf', accent: '#14b8a6' },
+  ca: { sections: CA_FISCAL_SECTIONS, defaultKey: 'gfs', accent: '#f59e0b' },
+}
+
 export function FiscalPage() {
-  const [country, setCountry] = useCountryParam()
-  const [section, setSection] = useTabParam(FISCAL_SECTIONS.map(s => s.key), 'dts')
-  const [ukSection, setUkSection] = useTabParam(UK_FISCAL_SECTIONS.map(s => s.key), 'psf')
-  const [caSection, setCaSection] = useTabParam(CA_FISCAL_SECTIONS.map(s => s.key), 'gfs')
+  const { country, setCountry, cfg, section, setSection } = useCountrySections(FISCAL_NAV)
 
   return (
     <div className={styles.shell}>
@@ -54,10 +57,10 @@ export function FiscalPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="fiscal"
-          sections={country === 'us' ? FISCAL_SECTIONS : country === 'uk' ? UK_FISCAL_SECTIONS : country === 'ca' ? CA_FISCAL_SECTIONS : undefined}
-          activeSection={country === 'us' ? section : country === 'uk' ? ukSection : caSection}
-          onSelectSection={country === 'us' ? setSection : country === 'uk' ? setUkSection : setCaSection}
-          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
+          sections={cfg?.sections}
+          activeSection={section}
+          onSelectSection={setSection}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (
@@ -67,13 +70,13 @@ export function FiscalPage() {
           </Suspense>
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {ukSection === 'psf' && <UKFiscalPSFContent />}
-            {ukSection === 'receipts' && <UKHMRCReceiptsContent />}
+            {section === 'psf' && <UKFiscalPSFContent />}
+            {section === 'receipts' && <UKHMRCReceiptsContent />}
           </Suspense>
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {caSection === 'gfs' && <CAFiscalGFSContent />}
-            {caSection === 'debt' && <CAFiscalDebtContent />}
+            {section === 'gfs' && <CAFiscalGFSContent />}
+            {section === 'debt' && <CAFiscalDebtContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

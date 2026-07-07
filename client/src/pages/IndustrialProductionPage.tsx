@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
@@ -22,8 +22,14 @@ const CA_IP_SECTIONS = [
   { key: 'industrial', label: 'GDP BY INDUSTRY' },
 ] as const
 
+const IP_NAV: Record<string, CountrySections> = {
+  us: { sections: IP_SECTIONS, defaultKey: 'ip-explorer', accent: '#f87171' },
+  uk: { sections: UK_IP_SECTIONS, defaultKey: 'iop', accent: '#14b8a6' },
+  ca: { sections: CA_IP_SECTIONS, defaultKey: 'industrial', accent: '#f59e0b' },
+}
+
 export function IndustrialProductionPage() {
-  const [country, setCountry] = useCountryParam()
+  const { country, setCountry, cfg, section } = useCountrySections(IP_NAV)
 
   return (
     <div className={styles.shell}>
@@ -41,9 +47,9 @@ export function IndustrialProductionPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="industrial"
-          sections={country === 'us' ? IP_SECTIONS : country === 'uk' ? UK_IP_SECTIONS : country === 'ca' ? CA_IP_SECTIONS : undefined}
-          activeSection={country === 'us' ? 'ip-explorer' : country === 'uk' ? 'iop' : 'industrial'}
-          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
+          sections={cfg?.sections}
+          activeSection={section}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (

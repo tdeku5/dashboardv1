@@ -6,7 +6,7 @@ import {
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import { fetchFredSeries } from '../lib/fred'
 import styles from './ModelsPage.module.css'
@@ -38,6 +38,12 @@ const CA_HOUSING_SECTIONS = [
   { key: 'prices', label: 'PRICES' },
   { key: 'credit', label: 'CREDIT' },
 ] as const
+
+const HOUSING_NAV: Record<string, CountrySections> = {
+  us: { sections: HOUSING_SECTIONS, defaultKey: 'supply', accent: '#f87171' },
+  uk: { sections: UK_HOUSING_SECTIONS, defaultKey: 'demand', accent: '#14b8a6' },
+  ca: { sections: CA_HOUSING_SECTIONS, defaultKey: 'supply', accent: '#f59e0b' },
+}
 
 const HOUSING_SERIES = [
   'HOUST', 'HOUST1F', 'HOUST2F', 'HOUST5F',
@@ -175,10 +181,9 @@ const RANGES = ['1y', '2y', '5y', '10y', 'all']
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function HousingPage() {
-  const [country, setCountry] = useCountryParam()
-  const [section, setSection] = useTabParam(HOUSING_SECTIONS.map(s => s.key), 'supply')
-  const [ukSection, setUkSection] = useTabParam(UK_HOUSING_SECTIONS.map(s => s.key), 'demand')
-  const [caSection, setCaSection] = useTabParam(CA_HOUSING_SECTIONS.map(s => s.key), 'supply')
+  // Fallback = US config: HousingPage has always shown the US section bar for
+  // countries without content (unlike the other hubs, which hide the bar).
+  const { country, setCountry, cfg, section, setSection } = useCountrySections(HOUSING_NAV, HOUSING_NAV.us)
 
   const [housingData, setHousingData] = useState<Record<string, D[]>>({})
   const [housingLoading, setHousingLoading] = useState(true)
@@ -448,10 +453,10 @@ export function HousingPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="housing"
-          sections={country === 'uk' ? UK_HOUSING_SECTIONS : country === 'ca' ? CA_HOUSING_SECTIONS : HOUSING_SECTIONS}
-          activeSection={country === 'uk' ? ukSection : country === 'ca' ? caSection : section}
-          onSelectSection={country === 'uk' ? setUkSection : country === 'ca' ? setCaSection : setSection}
-          sectionAccent={country === 'uk' ? '#14b8a6' : country === 'ca' ? '#f59e0b' : '#f87171'}
+          sections={cfg?.sections}
+          activeSection={section}
+          onSelectSection={setSection}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (
@@ -936,11 +941,13 @@ export function HousingPage() {
           </>
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            <UKHousingContent section={ukSection} />
+            {/* section is validated against UK_HOUSING_SECTIONS keys when country === 'uk' */}
+            <UKHousingContent section={section as 'demand' | 'prices' | 'credit'} />
           </Suspense>
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            <CAHousingContent section={caSection} />
+            {/* section is validated against CA_HOUSING_SECTIONS keys when country === 'ca' */}
+            <CAHousingContent section={section as 'supply' | 'prices' | 'credit'} />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>{COUNTRIES.find((c) => c.key === country)?.label} housing models coming soon</div>

@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
@@ -22,8 +22,16 @@ const CA_CREDIT_SECTIONS = [
   { key: 'household-credit', label: 'HOUSEHOLD CREDIT' },
 ] as const
 
+// Single-section bars: no onSelectSection (static buttons, matching the
+// pre-map behavior where these bars had no click handlers).
+const CREDIT_NAV: Record<string, CountrySections> = {
+  us: { sections: CREDIT_SECTIONS, defaultKey: 'bank-credit', accent: '#f87171' },
+  uk: { sections: UK_CREDIT_SECTIONS, defaultKey: 'money-credit', accent: '#14b8a6' },
+  ca: { sections: CA_CREDIT_SECTIONS, defaultKey: 'household-credit', accent: '#f59e0b' },
+}
+
 export function CreditPage() {
-  const [country, setCountry] = useCountryParam()
+  const { country, setCountry, cfg, section } = useCountrySections(CREDIT_NAV)
 
   return (
     <div className={styles.shell}>
@@ -41,9 +49,9 @@ export function CreditPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="credit"
-          sections={country === 'us' ? CREDIT_SECTIONS : country === 'uk' ? UK_CREDIT_SECTIONS : country === 'ca' ? CA_CREDIT_SECTIONS : undefined}
-          activeSection={country === 'us' ? 'bank-credit' : country === 'uk' ? 'money-credit' : 'household-credit'}
-          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
+          sections={cfg?.sections}
+          activeSection={section}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (

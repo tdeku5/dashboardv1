@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { COUNTRIES } from './modelNav'
-import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { useCountrySections, type CountrySections } from '../lib/modelNavParams'
 import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
@@ -52,11 +52,14 @@ const CA_LABOR_SECTIONS = [
   { key: 'projection', label: 'PROJECTION' },
 ] as const
 
+const LABOR_NAV: Record<string, CountrySections> = {
+  us: { sections: LABOR_SECTIONS, defaultKey: 'cps', accent: '#f87171' },
+  uk: { sections: UK_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#14b8a6' },
+  ca: { sections: CA_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#f59e0b' },
+}
+
 export function LaborMarketPage() {
-  const [country, setCountry] = useCountryParam()
-  const [section, setSection] = useTabParam(LABOR_SECTIONS.map(s => s.key), 'cps')
-  const [ukSection, setUkSection] = useTabParam(UK_LABOR_SECTIONS.map(s => s.key), 'lfs')
-  const [caSection, setCaSection] = useTabParam(CA_LABOR_SECTIONS.map(s => s.key), 'lfs')
+  const { country, setCountry, cfg, section, setSection } = useCountrySections(LABOR_NAV)
 
   return (
     <div className={styles.shell}>
@@ -74,10 +77,10 @@ export function LaborMarketPage() {
           country={country}
           onSelectCountry={setCountry}
           activeCategory="labor"
-          sections={country === 'us' ? LABOR_SECTIONS : country === 'uk' ? UK_LABOR_SECTIONS : country === 'ca' ? CA_LABOR_SECTIONS : undefined}
-          activeSection={country === 'us' ? section : country === 'uk' ? ukSection : caSection}
-          onSelectSection={country === 'us' ? setSection : country === 'uk' ? setUkSection : setCaSection}
-          sectionAccent={country === 'us' ? '#f87171' : country === 'uk' ? '#14b8a6' : '#f59e0b'}
+          sections={cfg?.sections}
+          activeSection={section}
+          onSelectSection={setSection}
+          sectionAccent={cfg?.accent}
         />
 
         {country === 'us' ? (
@@ -91,21 +94,21 @@ export function LaborMarketPage() {
           </Suspense>
         ) : country === 'uk' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {ukSection === 'lfs' && <UKLFSContent />}
-            {ukSection === 'claimant' && <UKClaimantContent />}
-            {ukSection === 'earnings' && <UKEarningsContent />}
-            {ukSection === 'vacancies' && <UKVacanciesContent />}
-            {ukSection === 'productivity' && <UKProductivityContent />}
-            {ukSection === 'projection' && <UKLaborProjectionContent />}
+            {section === 'lfs' && <UKLFSContent />}
+            {section === 'claimant' && <UKClaimantContent />}
+            {section === 'earnings' && <UKEarningsContent />}
+            {section === 'vacancies' && <UKVacanciesContent />}
+            {section === 'productivity' && <UKProductivityContent />}
+            {section === 'projection' && <UKLaborProjectionContent />}
           </Suspense>
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {caSection === 'lfs' && <CALFSContent />}
-            {caSection === 'ei' && <CAEIContent />}
-            {caSection === 'payrolls' && <CAPayrollsContent />}
-            {caSection === 'vacancies' && <CAVacanciesContent />}
-            {caSection === 'productivity' && <CAProductivityContent />}
-            {caSection === 'projection' && <CALaborProjectionContent />}
+            {section === 'lfs' && <CALFSContent />}
+            {section === 'ei' && <CAEIContent />}
+            {section === 'payrolls' && <CAPayrollsContent />}
+            {section === 'vacancies' && <CAVacanciesContent />}
+            {section === 'productivity' && <CAProductivityContent />}
+            {section === 'projection' && <CALaborProjectionContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>
