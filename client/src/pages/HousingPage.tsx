@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, lazy, Suspense, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   ComposedChart, LineChart, Line, Bar, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Brush, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
-import { COUNTRIES, CATEGORIES } from './modelNav'
+import { COUNTRIES } from './modelNav'
+import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import { fetchFredSeries } from '../lib/fred'
 import styles from './ModelsPage.module.css'
 
@@ -165,10 +166,9 @@ const RANGES = ['1y', '2y', '5y', '10y', 'all']
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function HousingPage() {
-  const [country, setCountry] = useState('us')
-  const [section, setSection] = useState<string>('supply')
-  const [ukSection, setUkSection] = useState<'demand' | 'prices' | 'credit'>('demand')
-  const navigate = useNavigate()
+  const [country, setCountry] = useCountryParam()
+  const [section, setSection] = useTabParam(HOUSING_SECTIONS.map(s => s.key), 'supply')
+  const [ukSection, setUkSection] = useTabParam(UK_HOUSING_SECTIONS.map(s => s.key), 'demand')
 
   const [housingData, setHousingData] = useState<Record<string, D[]>>({})
   const [housingLoading, setHousingLoading] = useState(true)
@@ -434,21 +434,15 @@ export function HousingPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.countryBar}>
-          {COUNTRIES.map((c, i) => (<button key={c.key} className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`} onClick={() => setCountry(c.key)} style={{ border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{c.label}</button>))}
-        </div>
-        <div className={styles.categoryBar}>
-          {CATEGORIES.map((cat, i) => (<button key={cat.key} className={`${styles.categoryBtn} ${cat.key === 'housing' ? styles.categoryBtnActive : ''}`} onClick={() => { if (cat.key !== 'housing') navigate(cat.path) }} style={{ border: `1px solid ${cat.key === 'housing' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{cat.label}</button>))}
-        </div>
-        {country === 'uk' ? (
-          <div className={styles.sectionBar}>
-            {UK_HOUSING_SECTIONS.map((sec, i) => (<button key={sec.key} className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`} onClick={() => setUkSection(sec.key)} style={{ border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{sec.label}</button>))}
-          </div>
-        ) : (
-          <div className={styles.sectionBar}>
-            {HOUSING_SECTIONS.map((sec, i) => (<button key={sec.key} className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`} onClick={() => setSection(sec.key)} style={{ border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`, ...(i > 0 ? { borderLeft: 'none' } : {}) }}>{sec.label}</button>))}
-          </div>
-        )}
+        <CountryCategoryNav
+          country={country}
+          onSelectCountry={setCountry}
+          activeCategory="housing"
+          sections={country === 'uk' ? UK_HOUSING_SECTIONS : HOUSING_SECTIONS}
+          activeSection={country === 'uk' ? ukSection : section}
+          onSelectSection={country === 'uk' ? setUkSection : setSection}
+          sectionAccent={country === 'uk' ? '#14b8a6' : '#f87171'}
+        />
 
         {country === 'us' ? (
           <>

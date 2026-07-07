@@ -1,12 +1,11 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { NavDropdown } from '../components/NavDropdown'
-import { COUNTRIES, CATEGORIES } from './modelNav'
+import { COUNTRIES } from './modelNav'
+import { useCountryParam } from '../lib/modelNavParams'
+import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
 export function ModelsPage() {
-  const [country, setCountry] = useState('us')
-  const navigate = useNavigate()
+  const [country, setCountry] = useCountryParam()
 
   return (
     <div className={styles.shell}>
@@ -20,41 +19,9 @@ export function ModelsPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.countryBar}>
-          {COUNTRIES.map((c, idx) => (
-            <button
-              key={c.key}
-              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
-              onClick={() => setCountry(c.key)}
-              style={{
-                border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
+        <CountryCategoryNav country={country} onSelectCountry={setCountry} />
 
-        {country === 'us' && (
-          <div className={styles.categoryBar}>
-            {CATEGORIES.map((cat, idx) => (
-              <button
-                key={cat.key}
-                className={styles.categoryBtn}
-                onClick={() => navigate(cat.path)}
-                style={{
-                  border: '1px solid rgba(255, 255, 255, 0.15)',
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {country !== 'us' && (
+        {country !== 'us' && country !== 'uk' && (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} models coming soon
           </div>

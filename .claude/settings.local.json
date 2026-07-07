@@ -351,7 +351,8 @@
       "Bash(sort -t'|' -k3)",
       "Bash(echo \"tsc exit: $?\")",
       "Bash(echo \"exit: $?\")",
-      "Bash(echo \"exit $?\")"
+      "Bash(echo \"exit $?\")",
+      "Bash(echo \"tsc: $?\")"
     ]
   },
   "sandbox": {

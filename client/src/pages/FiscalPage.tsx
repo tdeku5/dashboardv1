@@ -1,8 +1,9 @@
-import { useState, lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
-import { COUNTRIES, CATEGORIES } from './modelNav'
+import { COUNTRIES } from './modelNav'
+import { useCountryParam, useTabParam } from '../lib/modelNavParams'
+import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
 const FiscalFlowsContent = lazy(() => import('./FiscalFlowsPage').then(m => ({ default: m.FiscalFlowsContent })))
@@ -23,10 +24,9 @@ const UK_FISCAL_SECTIONS = [
 ] as const
 
 export function FiscalPage() {
-  const [country, setCountry] = useState('us')
-  const [section, setSection] = useState<string>('dts')
-  const [ukSection, setUkSection] = useState<string>('psf')
-  const navigate = useNavigate()
+  const [country, setCountry] = useCountryParam()
+  const [section, setSection] = useTabParam(FISCAL_SECTIONS.map(s => s.key), 'dts')
+  const [ukSection, setUkSection] = useTabParam(UK_FISCAL_SECTIONS.map(s => s.key), 'psf')
 
   return (
     <div className={styles.shell}>
@@ -40,82 +40,26 @@ export function FiscalPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.countryBar}>
-          {COUNTRIES.map((c, idx) => (
-            <button
-              key={c.key}
-              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
-              onClick={() => setCountry(c.key)}
-              style={{
-                border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.categoryBar}>
-          {CATEGORIES.map((cat, idx) => (
-            <button
-              key={cat.key}
-              className={`${styles.categoryBtn} ${cat.key === 'fiscal' ? styles.categoryBtnActive : ''}`}
-              onClick={() => { if (cat.key !== 'fiscal') navigate(cat.path) }}
-              style={{
-                border: `1px solid ${cat.key === 'fiscal' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+        <CountryCategoryNav
+          country={country}
+          onSelectCountry={setCountry}
+          activeCategory="fiscal"
+          sections={country === 'us' ? FISCAL_SECTIONS : country === 'uk' ? UK_FISCAL_SECTIONS : undefined}
+          activeSection={country === 'us' ? section : ukSection}
+          onSelectSection={country === 'us' ? setSection : setUkSection}
+          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+        />
 
         {country === 'us' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {FISCAL_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-                onClick={() => setSection(sec.key)}
-                style={{
-                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'dts' && <FiscalFlowsContent />}
             {section === 'mts' && <MtsContent />}
           </Suspense>
-          </>
         ) : country === 'uk' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {UK_FISCAL_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${ukSection === sec.key ? styles.sectionBtnActive : ''}`}
-                onClick={() => setUkSection(sec.key)}
-                style={{
-                  border: `1px solid ${ukSection === sec.key ? '#14b8a6' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {ukSection === 'psf' && <UKFiscalPSFContent />}
             {ukSection === 'receipts' && <UKHMRCReceiptsContent />}
           </Suspense>
-          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} fiscal models coming soon

@@ -1,8 +1,9 @@
-import { useState, lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
-import { COUNTRIES, CATEGORIES } from './modelNav'
+import { COUNTRIES } from './modelNav'
+import { useCountryParam } from '../lib/modelNavParams'
+import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
 const IPExplorerDashboardContent = lazy(() => import('./IPExplorerDashboardPage').then(m => ({ default: m.IPExplorerDashboardContent })))
@@ -17,9 +18,7 @@ const UK_IP_SECTIONS = [
 ] as const
 
 export function IndustrialProductionPage() {
-  const [country, setCountry] = useState('us')
-  const [section, setSection] = useState<string>('ip-explorer')
-  const navigate = useNavigate()
+  const [country, setCountry] = useCountryParam()
 
   return (
     <div className={styles.shell}>
@@ -33,79 +32,23 @@ export function IndustrialProductionPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.countryBar}>
-          {COUNTRIES.map((c, idx) => (
-            <button
-              key={c.key}
-              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
-              onClick={() => setCountry(c.key)}
-              style={{
-                border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.categoryBar}>
-          {CATEGORIES.map((cat, idx) => (
-            <button
-              key={cat.key}
-              className={`${styles.categoryBtn} ${cat.key === 'industrial' ? styles.categoryBtnActive : ''}`}
-              onClick={() => { if (cat.key !== 'industrial') navigate(cat.path) }}
-              style={{
-                border: `1px solid ${cat.key === 'industrial' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+        <CountryCategoryNav
+          country={country}
+          onSelectCountry={setCountry}
+          activeCategory="industrial"
+          sections={country === 'us' ? IP_SECTIONS : country === 'uk' ? UK_IP_SECTIONS : undefined}
+          activeSection={country === 'us' ? 'ip-explorer' : 'iop'}
+          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+        />
 
         {country === 'us' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {IP_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-                onClick={() => setSection(sec.key)}
-                style={{
-                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {section === 'ip-explorer' && <IPExplorerDashboardContent />}
+            <IPExplorerDashboardContent />
           </Suspense>
-          </>
         ) : country === 'uk' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {UK_IP_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${styles.sectionBtnActive}`}
-                style={{
-                  border: '1px solid #14b8a6',
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <UKIoPContent />
           </Suspense>
-          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} industrial production models coming soon

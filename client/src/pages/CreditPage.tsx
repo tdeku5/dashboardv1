@@ -1,8 +1,9 @@
-import { useState, lazy, Suspense } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
-import { COUNTRIES, CATEGORIES } from './modelNav'
+import { COUNTRIES } from './modelNav'
+import { useCountryParam } from '../lib/modelNavParams'
+import { CountryCategoryNav } from '../components/CountryCategoryNav'
 import styles from './ModelsPage.module.css'
 
 const BankCreditDashboardContent = lazy(() => import('./BankCreditDashboardPage').then(m => ({ default: m.BankCreditDashboardContent })))
@@ -17,9 +18,7 @@ const UK_CREDIT_SECTIONS = [
 ] as const
 
 export function CreditPage() {
-  const [country, setCountry] = useState('us')
-  const [section, setSection] = useState<string>('bank-credit')
-  const navigate = useNavigate()
+  const [country, setCountry] = useCountryParam()
 
   return (
     <div className={styles.shell}>
@@ -33,79 +32,23 @@ export function CreditPage() {
       </header>
 
       <main className={styles.body}>
-        <div className={styles.countryBar}>
-          {COUNTRIES.map((c, idx) => (
-            <button
-              key={c.key}
-              className={`${styles.countryBtn} ${country === c.key ? styles.countryBtnActive : ''}`}
-              onClick={() => setCountry(c.key)}
-              style={{
-                border: `1px solid ${country === c.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {c.label}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.categoryBar}>
-          {CATEGORIES.map((cat, idx) => (
-            <button
-              key={cat.key}
-              className={`${styles.categoryBtn} ${cat.key === 'credit' ? styles.categoryBtnActive : ''}`}
-              onClick={() => { if (cat.key !== 'credit') navigate(cat.path) }}
-              style={{
-                border: `1px solid ${cat.key === 'credit' ? '#4EC9B0' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
+        <CountryCategoryNav
+          country={country}
+          onSelectCountry={setCountry}
+          activeCategory="credit"
+          sections={country === 'us' ? CREDIT_SECTIONS : country === 'uk' ? UK_CREDIT_SECTIONS : undefined}
+          activeSection={country === 'us' ? 'bank-credit' : 'money-credit'}
+          sectionAccent={country === 'us' ? '#f87171' : '#14b8a6'}
+        />
 
         {country === 'us' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {CREDIT_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${section === sec.key ? styles.sectionBtnActive : ''}`}
-                onClick={() => setSection(sec.key)}
-                style={{
-                  border: `1px solid ${section === sec.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
-            {section === 'bank-credit' && <BankCreditDashboardContent />}
+            <BankCreditDashboardContent />
           </Suspense>
-          </>
         ) : country === 'uk' ? (
-          <>
-          <div className={styles.sectionBar}>
-            {UK_CREDIT_SECTIONS.map((sec, idx) => (
-              <button
-                key={sec.key}
-                className={`${styles.sectionBtn} ${styles.sectionBtnActive}`}
-                style={{
-                  border: '1px solid #14b8a6',
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
-              >
-                {sec.label}
-              </button>
-            ))}
-          </div>
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <UKMoneyCreditContent />
           </Suspense>
-          </>
         ) : (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} credit models coming soon
