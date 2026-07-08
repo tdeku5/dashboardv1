@@ -54,6 +54,21 @@ import { CAIndustrialContent } from './CAIndustrialContent'
 import { CAFiscalGFSContent } from './CAFiscalGFSContent'
 import { CAFiscalDebtContent } from './CAFiscalDebtContent'
 
+import { JPCPIContent } from './JPCPIContent'
+import { JPCPIProjectionsContent } from './JPCPIProjectionsContent'
+import { JPTokyoCPIContent } from './JPTokyoCPIContent'
+import { JPOtherInflationContent } from './JPOtherInflationContent'
+import { JPGDPContent } from './JPGDPContent'
+import { JPConsumptionContent } from './JPConsumptionContent'
+import { JPTradeContent } from './JPTradeContent'
+import { JPLFSContent } from './JPLFSContent'
+import { JPJobOffersContent } from './JPJobOffersContent'
+import { JPWagesContent } from './JPWagesContent'
+import { JPLaborProjectionContent } from './JPLaborProjectionContent'
+import { JPIIPContent } from './JPIIPContent'
+import { JPPPIContent } from './JPPPIContent'
+import { JPBankLendingContent } from './JPBankLendingContent'
+
 describe('US pages consuming refactored shared components', () => {
   it('RetailSalesDashboardPage renders', () => {
     const html = renderToStaticMarkup(<MemoryRouter><RetailSalesDashboardPage /></MemoryRouter>)
@@ -124,6 +139,31 @@ describe('Canada content components render', () => {
     ['CAIndustrialContent', () => <CAIndustrialContent />],
     ['CAFiscalGFSContent', () => <CAFiscalGFSContent />],
     ['CAFiscalDebtContent', () => <CAFiscalDebtContent />],
+  ]
+  for (const [name, make] of cases) {
+    it(`${name} renders`, () => {
+      const html = renderToStaticMarkup(<MemoryRouter>{make()}</MemoryRouter>)
+      expect(html.length).toBeGreaterThan(0)
+    })
+  }
+})
+
+describe('Japan content components render', () => {
+  const cases: Array<[string, () => JSX.Element]> = [
+    ['JPCPIContent', () => <JPCPIContent />],
+    ['JPCPIProjectionsContent', () => <JPCPIProjectionsContent />],
+    ['JPTokyoCPIContent', () => <JPTokyoCPIContent />],
+    ['JPOtherInflationContent', () => <JPOtherInflationContent />],
+    ['JPGDPContent', () => <JPGDPContent />],
+    ['JPConsumptionContent', () => <JPConsumptionContent />],
+    ['JPTradeContent', () => <JPTradeContent />],
+    ['JPLFSContent', () => <JPLFSContent />],
+    ['JPJobOffersContent', () => <JPJobOffersContent />],
+    ['JPWagesContent', () => <JPWagesContent />],
+    ['JPLaborProjectionContent', () => <JPLaborProjectionContent />],
+    ['JPIIPContent', () => <JPIIPContent />],
+    ['JPPPIContent', () => <JPPPIContent />],
+    ['JPBankLendingContent', () => <JPBankLendingContent />],
   ]
   for (const [name, make] of cases) {
     it(`${name} renders`, () => {

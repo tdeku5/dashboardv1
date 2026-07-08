@@ -9,6 +9,8 @@ import styles from './ModelsPage.module.css'
 const IPExplorerDashboardContent = lazy(() => import('./IPExplorerDashboardPage').then(m => ({ default: m.IPExplorerDashboardContent })))
 const UKIoPContent = lazy(() => import('./UKIoPContent').then(m => ({ default: m.UKIoPContent })))
 const CAIndustrialContent = lazy(() => import('./CAIndustrialContent').then(m => ({ default: m.CAIndustrialContent })))
+const JPIIPContent = lazy(() => import('./JPIIPContent').then(m => ({ default: m.JPIIPContent })))
+const JPPPIContent = lazy(() => import('./JPPPIContent').then(m => ({ default: m.JPPPIContent })))
 
 const IP_SECTIONS = [
   { key: 'ip-explorer', label: 'IP EXPLORER' },
@@ -22,14 +24,21 @@ const CA_IP_SECTIONS = [
   { key: 'industrial', label: 'GDP BY INDUSTRY' },
 ] as const
 
+// Japan carries the BoJ PPI here per the Phase 3 approval (verified decision h).
+const JP_IP_SECTIONS = [
+  { key: 'iip', label: 'IIP' },
+  { key: 'ppi', label: 'PPI (BOJ)' },
+] as const
+
 const IP_NAV: Record<string, CountrySections> = {
   us: { sections: IP_SECTIONS, defaultKey: 'ip-explorer', accent: '#f87171' },
   uk: { sections: UK_IP_SECTIONS, defaultKey: 'iop', accent: '#14b8a6' },
   ca: { sections: CA_IP_SECTIONS, defaultKey: 'industrial', accent: '#f59e0b' },
+  jp: { sections: JP_IP_SECTIONS, defaultKey: 'iip', accent: '#e879f9' },
 }
 
 export function IndustrialProductionPage() {
-  const { country, setCountry, cfg, section } = useCountrySections(IP_NAV)
+  const { country, setCountry, cfg, section, setSection } = useCountrySections(IP_NAV)
 
   return (
     <div className={styles.shell}>
@@ -49,6 +58,7 @@ export function IndustrialProductionPage() {
           activeCategory="industrial"
           sections={cfg?.sections}
           activeSection={section}
+          onSelectSection={country === 'jp' ? setSection : undefined}
           sectionAccent={cfg?.accent}
         />
 
@@ -63,6 +73,11 @@ export function IndustrialProductionPage() {
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <CAIndustrialContent />
+          </Suspense>
+        ) : country === 'jp' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'iip' && <JPIIPContent />}
+            {section === 'ppi' && <JPPPIContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

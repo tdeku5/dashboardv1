@@ -302,3 +302,46 @@ comes from tab=02), fixed and documented in the config comments.
 - Available-but-unpaneled (noted for future): 0003446462 also carries Consumer Confidence
   (1060), machinery orders (1040), new-housing floor area (1050), TOPIX, M2 YoY — one config
   line each if ever wanted.
+
+---
+
+## Phase 3 Addendum (2026-07-08) — Frontend Complete
+
+### Pages shipped (country `jp`, accent #e879f9; 14 content files, five categories)
+- **Inflation**: CPI (core-trio YoY panel with the mandatory nomenclature caption + badge,
+  headline/core rates, SA pair, 31-item distribution ×2, explorer; NO contribution panel per
+  decision g) · CPI PROJECTIONS (same-month-prior-year NSA method, caption page-level + per-panel,
+  BoJ 2% reference) · TOKYO ADVANCE (trio YoY, Tokyo-vs-national gap with the one-month lead
+  surfaced, rates pair — every panel badged `tokyo_advance`) · OTHER (goods/services NSA+SA,
+  energy & fresh food as the core↔core-core wedge, flat-rent story, durability)
+- **Growth**: GDP (Cabinet Office PUBLISHED contributions → ContribSection, real/nominal,
+  deflator, 15-item explorer — all DIRECT) · CONSUMPTION (FIES + terminal-computed real with
+  visible method caption, all badged) · TRADE (customs CSV, all badged)
+- **Labor**: LFS (SA-vs-NSA u-rate in one panel, participation/employment, employed persons,
+  by-age) · JOB OFFERS (有効求人倍率 with market-moving-gauge caption + y=1 reference, new offers)
+  · WAGES (thin per decision e; bonus-month caveat visible in panel subtitles; `mfg_earnings` +
+  `regemp_mls` distinct badges per decision c) · PROJECTION (NSA mechanics, derived labour force)
+- **Industrial**: IIP (2018-history caption, production/shipments/inventories/ratio) ·
+  **PPI (BoJ)** per verified decision (h) — 1960→, BoJ attribution line in the source caption
+- **Credit**: BANK LENDING (loans/published-YoY/deposits/L-D ratio, every panel badged
+  `boj_lending`, MD13 attribution line)
+- **Fiscal + Housing: no tabs, no stubs** — no `jp` entry in FISCAL_NAV/HOUSING_NAV; the nav's
+  missing-category fallback serves coming-soon (asserted in tests).
+
+### Regression results
+- Shared components: NONE modified this phase (consumption only — DistributionSection,
+  RatesChart, ContribSection, SeriesExplorer, ProxyBadge, CountryCategoryNav all untouched).
+  Hub wiring = one `jp` map entry + content branch each (the Phase 0 sections-map paying off);
+  IndustrialProductionPage additionally passes `onSelectSection` for Japan only (US/UK/CA bars
+  stay static). US/UK/CA content pages: zero diffs.
+- Suite: **88/88** (nav matrix incl. 7 new Japan cases — branch selection, categoryPath carry,
+  invalid-tab fallback, wages/ppi deep links, absent-Fiscal and absent-Housing fallbacks — and
+  14 new JP smoke renders; the old "?country=jp coming soon" case moved to Germany).
+  `tsc --noEmit` strict clean both workspaces; vite build clean; all 76 consumed series codes
+  curl-verified non-empty by the build agents.
+
+### Deferred follow-ups (unchanged from Phase 2)
+Housing (MLIT Excel), full MLS wages (e-Stat file pipeline), retail (file-only current data),
+Fiscal (MoF scraper), CPI contribution (weights Excel-only), pre-2018 IIP splice; plus the
+available-but-unpaneled composite-indicator series (consumer confidence, machinery orders,
+housing floor-area).

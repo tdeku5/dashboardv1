@@ -10,6 +10,9 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { InflationPage } from './InflationPage'
 import { FiscalPage } from './FiscalPage'
 import { GrowthPage } from './GrowthPage'
+import { HousingPage } from './HousingPage'
+import { LaborMarketPage } from './LaborMarketPage'
+import { IndustrialProductionPage } from './IndustrialProductionPage'
 import { ModelsPage } from './ModelsPage'
 import { categoryPath } from '../lib/modelNavParams'
 
@@ -106,14 +109,50 @@ describe('Canada country param (Phase 3)', () => {
   })
 })
 
+describe('Japan country param (Phase 3)', () => {
+  it('country=jp renders the Japan inflation branch (TOKYO ADVANCE, no PCE)', () => {
+    const html = renderAt('/models/inflation?country=jp', '/models/inflation', <InflationPage />)
+    expect(html).toContain('TOKYO ADVANCE')
+    expect(html).not.toContain('PCE PROJECTIONS')
+  })
+  it('categoryPath carries country=jp', () => {
+    expect(categoryPath('/models/labor', 'jp')).toBe('/models/labor?country=jp')
+  })
+  it('JP labor defaults to LFS (invalid tab falls back)', () => {
+    const html = renderAt('/models/labor?country=jp&tab=zzz', '/models/labor', <LaborMarketPage />)
+    expect(activeSections(html)).toContain('LFS')
+  })
+  it('JP labor tab=wages restores WAGES', () => {
+    const html = renderAt('/models/labor?country=jp&tab=wages', '/models/labor', <LaborMarketPage />)
+    expect(activeSections(html)).toContain('WAGES')
+  })
+  it('JP industrial tab=ppi restores PPI (BOJ)', () => {
+    const html = renderAt('/models/industrial?country=jp&tab=ppi', '/models/industrial', <IndustrialProductionPage />)
+    expect(activeSections(html)).toContain('PPI (BOJ)')
+  })
+  it('JP has no Fiscal — coming-soon with country bar intact (GAP by design)', () => {
+    const html = renderAt('/models/fiscal?country=jp', '/models/fiscal', <FiscalPage />)
+    expect(html).toContain('JAPAN fiscal models coming soon')
+    expect(html).toContain('>JAPAN<')
+  })
+  it('JP has no Housing — coming-soon with the fallback (US) section bar (deferred by design)', () => {
+    const html = renderAt('/models/housing?country=jp', '/models/housing', <HousingPage />)
+    expect(html).toContain('JAPAN housing models coming soon')
+  })
+})
+
 describe('ModelsPage landing', () => {
   it('shows category bar for UK (navigable) without coming-soon', () => {
     const html = renderAt('/models?country=uk', '/models', <ModelsPage />)
     expect(html).toContain('INFLATION')
     expect(html).not.toContain('models coming soon')
   })
-  it('shows coming-soon for countries without content', () => {
+  it('shows no coming-soon for JP (live country as of Japan Phase 3)', () => {
     const html = renderAt('/models?country=jp', '/models', <ModelsPage />)
-    expect(html).toContain('JAPAN models coming soon')
+    expect(html).not.toContain('models coming soon')
+  })
+  it('shows coming-soon for countries without content', () => {
+    const html = renderAt('/models?country=de', '/models', <ModelsPage />)
+    expect(html).toContain('GERMANY models coming soon')
   })
 })

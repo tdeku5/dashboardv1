@@ -9,6 +9,7 @@ import styles from './ModelsPage.module.css'
 const BankCreditDashboardContent = lazy(() => import('./BankCreditDashboardPage').then(m => ({ default: m.BankCreditDashboardContent })))
 const UKMoneyCreditContent = lazy(() => import('./UKMoneyCreditContent').then(m => ({ default: m.UKMoneyCreditContent })))
 const CAHouseholdCreditContent = lazy(() => import('./CAHouseholdCreditContent').then(m => ({ default: m.CAHouseholdCreditContent })))
+const JPBankLendingContent = lazy(() => import('./JPBankLendingContent').then(m => ({ default: m.JPBankLendingContent })))
 
 const CREDIT_SECTIONS = [
   { key: 'bank-credit', label: 'BANK CREDIT' },
@@ -24,10 +25,15 @@ const CA_CREDIT_SECTIONS = [
 
 // Single-section bars: no onSelectSection (static buttons, matching the
 // pre-map behavior where these bars had no click handlers).
+const JP_CREDIT_SECTIONS = [
+  { key: 'lending', label: 'BANK LENDING' },
+] as const
+
 const CREDIT_NAV: Record<string, CountrySections> = {
   us: { sections: CREDIT_SECTIONS, defaultKey: 'bank-credit', accent: '#f87171' },
   uk: { sections: UK_CREDIT_SECTIONS, defaultKey: 'money-credit', accent: '#14b8a6' },
   ca: { sections: CA_CREDIT_SECTIONS, defaultKey: 'household-credit', accent: '#f59e0b' },
+  jp: { sections: JP_CREDIT_SECTIONS, defaultKey: 'lending', accent: '#e879f9' },
 }
 
 export function CreditPage() {
@@ -65,6 +71,10 @@ export function CreditPage() {
         ) : country === 'ca' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <CAHouseholdCreditContent />
+          </Suspense>
+        ) : country === 'jp' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <JPBankLendingContent />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

@@ -20,6 +20,10 @@ const CACPIContent = lazy(() => import('./CACPIContent').then(m => ({ default: m
 const CACPIProjectionsContent = lazy(() => import('./CACPIProjectionsContent').then(m => ({ default: m.CACPIProjectionsContent })))
 const CAIPPIContent = lazy(() => import('./CAIPPIContent').then(m => ({ default: m.CAIPPIContent })))
 const CAOtherInflationContent = lazy(() => import('./CAOtherInflationContent').then(m => ({ default: m.CAOtherInflationContent })))
+const JPCPIContent = lazy(() => import('./JPCPIContent').then(m => ({ default: m.JPCPIContent })))
+const JPCPIProjectionsContent = lazy(() => import('./JPCPIProjectionsContent').then(m => ({ default: m.JPCPIProjectionsContent })))
+const JPTokyoCPIContent = lazy(() => import('./JPTokyoCPIContent').then(m => ({ default: m.JPTokyoCPIContent })))
+const JPOtherInflationContent = lazy(() => import('./JPOtherInflationContent').then(m => ({ default: m.JPOtherInflationContent })))
 
 const INFLATION_SECTIONS = [
   { key: 'cpi', label: 'CPI' },
@@ -47,10 +51,20 @@ const CA_INFLATION_SECTIONS = [
   { key: 'other', label: 'OTHER' },
 ] as const
 
+// Japan: PPI lives on the Industrial page (Phase 3 approval); Tokyo advance is
+// the leading CPI read (decision a). No PCE (no monthly consumption deflator).
+const JP_INFLATION_SECTIONS = [
+  { key: 'cpi', label: 'CPI' },
+  { key: 'cpi-proj', label: 'CPI PROJECTIONS' },
+  { key: 'tokyo', label: 'TOKYO ADVANCE' },
+  { key: 'other', label: 'OTHER' },
+] as const
+
 const INFLATION_NAV: Record<string, CountrySections> = {
   us: { sections: INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#f87171' },
   uk: { sections: UK_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#14b8a6' },
   ca: { sections: CA_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#f59e0b' },
+  jp: { sections: JP_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#e879f9' },
 }
 
 export function InflationPage() {
@@ -100,6 +114,13 @@ export function InflationPage() {
             {section === 'cpi-proj' && <CACPIProjectionsContent />}
             {section === 'ippi' && <CAIPPIContent />}
             {section === 'other' && <CAOtherInflationContent />}
+          </Suspense>
+        ) : country === 'jp' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'cpi' && <JPCPIContent />}
+            {section === 'cpi-proj' && <JPCPIProjectionsContent />}
+            {section === 'tokyo' && <JPTokyoCPIContent />}
+            {section === 'other' && <JPOtherInflationContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

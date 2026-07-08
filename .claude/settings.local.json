@@ -375,7 +375,12 @@
       "WebFetch(domain:www.stat-search.boj.or.jp)",
       "Bash(iconv -f SHIFT_JIS -t UTF-8)",
       "WebFetch(domain:www.stat.go.jp)",
-      "Bash(awk -F, '$2+0>0')"
+      "Bash(awk -F, '$2+0>0')",
+      "Bash(mkdir -p pv)",
+      "Bash(cp validate_palette.mjs pv/validate_palette.js)",
+      "Bash(echo '{\"type\":\"module\"}')",
+      "Bash(git stash *)",
+      "Bash(tee /tmp/claude-1000/-home-tdeku-dashboardv1/b59d007e-661d-487f-8a7d-0d9d73fee757/scratchpad/tsc.log)"
     ]
   },
   "sandbox": {

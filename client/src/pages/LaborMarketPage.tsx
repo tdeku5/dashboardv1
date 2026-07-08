@@ -24,6 +24,10 @@ const CAPayrollsContent = lazy(() => import('./CAPayrollsContent').then(m => ({ 
 const CAVacanciesContent = lazy(() => import('./CAVacanciesContent').then(m => ({ default: m.CAVacanciesContent })))
 const CAProductivityContent = lazy(() => import('./CAProductivityContent').then(m => ({ default: m.CAProductivityContent })))
 const CALaborProjectionContent = lazy(() => import('./CALaborProjectionContent').then(m => ({ default: m.CALaborProjectionContent })))
+const JPLFSContent = lazy(() => import('./JPLFSContent').then(m => ({ default: m.JPLFSContent })))
+const JPJobOffersContent = lazy(() => import('./JPJobOffersContent').then(m => ({ default: m.JPJobOffersContent })))
+const JPWagesContent = lazy(() => import('./JPWagesContent').then(m => ({ default: m.JPWagesContent })))
+const JPLaborProjectionContent = lazy(() => import('./JPLaborProjectionContent').then(m => ({ default: m.JPLaborProjectionContent })))
 
 const LABOR_SECTIONS = [
   { key: 'projection', label: 'U-3 PROJECTION' },
@@ -52,10 +56,20 @@ const CA_LABOR_SECTIONS = [
   { key: 'projection', label: 'PROJECTION' },
 ] as const
 
+// Japan: no weekly-claims concept; the job-offers ratio is the JOLTS analog;
+// WAGES is thin per decision (e) — full MLS wages are file-only and deferred.
+const JP_LABOR_SECTIONS = [
+  { key: 'lfs', label: 'LFS' },
+  { key: 'joboffers', label: 'JOB OFFERS' },
+  { key: 'wages', label: 'WAGES' },
+  { key: 'projection', label: 'PROJECTION' },
+] as const
+
 const LABOR_NAV: Record<string, CountrySections> = {
   us: { sections: LABOR_SECTIONS, defaultKey: 'cps', accent: '#f87171' },
   uk: { sections: UK_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#14b8a6' },
   ca: { sections: CA_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#f59e0b' },
+  jp: { sections: JP_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#e879f9' },
 }
 
 export function LaborMarketPage() {
@@ -109,6 +123,13 @@ export function LaborMarketPage() {
             {section === 'vacancies' && <CAVacanciesContent />}
             {section === 'productivity' && <CAProductivityContent />}
             {section === 'projection' && <CALaborProjectionContent />}
+          </Suspense>
+        ) : country === 'jp' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'lfs' && <JPLFSContent />}
+            {section === 'joboffers' && <JPJobOffersContent />}
+            {section === 'wages' && <JPWagesContent />}
+            {section === 'projection' && <JPLaborProjectionContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

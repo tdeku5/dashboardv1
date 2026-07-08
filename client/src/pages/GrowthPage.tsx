@@ -32,6 +32,9 @@ const CAConsumptionContent = lazy(() => import('./CAConsumptionContent').then(m 
 const CAHouseholdIncomeContent = lazy(() => import('./CAHouseholdIncomeContent').then(m => ({ default: m.CAHouseholdIncomeContent })))
 const CAGDPIncomeContent = lazy(() => import('./CAGDPIncomeContent').then(m => ({ default: m.CAGDPIncomeContent })))
 const CAConsumerHealthContent = lazy(() => import('./CAConsumerHealthContent').then(m => ({ default: m.CAConsumerHealthContent })))
+const JPGDPContent = lazy(() => import('./JPGDPContent').then(m => ({ default: m.JPGDPContent })))
+const JPConsumptionContent = lazy(() => import('./JPConsumptionContent').then(m => ({ default: m.JPConsumptionContent })))
+const JPTradeContent = lazy(() => import('./JPTradeContent').then(m => ({ default: m.JPTradeContent })))
 
 const GROWTH_SECTIONS = [
   { key: 'ngdp', label: 'NOMINAL GDP' },
@@ -68,10 +71,19 @@ const CA_GROWTH_SECTIONS = [
   { key: 'consumer', label: 'CONSUMER HEALTH' },
 ] as const
 
+// Japan: retail deferred (e-Stat DB frozen Jan-2025), GDI folded into GDP,
+// Consumer Health omitted (docs/jp-models-mapping.md).
+const JP_GROWTH_SECTIONS = [
+  { key: 'gdp', label: 'GDP' },
+  { key: 'consumption', label: 'CONSUMPTION' },
+  { key: 'trade', label: 'TRADE' },
+] as const
+
 const GROWTH_NAV: Record<string, CountrySections> = {
   us: { sections: GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#f87171' },
   uk: { sections: UK_GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#14b8a6' },
   ca: { sections: CA_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#f59e0b' },
+  jp: { sections: JP_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#e879f9' },
 }
 
 export function GrowthPage() {
@@ -135,6 +147,12 @@ export function GrowthPage() {
             {section === 'income' && <CAHouseholdIncomeContent />}
             {section === 'gdpi' && <CAGDPIncomeContent />}
             {section === 'consumer' && <CAConsumerHealthContent />}
+          </Suspense>
+        ) : country === 'jp' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'gdp' && <JPGDPContent />}
+            {section === 'consumption' && <JPConsumptionContent />}
+            {section === 'trade' && <JPTradeContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>
