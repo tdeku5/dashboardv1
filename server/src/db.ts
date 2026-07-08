@@ -1051,11 +1051,12 @@ db.exec(`
 export function storeEstatObservations(
   seriesCode: string,
   unit: string,
-  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>
+  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>,
+  source = 'eStat', // Japan trade totals live in this table with source 'Customs'
 ): number {
   const stmt = db.prepare(`
     INSERT INTO estat_observations (date, series_code, value, unit, obs_status, source, ingested_at)
-    VALUES (?, ?, ?, ?, ?, 'eStat', datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(date, series_code) DO UPDATE SET
       value = excluded.value,
       unit = excluded.unit,
@@ -1066,7 +1067,7 @@ export function storeEstatObservations(
   const tx = db.transaction(() => {
     for (const obs of observations) {
       if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
-      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsStatus ?? null)
+      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsStatus ?? null, source)
       n += 1
     }
   })
@@ -1085,6 +1086,66 @@ export function getEstatObservations(seriesCode: string): Array<{ date: string; 
 export function getEstatLatestDate(seriesCode: string): string | null {
   const row = db.prepare(`
     SELECT MAX(date) AS d FROM estat_observations WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
+// ── Bank of Japan Time-Series Data Search API ────────────────────────────────
+// Japanese financial-side series for the JP Economic Data Models (PPI PR01,
+// bank lending/deposits MD13). Same per-source table pattern. The BoJ requires
+// a UI attribution line ("uses the BoJ Time-Series Data Search API; content
+// not guaranteed by the Bank of Japan") — rendered on the consuming panels.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS bojts_observations (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_bojts_observations_code_date
+    ON bojts_observations(series_code, date ASC);
+`)
+
+export function storeBojTsObservations(
+  seriesCode: string,
+  unit: string,
+  observations: Array<{ date: string; value: number | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO bojts_observations (date, series_code, value, unit, ingested_at)
+    VALUES (?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getBojTsObservations(seriesCode: string): Array<{ date: string; value: number }> {
+  return db.prepare(`
+    SELECT date, value FROM bojts_observations
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number }>
+}
+
+export function getBojTsLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM bojts_observations WHERE series_code = ?
   `).get(seriesCode) as { d: string | null } | undefined
   return row?.d ?? null
 }

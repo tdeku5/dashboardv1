@@ -42,6 +42,11 @@ import { payeRtiRouter } from './routes/payeRti'
 import { syncPayeRti } from './payeRti'
 import { statcanRouter } from './routes/statcan'
 import { verifyStatcanMetadata, syncAllStatcanSeries } from './fetchAllStatcanSeries'
+import { estatRouter } from './routes/estat'
+import { verifyEstatMetadata, syncAllEstatSeries } from './fetchAllEstatSeries'
+import { bojTsRouter } from './routes/bojTs'
+import { syncBojTsSeries } from './bojTsCollector'
+import { syncJpTrade } from './jpTradeCsv'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
@@ -97,6 +102,8 @@ app.use('/api/uk-hpi',       ukHpiRouter)
 app.use('/api/hmrc-receipts', hmrcReceiptsRouter)
 app.use('/api/paye-rti',     payeRtiRouter)
 app.use('/api/statcan',      statcanRouter)
+app.use('/api/estat',        estatRouter)
+app.use('/api/boj-ts',       bojTsRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
@@ -265,6 +272,23 @@ async function startup(): Promise<void> {
     .then(() => syncAllStatcanSeries())
     .catch(err => console.error('[startup] StatCan WDS sync error:', err))
 
+  // Japan econ-model e-Stat series: metadata health check first (base-year
+  // renumbering + lang=E-hides-table defense), then full-refetch sync with
+  // frozen-feed staleness warnings.
+  verifyEstatMetadata()
+    .then(() => syncAllEstatSeries())
+    .catch(err => console.error('[startup] eStat generic sync error:', err))
+
+  // Japan BoJ Time-Series API (PPI + bank lending) — non-blocking.
+  syncBojTsSeries().catch(err =>
+    console.error('[startup] BoJ-TS sync error:', err)
+  )
+
+  // Japan merchandise trade totals — Customs CSV (full history each pull).
+  syncJpTrade().catch(err =>
+    console.error('[startup] JP trade sync error:', err)
+  )
+
   // BoE gilt yield curve sync (non-blocking)
   syncGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve sync error:', err)
@@ -360,6 +384,12 @@ async function startup(): Promise<void> {
     verifyStatcanMetadata()
       .then(() => syncAllStatcanSeries())
       .catch(err => console.error('[cron] StatCan WDS error:', err))
+    // Japan econ-model series (e-Stat health check + sync, BoJ, customs trade).
+    verifyEstatMetadata()
+      .then(() => syncAllEstatSeries())
+      .catch(err => console.error('[cron] eStat generic error:', err))
+    syncBojTsSeries().catch(err => console.error('[cron] BoJ-TS error:', err))
+    syncJpTrade().catch(err => console.error('[cron] JP trade error:', err))
     // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
     // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
     // overnight rates. Incremental sync is a no-op on days with no ECB release.)

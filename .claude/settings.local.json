@@ -360,7 +360,22 @@
       "Bash(ps -o pid,ppid,etime,cmd -p 3205)",
       "Bash(kill 8164)",
       "Bash(awk '{print $2, $9}')",
-      "Skill(dataviz)"
+      "Skill(dataviz)",
+      "Bash(JPLANG=1 python3 estat.py list \"毎月勤労統計調査 現金給与総額\")",
+      "Bash(JPLANG=1 python3 estat.py list \"毎月勤労統計調査 現金給与総額\" updatedDate=20250101-)",
+      "Bash(JPLANG=1 python3 estat.py list \"毎月勤労統計調査 現金給与総額 実数\" updatedDate=2026)",
+      "Bash(JPLANG=1 python3 estat.py list \"毎月勤労統計調査\" updatedDate=2026 limit=15)",
+      "Bash(JPLANG=1 python3 *)",
+      "Bash(sort -u -t'|' -k4)",
+      "Bash(awk -F'|' '{print $4}')",
+      "WebFetch(domain:www.mhlw.go.jp)",
+      "WebFetch(domain:www.mlit.go.jp)",
+      "WebFetch(domain:www.e-stat.go.jp)",
+      "WebFetch(domain:ignite-biz.net)",
+      "WebFetch(domain:www.stat-search.boj.or.jp)",
+      "Bash(iconv -f SHIFT_JIS -t UTF-8)",
+      "WebFetch(domain:www.stat.go.jp)",
+      "Bash(awk -F, '$2+0>0')"
     ]
   },
   "sandbox": {
