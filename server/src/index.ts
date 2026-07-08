@@ -47,6 +47,8 @@ import { verifyEstatMetadata, syncAllEstatSeries } from './fetchAllEstatSeries'
 import { bojTsRouter } from './routes/bojTs'
 import { syncBojTsSeries } from './bojTsCollector'
 import { syncJpTrade } from './jpTradeCsv'
+import { eurostatRouter } from './routes/eurostat'
+import { verifyEurostatMetadata, syncAllEurostatSeries } from './fetchAllEurostatSeries'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
 import { globalRouter } from './routes/global'
@@ -104,6 +106,7 @@ app.use('/api/paye-rti',     payeRtiRouter)
 app.use('/api/statcan',      statcanRouter)
 app.use('/api/estat',        estatRouter)
 app.use('/api/boj-ts',       bojTsRouter)
+app.use('/api/eurostat',     eurostatRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
@@ -289,6 +292,13 @@ async function startup(): Promise<void> {
     console.error('[startup] JP trade sync error:', err)
   )
 
+  // EU3 (DE/FR/IT) Eurostat series: dataset metadata health check first
+  // (dimension-order + title assertions), then geo-batched full sync. The
+  // country-level ECB series ride the existing ECB syncIncremental above.
+  verifyEurostatMetadata()
+    .then(() => syncAllEurostatSeries())
+    .catch(err => console.error('[startup] Eurostat sync error:', err))
+
   // BoE gilt yield curve sync (non-blocking)
   syncGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve sync error:', err)
@@ -390,6 +400,10 @@ async function startup(): Promise<void> {
       .catch(err => console.error('[cron] eStat generic error:', err))
     syncBojTsSeries().catch(err => console.error('[cron] BoJ-TS error:', err))
     syncJpTrade().catch(err => console.error('[cron] JP trade error:', err))
+    // EU3 Eurostat series (health check then sync).
+    verifyEurostatMetadata()
+      .then(() => syncAllEurostatSeries())
+      .catch(err => console.error('[cron] Eurostat error:', err))
     // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
     // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
     // overnight rates. Incremental sync is a no-op on days with no ECB release.)

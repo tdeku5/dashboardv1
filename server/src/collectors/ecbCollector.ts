@@ -44,8 +44,8 @@ const ECB_BASE = 'https://data-api.ecb.europa.eu/service/data'
 
 interface EcbSeriesDef {
   code: string         // dashboard series_code stored in ecb_observations
-  unit: 'index' | 'percent'
-  dataflow: string     // SDMX dataflow, e.g. 'ICP' or 'LFSI'
+  unit: 'index' | 'percent' | 'mio_eur'
+  dataflow: string     // SDMX dataflow, e.g. 'HICP', 'LFSI' or 'BSI'
   key: string          // SDMX series key
 }
 
@@ -67,6 +67,58 @@ const SERIES: EcbSeriesDef[] = [
   // ── Labor (SA at source) — unaffected by the HICP migration ──
   { code: 'UNRATE_EA',      unit: 'percent', dataflow: 'LFSI', key: 'M.I9.S.UNEHRT.TOTAL0.15_74.T' },
 ]
+
+// ── DE/FR/IT country series (EU3 econ models, docs/eu3-models-mapping.md) ────
+// Additive extension (Phase 2, 2026-07): country-level HICP on the same
+// post-migration `HICP` dataflow (2025=100, NSA — no country SA exists on the
+// portal), LFSI unemployment, and BSI bank lending (decision h, verified).
+// The euro-area entries above are the rates-model's and stay untouched; these
+// country entries only ADD to the same config array and reuse all logic.
+
+const EU3_GEOS = ['DE', 'FR', 'IT'] as const
+
+// ICP_ITEM → code suffix. Verified live against the DE item list (435 items);
+// all items exist identically for FR/IT (same codelist, e-COICOP 2).
+const EU3_HICP_ITEMS: ReadonlyArray<[item: string, suffix: string]> = [
+  ['000000', 'HICP'],           // All items
+  ['XEF000', 'HICP_XEF'],       // ex energy, food, alcohol & tobacco (US-core analog)
+  ['XEFUN0', 'HICP_XEFUN'],     // ex energy & unprocessed food (ECB core)
+  // 12 COICOP divisions
+  ['010000', 'HICP_CP01'], ['020000', 'HICP_CP02'], ['030000', 'HICP_CP03'],
+  ['040000', 'HICP_CP04'], ['050000', 'HICP_CP05'], ['060000', 'HICP_CP06'],
+  ['070000', 'HICP_CP07'], ['080000', 'HICP_CP08'], ['090000', 'HICP_CP09'],
+  ['100000', 'HICP_CP10'], ['110000', 'HICP_CP11'], ['120000', 'HICP_CP12'],
+  // Special aggregates
+  ['NRGY00', 'HICP_ENERGY'], ['FOOD00', 'HICP_FOOD'], ['FOODUN', 'HICP_FOODUN'],
+  ['SERV00', 'HICP_SERVICES'], ['GOODS0', 'HICP_GOODS'], ['IGXE00', 'HICP_NEIG'],
+  ['IGXEDU', 'HICP_DUR'], ['IGXEND', 'HICP_NONDUR'], ['IGXESD', 'HICP_SEMIDUR'],
+  // Distribution sub-items (27; e-COICOP 2 — no tobacco item exists post-restructure)
+  ['011100', 'HICP_D_CEREALS'], ['011200', 'HICP_D_MEAT'], ['011300', 'HICP_D_FISH'],
+  ['011400', 'HICP_D_DAIRY'], ['011600', 'HICP_D_FRUIT'], ['011700', 'HICP_D_VEG'],
+  ['021000', 'HICP_D_ALCOHOL'], ['031000', 'HICP_D_CLOTHING'], ['041000', 'HICP_D_RENTS'],
+  ['043000', 'HICP_D_MAINT'], ['044000', 'HICP_D_WATER'], ['045100', 'HICP_D_ELECTRICITY'],
+  ['045200', 'HICP_D_GAS'], ['045300', 'HICP_D_LIQFUEL'], ['051000', 'HICP_D_FURNITURE'],
+  ['053000', 'HICP_D_APPLIANCES'], ['061000', 'HICP_D_MEDICINES'], ['071100', 'HICP_D_CARS'],
+  ['072200', 'HICP_D_MOTORFUEL'], ['073000', 'HICP_D_TRANSPSVC'], ['081000', 'HICP_D_ICTEQUIP'],
+  ['083000', 'HICP_D_ICTSVC'], ['095000', 'HICP_D_CULTGOODS'], ['096000', 'HICP_D_CULTSVC'],
+  ['111000', 'HICP_D_RESTAURANTS'], ['112000', 'HICP_D_ACCOMM'], ['121000', 'HICP_D_INSURANCE'],
+]
+
+const EU3_SERIES: EcbSeriesDef[] = EU3_GEOS.flatMap(cc => [
+  ...EU3_HICP_ITEMS.map(([item, suffix]): EcbSeriesDef => ({
+    code: `${cc}_${suffix}`, unit: 'index',
+    dataflow: 'HICP', key: `M.${cc}.N.${item}.4D0.INX`,
+  })),
+  // Unemployment rate (SA) — same LFSI conventions as UNRATE_EA
+  { code: `UNRATE_${cc}`, unit: 'percent', dataflow: 'LFSI', key: `M.${cc}.S.UNEHRT.TOTAL0.15_74.T` },
+  // BSI bank lending (decision h — verified live: DE HH €2,110bn May-26, +2.18% YoY)
+  { code: `${cc}_LOANS_HH`, unit: 'mio_eur', dataflow: 'BSI', key: `M.${cc}.N.A.A20.A.1.U2.2250.Z01.E` },
+  { code: `${cc}_LOANS_NFC`, unit: 'mio_eur', dataflow: 'BSI', key: `M.${cc}.N.A.A20.A.1.U2.2240.Z01.E` },
+  { code: `${cc}_LOANS_HH_YOY`, unit: 'percent', dataflow: 'BSI', key: `M.${cc}.N.A.A20.A.I.U2.2250.Z01.A` },
+  { code: `${cc}_LOANS_NFC_YOY`, unit: 'percent', dataflow: 'BSI', key: `M.${cc}.N.A.A20.A.I.U2.2240.Z01.A` },
+])
+
+SERIES.push(...EU3_SERIES)
 
 const BACKFILL_START = '2000-01'
 
@@ -167,10 +219,15 @@ function nextMonthPeriod(isoDate: string): string {
   return `${ny}-${String(nm).padStart(2, '0')}`
 }
 
-// Full history for all four series from 2000-01.
+// Polite spacing between requests now that the EU3 extension takes the config
+// from 7 to ~175 series (ECB asks for restraint; 150ms ≈ 6-7 req/s).
+const throttle = () => new Promise<void>(r => setTimeout(r, 150))
+
+// Full history for all series from 2000-01.
 export async function backfill(): Promise<void> {
   console.log('[ECB] backfill starting…')
   for (const def of SERIES) {
+    await throttle()
     const obs = await fetchSeries(def, BACKFILL_START)
     const n = storeEcbObservations(def.code, def.unit, obs)
     console.log(`[ECB] backfill ${def.code}: ${n} rows (${obs[0]?.date ?? '—'} → ${obs[obs.length - 1]?.date ?? '—'})`)
@@ -183,6 +240,7 @@ export async function backfill(): Promise<void> {
 // startup/cron call handles both the empty and steady-state cases).
 export async function syncIncremental(): Promise<void> {
   for (const def of SERIES) {
+    await throttle()
     const latest = getEcbLatestDate(def.code)
     const start = latest ? nextMonthPeriod(latest) : BACKFILL_START
     const obs = await fetchSeries(def, start)

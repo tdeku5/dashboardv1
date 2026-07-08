@@ -380,7 +380,12 @@
       "Bash(cp validate_palette.mjs pv/validate_palette.js)",
       "Bash(echo '{\"type\":\"module\"}')",
       "Bash(git stash *)",
-      "Bash(tee /tmp/claude-1000/-home-tdeku-dashboardv1/b59d007e-661d-487f-8a7d-0d9d73fee757/scratchpad/tsc.log)"
+      "Bash(tee /tmp/claude-1000/-home-tdeku-dashboardv1/b59d007e-661d-487f-8a7d-0d9d73fee757/scratchpad/tsc.log)",
+      "Bash(awk -F, 'NR>1 {print $5}' /tmp/claude-1000/-home-tdeku-dashboardv1/b59d007e-661d-487f-8a7d-0d9d73fee757/scratchpad/de_items.csv)",
+      "Bash(awk -F, 'NR>1 {print $5}' de_items.csv)",
+      "Bash(command -v jq)",
+      "Bash(command -v python3)",
+      "Bash(awk -F, '$10==\"p\"')"
     ]
   },
   "sandbox": {

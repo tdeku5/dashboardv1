@@ -1150,6 +1150,69 @@ export function getBojTsLatestDate(seriesCode: string): string | null {
   return row?.d ?? null
 }
 
+// ── Eurostat dissemination API ───────────────────────────────────────────────
+// DE/FR/IT real-economy series for the EU3 economic models
+// (fetchAllEurostatSeries.ts). obs_flag captures Eurostat's status letters —
+// `b` break-in-series, `p` provisional, `e` estimate, `d` definition-differs,
+// `u` low-reliability — which the frontend surfaces (German permits e-flags,
+// unemployment break markers).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eurostat_observations (
+    date        TEXT NOT NULL,
+    series_code TEXT NOT NULL,
+    value       REAL,
+    unit        TEXT,
+    obs_flag    TEXT,
+    ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (date, series_code)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_eurostat_observations_code_date
+    ON eurostat_observations(series_code, date ASC);
+`)
+
+export function storeEurostatObservations(
+  seriesCode: string,
+  unit: string,
+  observations: Array<{ date: string; value: number | null; obsFlag?: string | null }>
+): number {
+  const stmt = db.prepare(`
+    INSERT INTO eurostat_observations (date, series_code, value, unit, obs_flag, ingested_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'))
+    ON CONFLICT(date, series_code) DO UPDATE SET
+      value = excluded.value,
+      unit = excluded.unit,
+      obs_flag = excluded.obs_flag,
+      ingested_at = excluded.ingested_at
+  `)
+  let n = 0
+  const tx = db.transaction(() => {
+    for (const obs of observations) {
+      if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
+      stmt.run(obs.date, seriesCode, obs.value, unit, obs.obsFlag ?? null)
+      n += 1
+    }
+  })
+  tx()
+  return n
+}
+
+export function getEurostatObservations(seriesCode: string): Array<{ date: string; value: number; obs_flag: string | null }> {
+  return db.prepare(`
+    SELECT date, value, obs_flag FROM eurostat_observations
+    WHERE series_code = ? AND value IS NOT NULL
+    ORDER BY date ASC
+  `).all(seriesCode) as Array<{ date: string; value: number; obs_flag: string | null }>
+}
+
+export function getEurostatLatestDate(seriesCode: string): string | null {
+  const row = db.prepare(`
+    SELECT MAX(date) AS d FROM eurostat_observations WHERE series_code = ?
+  `).get(seriesCode) as { d: string | null } | undefined
+  return row?.d ?? null
+}
+
 // ── Australian Bureau of Statistics (ABS Data API, SDMX) ─────────────────────
 // Australian macro series for the AUD rates fundamental model. Same per-source
 // table pattern as the other macro collectors. Unlike the others, Australian CPI
