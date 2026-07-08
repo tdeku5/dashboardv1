@@ -49,6 +49,8 @@ import { syncBojTsSeries } from './bojTsCollector'
 import { syncJpTrade } from './jpTradeCsv'
 import { eurostatRouter } from './routes/eurostat'
 import { ecbRouter } from './routes/ecb'
+import { absRouter } from './routes/abs'
+import { verifyAbsEconMetadata, syncAllAbsSeries } from './fetchAllAbsSeries'
 import { verifyEurostatMetadata, syncAllEurostatSeries } from './fetchAllEurostatSeries'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
@@ -109,6 +111,7 @@ app.use('/api/estat',        estatRouter)
 app.use('/api/boj-ts',       bojTsRouter)
 app.use('/api/eurostat',     eurostatRouter)
 app.use('/api/ecb',          ecbRouter)
+app.use('/api/abs',          absRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)
@@ -301,6 +304,12 @@ async function startup(): Promise<void> {
     .then(() => syncAllEurostatSeries())
     .catch(err => console.error('[startup] Eurostat sync error:', err))
 
+  // Australia econ-model ABS series: DSD-label health check first (rebase/
+  // recode defense), then incremental sync with frozen-feed warnings.
+  verifyAbsEconMetadata()
+    .then(() => syncAllAbsSeries())
+    .catch(err => console.error('[startup] ABS econ sync error:', err))
+
   // BoE gilt yield curve sync (non-blocking)
   syncGiltYieldCurves().catch(err =>
     console.error('[startup] Gilt yield curve sync error:', err)
@@ -406,6 +415,10 @@ async function startup(): Promise<void> {
     verifyEurostatMetadata()
       .then(() => syncAllEurostatSeries())
       .catch(err => console.error('[cron] Eurostat error:', err))
+    // Australia econ-model ABS series.
+    verifyAbsEconMetadata()
+      .then(() => syncAllAbsSeries())
+      .catch(err => console.error('[cron] ABS econ error:', err))
     // ECB (HICP + euro-area unemployment) — macro collector, runs with ONS/BoE/FRED.
     // (The other macro collectors share this 06:00 slot; 03:00 is reserved for
     // overnight rates. Incremental sync is a no-op on days with no ECB release.)

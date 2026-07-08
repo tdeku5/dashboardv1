@@ -1238,26 +1238,37 @@ db.exec(`
     ON au_macro_series(series_code, date ASC);
 `)
 
+// Additive migration (AU econ models, 2026-07): capture ABS OBS_STATUS flags
+// (TVD p=preliminary / r=revised; JV q=suspension) per the flag-surfacing
+// convention. Guarded — no-op when the column already exists.
+{
+  const cols = db.prepare(`PRAGMA table_info(au_macro_series)`).all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'obs_status')) {
+    db.exec(`ALTER TABLE au_macro_series ADD COLUMN obs_status TEXT`)
+  }
+}
+
 export function storeAbsObservations(
   seriesCode: string,
   unit: string,
   frequency: string,
-  observations: Array<{ date: string; value: number | null }>
+  observations: Array<{ date: string; value: number | null; obsStatus?: string | null }>
 ): number {
   const stmt = db.prepare(`
-    INSERT INTO au_macro_series (date, series_code, value, unit, frequency, source, ingested_at)
-    VALUES (?, ?, ?, ?, ?, 'ABS', datetime('now'))
+    INSERT INTO au_macro_series (date, series_code, value, unit, frequency, obs_status, source, ingested_at)
+    VALUES (?, ?, ?, ?, ?, ?, 'ABS', datetime('now'))
     ON CONFLICT(date, series_code) DO UPDATE SET
       value = excluded.value,
       unit = excluded.unit,
       frequency = excluded.frequency,
+      obs_status = excluded.obs_status,
       ingested_at = excluded.ingested_at
   `)
   let n = 0
   const tx = db.transaction(() => {
     for (const obs of observations) {
       if (obs.value === null || obs.value === undefined || !Number.isFinite(obs.value)) continue
-      stmt.run(obs.date, seriesCode, obs.value, unit, frequency)
+      stmt.run(obs.date, seriesCode, obs.value, unit, frequency, obs.obsStatus ?? null)
       n += 1
     }
   })
@@ -1265,12 +1276,12 @@ export function storeAbsObservations(
   return n
 }
 
-export function getAbsObservations(seriesCode: string): Array<{ date: string; value: number }> {
+export function getAbsObservations(seriesCode: string): Array<{ date: string; value: number; obs_status: string | null }> {
   return db.prepare(`
-    SELECT date, value FROM au_macro_series
+    SELECT date, value, obs_status FROM au_macro_series
     WHERE series_code = ? AND value IS NOT NULL
     ORDER BY date ASC
-  `).all(seriesCode) as Array<{ date: string; value: number }>
+  `).all(seriesCode) as Array<{ date: string; value: number; obs_status: string | null }>
 }
 
 export function getAbsLatestDate(seriesCode: string): string | null {
