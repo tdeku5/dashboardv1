@@ -287,3 +287,36 @@ empirically-resolved IDs and warns that prior guide docs were wrong; read it bef
   a registered user token; fiscal is quarterly Eurostat (`gov_10q_ggnfa`-family — verify).
 - Phase 1 to verify: everything beyond HICP/unemployment — Destatis (VPI, IP `42153`-family,
   Ifo is private), INSEE BDM series, ISTAT SDMX.
+
+---
+
+## Closing Addendum (2026-07-08) — Program Complete: Eight Countries
+
+US, UK, Canada, Japan, Germany, France, Italy, Australia — every country in the nav is live.
+The consolidated deferred-items backlog lives in `docs/au-models-mapping.md` (Phase 3 addendum).
+Lessons from the final run worth carrying to any future source integration:
+
+1. **Derive tolerances, don't tune them.** Australia's GDP contributions-sum assertion failed
+   honestly (99/159 quarters) until the missing statistical-discrepancy component was added and
+   the tolerance DERIVED from first principles (nine values published to 0.1pp → 0.45pp
+   worst-case envelope; observed worst 0.40). A tuned tolerance would have hidden the missing
+   component. Assertions should encode arithmetic, not vibes.
+2. **Dual-frequency design (the AU CPI pattern).** When one concept lives at two frequencies on
+   different bases: distinct series codes + a frequency column at the schema layer; [MONTHLY]/
+   [QUARTERLY] tags in every panel title; levels never share an axis across bases (rates are
+   base-invariant and may overlay); long-history panels key off the long series; the young
+   series carries its floor caption everywhere it appears.
+3. **Dead feeds are a first-class mapping outcome.** Three live ABS discontinuations (Retail
+   Trade, Payroll Jobs, RPPI) each changed a page's shape. The pattern held in Japan (MLS/
+   retail/housing frozen DB) and the EU (dead ICP dataflow). Always check the LATEST period,
+   not just series existence — and encode staleness thresholds so tomorrow's discontinuation
+   announces itself.
+4. **Inputs determine the model's frequency.** The labor-projection tab was omitted for the EU3
+   (quarterly inputs) and built for Australia (monthly inputs) — one principle, applied twice,
+   recorded once.
+5. **Rates-side collectors are reconnaissance.** Every country's hardest discovery question had
+   already been answered empirically by the small rates-side collector (JP time codes, EU dead
+   dataflow + migration, AU dual-frequency flows + version-URL quirk). Read the sibling first.
+6. **Preserve fallback coverage synthetically.** With no contentless country left, the nav's
+   coming-soon path would have silently lost test coverage — a vi.mocked synthetic country
+   (navFallback.test.tsx) keeps the future-country path exercised.

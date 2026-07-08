@@ -27,6 +27,10 @@ const JPOtherInflationContent = lazy(() => import('./JPOtherInflationContent').t
 const EU3HICPContent = lazy(() => import('./EU3HICPContent').then(m => ({ default: m.EU3HICPContent })))
 const EU3HICPProjectionsContent = lazy(() => import('./EU3HICPProjectionsContent').then(m => ({ default: m.EU3HICPProjectionsContent })))
 const EU3OtherInflationContent = lazy(() => import('./EU3OtherInflationContent').then(m => ({ default: m.EU3OtherInflationContent })))
+const AUCPIContent = lazy(() => import('./AUCPIContent').then(m => ({ default: m.AUCPIContent })))
+const AUCPIProjectionsContent = lazy(() => import('./AUCPIProjectionsContent').then(m => ({ default: m.AUCPIProjectionsContent })))
+const AUPPIContent = lazy(() => import('./AUPPIContent').then(m => ({ default: m.AUPPIContent })))
+const AUOtherInflationContent = lazy(() => import('./AUOtherInflationContent').then(m => ({ default: m.AUOtherInflationContent })))
 
 const INFLATION_SECTIONS = [
   { key: 'cpi', label: 'CPI' },
@@ -79,6 +83,17 @@ const INFLATION_NAV: Record<string, CountrySections> = {
   de: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#a3e635' },
   fr: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#60a5fa' },
   it: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#34d399' },
+  // Australia: dual-frequency CPI centerpiece; OTHER = the monthly-only
+  // special aggregates (docs/au-models-mapping.md decision a).
+  au: {
+    sections: [
+      { key: 'cpi', label: 'CPI' },
+      { key: 'cpi-proj', label: 'CPI PROJECTIONS' },
+      { key: 'ppi', label: 'PPI' },
+      { key: 'other', label: 'OTHER' },
+    ],
+    defaultKey: 'cpi', accent: '#facc15',
+  },
 }
 
 const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
@@ -143,6 +158,13 @@ export function InflationPage() {
             {section === 'hicp' && <EU3HICPContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'hicp-proj' && <EU3HICPProjectionsContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'other' && <EU3OtherInflationContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+          </Suspense>
+        ) : country === 'au' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'cpi' && <AUCPIContent />}
+            {section === 'cpi-proj' && <AUCPIProjectionsContent />}
+            {section === 'ppi' && <AUPPIContent />}
+            {section === 'other' && <AUOtherInflationContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

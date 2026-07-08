@@ -39,6 +39,10 @@ const EU3GDPContent = lazy(() => import('./EU3GDPContent').then(m => ({ default:
 const EU3RetailContent = lazy(() => import('./EU3RetailContent').then(m => ({ default: m.EU3RetailContent })))
 const EU3TradeContent = lazy(() => import('./EU3TradeContent').then(m => ({ default: m.EU3TradeContent })))
 const EU3SentimentContent = lazy(() => import('./EU3SentimentContent').then(m => ({ default: m.EU3SentimentContent })))
+const AUGDPContent = lazy(() => import('./AUGDPContent').then(m => ({ default: m.AUGDPContent })))
+const AUSpendingContent = lazy(() => import('./AUSpendingContent').then(m => ({ default: m.AUSpendingContent })))
+const AUTradeContent = lazy(() => import('./AUTradeContent').then(m => ({ default: m.AUTradeContent })))
+const AUBusinessContent = lazy(() => import('./AUBusinessContent').then(m => ({ default: m.AUBusinessContent })))
 
 const GROWTH_SECTIONS = [
   { key: 'ngdp', label: 'NOMINAL GDP' },
@@ -100,6 +104,17 @@ const GROWTH_NAV: Record<string, CountrySections> = {
   de: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#a3e635' },
   fr: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#60a5fa' },
   it: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#34d399' },
+  // Australia: SPENDING = HSI (Retail Trade survey discontinued mid-2025);
+  // BUSINESS = QBIS profits + inventories (docs/au-models-mapping.md).
+  au: {
+    sections: [
+      { key: 'gdp', label: 'GDP' },
+      { key: 'spending', label: 'SPENDING' },
+      { key: 'trade', label: 'TRADE' },
+      { key: 'business', label: 'BUSINESS' },
+    ],
+    defaultKey: 'gdp', accent: '#facc15',
+  },
 }
 
 const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
@@ -178,6 +193,13 @@ export function GrowthPage() {
             {section === 'retail' && <EU3RetailContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'trade' && <EU3TradeContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'sentiment' && <EU3SentimentContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+          </Suspense>
+        ) : country === 'au' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'gdp' && <AUGDPContent />}
+            {section === 'spending' && <AUSpendingContent />}
+            {section === 'trade' && <AUTradeContent />}
+            {section === 'business' && <AUBusinessContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

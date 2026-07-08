@@ -32,6 +32,12 @@ const EU3UnemploymentContent = lazy(() => import('./EU3UnemploymentContent').the
 const EU3EmploymentContent = lazy(() => import('./EU3EmploymentContent').then(m => ({ default: m.EU3EmploymentContent })))
 const EU3VacanciesContent = lazy(() => import('./EU3VacanciesContent').then(m => ({ default: m.EU3VacanciesContent })))
 const EU3LabourCostsContent = lazy(() => import('./EU3LabourCostsContent').then(m => ({ default: m.EU3LabourCostsContent })))
+const AULabourForceContent = lazy(() => import('./AULabourForceContent').then(m => ({ default: m.AULabourForceContent })))
+const AUEmploymentContent = lazy(() => import('./AUEmploymentContent').then(m => ({ default: m.AUEmploymentContent })))
+const AUUnderutilisationContent = lazy(() => import('./AUUnderutilisationContent').then(m => ({ default: m.AUUnderutilisationContent })))
+const AUVacanciesContent = lazy(() => import('./AUVacanciesContent').then(m => ({ default: m.AUVacanciesContent })))
+const AUWagesContent = lazy(() => import('./AUWagesContent').then(m => ({ default: m.AUWagesContent })))
+const AULaborProjectionContent = lazy(() => import('./AULaborProjectionContent').then(m => ({ default: m.AULaborProjectionContent })))
 
 const LABOR_SECTIONS = [
   { key: 'projection', label: 'U-3 PROJECTION' },
@@ -86,6 +92,19 @@ const LABOR_NAV: Record<string, CountrySections> = {
   de: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#a3e635' },
   fr: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#60a5fa' },
   it: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#34d399' },
+  // Australia: no payrolls tab (STP series discontinued Jul-2025 — decision c);
+  // PROJECTION builds because all inputs are monthly (decision h, vs the EU3 omit).
+  au: {
+    sections: [
+      { key: 'labour-force', label: 'LABOUR FORCE' },
+      { key: 'employment', label: 'EMPLOYMENT' },
+      { key: 'underutilisation', label: 'UNDERUTILISATION' },
+      { key: 'vacancies', label: 'VACANCIES' },
+      { key: 'wages', label: 'WAGES' },
+      { key: 'projection', label: 'PROJECTION' },
+    ],
+    defaultKey: 'labour-force', accent: '#facc15',
+  },
 }
 
 const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
@@ -155,6 +174,15 @@ export function LaborMarketPage() {
             {section === 'employment' && <EU3EmploymentContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'vacancies' && <EU3VacanciesContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
             {section === 'labour-costs' && <EU3LabourCostsContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+          </Suspense>
+        ) : country === 'au' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'labour-force' && <AULabourForceContent />}
+            {section === 'employment' && <AUEmploymentContent />}
+            {section === 'underutilisation' && <AUUnderutilisationContent />}
+            {section === 'vacancies' && <AUVacanciesContent />}
+            {section === 'wages' && <AUWagesContent />}
+            {section === 'projection' && <AULaborProjectionContent />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

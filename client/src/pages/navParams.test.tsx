@@ -56,7 +56,10 @@ describe('?country= selects the country branch', () => {
     const html = renderAt('/models/inflation?country=xx', '/models/inflation', <InflationPage />)
     expect(html).toContain('PCE PROJECTIONS')
   })
-  it('country without content shows coming-soon with country bar intact', () => {
+  it('category absent for a live country shows coming-soon with country bar intact', () => {
+    // Australia is live but has no Fiscal (GAP by design) — the same fallback
+    // path serves absent categories. Synthetic unknown-country coverage lives
+    // in navFallback.test.tsx.
     const html = renderAt('/models/fiscal?country=au', '/models/fiscal', <FiscalPage />)
     expect(html).toContain('AUSTRALIA fiscal models coming soon')
     expect(html).toContain('>AUSTRALIA<') // country bar still rendered
@@ -151,9 +154,41 @@ describe('ModelsPage landing', () => {
     const html = renderAt('/models?country=jp', '/models', <ModelsPage />)
     expect(html).not.toContain('models coming soon')
   })
-  it('shows coming-soon for countries without content', () => {
+  it('shows no coming-soon for AU (live as of the final replication)', () => {
     const html = renderAt('/models?country=au', '/models', <ModelsPage />)
-    expect(html).toContain('AUSTRALIA models coming soon')
+    expect(html).not.toContain('models coming soon')
+  })
+})
+
+describe('Australia country params (final country, Phase 3)', () => {
+  it('country=au renders the Australia inflation branch (dual-frequency CPI)', () => {
+    const html = renderAt('/models/inflation?country=au', '/models/inflation', <InflationPage />)
+    expect(html).toContain('CPI PROJECTIONS')
+    expect(html).not.toContain('PCE PROJECTIONS')
+    expect(activeSections(html)).toContain('CPI')
+  })
+  it('categoryPath carries country=au', () => {
+    expect(categoryPath('/models/labor', 'au')).toBe('/models/labor?country=au')
+  })
+  it('AU labor defaults to LABOUR FORCE (invalid tab falls back)', () => {
+    const html = renderAt('/models/labor?country=au&tab=zzz', '/models/labor', <LaborMarketPage />)
+    expect(activeSections(html)).toContain('LABOUR FORCE')
+  })
+  it('AU labor tab=underutilisation deep link restores UNDERUTILISATION', () => {
+    const html = renderAt('/models/labor?country=au&tab=underutilisation', '/models/labor', <LaborMarketPage />)
+    expect(activeSections(html)).toContain('UNDERUTILISATION')
+  })
+  it('AU growth tab=business deep link restores BUSINESS', () => {
+    const html = renderAt('/models/growth?country=au&tab=business', '/models/growth', <GrowthPage />)
+    expect(activeSections(html)).toContain('BUSINESS')
+  })
+  it('AU housing tab=prices-lending deep link restores PRICES & LENDING', () => {
+    const html = renderAt('/models/housing?country=au&tab=prices-lending', '/models/housing', <HousingPage />)
+    expect(activeSections(html)).toContain('PRICES &amp; LENDING') // static markup escapes &
+  })
+  it('AU has no Industrial — coming-soon fallback (no IP index exists)', () => {
+    const html = renderAt('/models/industrial?country=au', '/models/industrial', <IndustrialProductionPage />)
+    expect(html).toContain('AUSTRALIA industrial production models coming soon')
   })
 })
 

@@ -85,6 +85,22 @@ import { EU3HousingContent } from './EU3HousingContent'
 import { EU3FiscalContent } from './EU3FiscalContent'
 import { EU3LendingContent } from './EU3LendingContent'
 
+import { AUCPIContent } from './AUCPIContent'
+import { AUCPIProjectionsContent } from './AUCPIProjectionsContent'
+import { AUPPIContent } from './AUPPIContent'
+import { AUOtherInflationContent } from './AUOtherInflationContent'
+import { AUGDPContent } from './AUGDPContent'
+import { AUSpendingContent } from './AUSpendingContent'
+import { AUTradeContent } from './AUTradeContent'
+import { AUBusinessContent } from './AUBusinessContent'
+import { AULabourForceContent } from './AULabourForceContent'
+import { AUEmploymentContent } from './AUEmploymentContent'
+import { AUUnderutilisationContent } from './AUUnderutilisationContent'
+import { AUVacanciesContent } from './AUVacanciesContent'
+import { AUWagesContent } from './AUWagesContent'
+import { AULaborProjectionContent } from './AULaborProjectionContent'
+import { AUHousingContent } from './AUHousingContent'
+
 describe('US pages consuming refactored shared components', () => {
   it('RetailSalesDashboardPage renders', () => {
     const html = renderToStaticMarkup(<MemoryRouter><RetailSalesDashboardPage /></MemoryRouter>)
@@ -221,6 +237,33 @@ describe('EU3 content components render (parameterized, all three countries)', (
     ['EU3FiscalContent (DE debt)', () => <EU3FiscalContent cc="DE" section="debt" />],
     ['EU3LendingContent (DE)', () => <EU3LendingContent cc="DE" />],
     ['EU3LendingContent (FR)', () => <EU3LendingContent cc="FR" />],
+  ]
+  for (const [name, make] of cases) {
+    it(`${name} renders`, () => {
+      const html = renderToStaticMarkup(<MemoryRouter>{make()}</MemoryRouter>)
+      expect(html.length).toBeGreaterThan(0)
+    })
+  }
+})
+
+describe('Australia content components render (final country)', () => {
+  const cases: Array<[string, () => JSX.Element]> = [
+    ['AUCPIContent', () => <AUCPIContent />],
+    ['AUCPIProjectionsContent', () => <AUCPIProjectionsContent />],
+    ['AUPPIContent', () => <AUPPIContent />],
+    ['AUOtherInflationContent', () => <AUOtherInflationContent />],
+    ['AUGDPContent', () => <AUGDPContent />],
+    ['AUSpendingContent', () => <AUSpendingContent />],
+    ['AUTradeContent', () => <AUTradeContent />],
+    ['AUBusinessContent', () => <AUBusinessContent />],
+    ['AULabourForceContent', () => <AULabourForceContent />],
+    ['AUEmploymentContent', () => <AUEmploymentContent />],
+    ['AUUnderutilisationContent', () => <AUUnderutilisationContent />],
+    ['AUVacanciesContent', () => <AUVacanciesContent />],
+    ['AUWagesContent', () => <AUWagesContent />],
+    ['AULaborProjectionContent', () => <AULaborProjectionContent />],
+    ['AUHousingContent (approvals)', () => <AUHousingContent section="approvals" />],
+    ['AUHousingContent (prices-lending)', () => <AUHousingContent section="prices-lending" />],
   ]
   for (const [name, make] of cases) {
     it(`${name} renders`, () => {

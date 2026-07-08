@@ -31,6 +31,7 @@ const UK_HOUSING_SECTIONS = [
 const UKHousingContent = lazy(() => import('./UKHousingContent').then(m => ({ default: m.UKHousingContent })))
 const CAHousingContent = lazy(() => import('./CAHousingContent').then(m => ({ default: m.CAHousingContent })))
 const EU3HousingContent = lazy(() => import('./EU3HousingContent').then(m => ({ default: m.EU3HousingContent })))
+const AUHousingContent = lazy(() => import('./AUHousingContent').then(m => ({ default: m.AUHousingContent })))
 
 // Canada Housing has no DEMAND tab: no public transactions series exists
 // (CREA MLS / Teranet-NB are private — docs/ca-models-mapping.md decision c).
@@ -53,6 +54,15 @@ const HOUSING_NAV: Record<string, CountrySections> = {
   de: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#a3e635' },
   fr: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#60a5fa' },
   it: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#34d399' },
+  // Australia: approvals (NSA-only on the API) + TVD mean price & lending
+  // (RPPI discontinued 2022 — docs/au-models-mapping.md decision d).
+  au: {
+    sections: [
+      { key: 'approvals', label: 'APPROVALS' },
+      { key: 'prices-lending', label: 'PRICES & LENDING' },
+    ],
+    defaultKey: 'approvals', accent: '#facc15',
+  },
 }
 
 const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
@@ -967,6 +977,10 @@ export function HousingPage() {
               cc={EU3_CC[country as keyof typeof EU3_CC]}
               section={section === 'permits' ? 'permits' : 'prices'}
             />
+          </Suspense>
+        ) : country === 'au' ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <AUHousingContent section={section === 'prices-lending' ? 'prices-lending' : 'approvals'} />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>{COUNTRIES.find((c) => c.key === country)?.label} housing models coming soon</div>

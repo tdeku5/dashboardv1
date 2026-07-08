@@ -64,7 +64,7 @@ WGTMED, AU_UNRATE_SA/TREND) in `au_macro_series` — the econ collector extends 
 | 11 groups | DIRECT | Both freqs (M short / Q long): 20001 Food, 20006 Alc&tob, 20002 Clothing, 20003 Housing, 20004 Furnishings, 115486 Health, 20005 Transport, 115488 Communication, 115489 Recreation, 115493 Education, 126670 Insurance&financial | M latest May-26 / Q latest 26Q1 verified per group |
 | Sub-items (~14 distribution) | DIRECT | Both freqs: 30014 Rents, 97559 New dwellings, 40055 Electricity, 115524 Gas, 40081 Auto fuel, 40091 Medical svcs, 40080 Motor vehicles, 115529 Insurance, 40090 Tobacco, 114121 Fruit, 114122 Vegetables, 40101/40102 Holiday travel | Distribution panels on QUARTERLY (long history) |
 | Special aggregates | DIRECT (M-only) | 102675/102676 Tradables/Non-tradables, 104101/104104 Goods/Services, 104122 ex volatile, 131197 **ex food & energy**, 999904 ex volatile & holiday travel, 132304/132305 Discretionary/Non-discretionary | Monthly-only in any flow — captioned floor |
-| PPI | DIRECT | `PPI_FD` `1.TOT.TOT.TOTXE.Q` (138.2 26Q1) + published YoY `3.…` (3.0%) | Key order MEASURE.INDEX.SOURCE.DESTINATION.FREQ; history start UNVERIFIED (resolve in Phase 2 config bring-up) |
+| PPI | DIRECT | `PPI_FD` `1.TOT.TOT.TOTXE.Q` (138.2 26Q1) + published YoY `3.…` (3.0%) | Key order MEASURE.INDEX.SOURCE.DESTINATION.FREQ; history 1998-Q3→ (resolved at Phase 3 bring-up — an earlier truncated probe suggested 2005-Q2) |
 | PCE deflator | GAP | — | UK/CA/JP/EU3 precedent |
 
 ### Growth (flows `ANA_AGG`/`ANA_EXP`/`ANA_INC`, `HSI_M`/`HSI_Q`, `ITGS`, `QBIS` — all quarterly SA A$M unless noted; GDP history 1959-Q3→)
@@ -255,3 +255,63 @@ RBA D2 credit aggregates (rba.gov.au/statistics/tables/csv/d2-data.csv — new n
 collector; decision g); MEEI employee-jobs spreadsheet pipeline (abs.gov.au monthly
 publication; decision c context); dwelling starts (construction flow — UNVERIFIED);
 services trade panels (BOP quarterly, verified but unpaneled v1).
+
+---
+
+## Phase 3 Addendum (2026-07-08) — Frontend Complete. Program Complete.
+
+### Pages shipped (country `au`, accent #facc15; 15 content files, four categories)
+- **Inflation**: CPI — the dual-frequency showcase: every panel title carries a [MONTHLY] or
+  [QUARTERLY] tag; monthly headline (NSA + interim-SA) under the RBA 2–3% band with the
+  Apr-2024 floor caption; the **quarterly trimmed-mean RBA-reference panel as the centerpiece**
+  (thick quarterly lines 1983→, monthly trimmed mean as a thin dashed overlay, transition
+  caption + badge); quarterly long-history headline; monthly groups; distribution + explorer on
+  quarterly (levels never mixed across bases — rates only) · CPI PROJECTIONS (quarterly SA
+  paces — the monthly is too young, captioned) · PPI (published rates; **history corrected to
+  1998-Q3** against the live source) · OTHER (the monthly-only special aggregates incl. XFE
+  flagged as the US-core analog, all floor-captioned)
+- **Growth**: GDP (ABS-published TCH contributions — server-side sum assertion guards them —
+  incl. dwelling investment; saving-ratio panel) · SPENDING (HSI monthly nominal + published
+  YoY + quarterly real, all badged, Retail-Trade-successor caption) · TRADE (debits convention
+  handled: |imports| displayed, balance keeps its true sign) · BUSINESS (profits + inventories;
+  per-industry-only sales omitted, captioned)
+- **Labor**: LABOUR FORCE (trend thick / SA thin on every rate panel per ABS guidance, ±0.2pp
+  caption) · EMPLOYMENT (lf_jobs badges + the payroll-jobs-discontinuation line verbatim) ·
+  UNDERUTILISATION (Australia's distinctive slack measures + youth) · VACANCIES (**the 2008-09
+  survey suspension renders as a real 5-quarter break**, connectNulls off; Beveridge curve) ·
+  WAGES (WPI published rates + real-wage panel) · PROJECTION (monthly SA inputs — the decision-h
+  contrast with the EU3 omit: inputs determine the model's frequency)
+- **Housing**: APPROVALS (12-month-sum primary view for the NSA-only feed) · PRICES & LENDING
+  (TVD mean price with the level-not-index + RPPI-frozen captions and a DYNAMIC "latest quarter
+  preliminary" caption keyed off the stored p-flag; OO/investor lending)
+- **Fiscal, Credit, Industrial: no tabs, no stubs** — nav fallback, asserted in tests.
+
+### Regression & test results
+- Shared components: ONE touch — `buildDistribution` gained an optional `lag` param (default 12
+  preserved; +3/−1 lines). Consumers UKCPIContent/CACPIContent/JPCPIContent/EU3HICPContent/
+  AUCPIContent all pass in the smoke suite. **FiscalYearOverlay: zero diff lines** (the (e)
+  cancellation held). US/UK/CA/JP/EU3 content pages: zero diffs.
+- Suite **151/151** across three files: the AU coming-soon assertions flipped to real-page +
+  absent-category assertions; 7 new AU nav cases (branch, categoryPath, invalid-tab fallback,
+  underutilisation/business/prices-lending deep links, absent-Industrial); **synthetic fallback
+  coverage** in new `navFallback.test.tsx` (vi.mocks a ZZLAND entry into COUNTRIES so the
+  coming-soon path keeps real coverage with no contentless country left); 16 AU smoke renders.
+  tsc strict clean both workspaces; vite build clean; all ~80 consumed codes live-verified by
+  the build agents.
+
+### Program completion — consolidated deferred backlog (all eight countries)
+| Item | Country | Path |
+|---|---|---|
+| MLIT housing Excel collector | JP | mapping doc Phase 2 addendum |
+| Full MLS wages file pipeline | JP | e-Stat files toukei=00450071 |
+| Retail (file-only current data) | JP | e-Stat files / METI Excel (browser UA) |
+| MoF fiscal scraper | JP | mof.go.jp HTML/Excel |
+| Destatis factory orders | DE | GENESIS-Online (registration) |
+| 2026 HICP weights swap | DE/FR/IT | prc_hicp_inw when published (forward-fill until) |
+| PPI (sts_inpp_m) | DE/FR/IT | UNVERIFIED — one dataset check |
+| RBA D2 credit aggregates | AU | rba.gov.au csv tables (new non-API collector) |
+| MEEI employee-jobs pipeline | AU | ABS monthly publication spreadsheets |
+| Dwelling starts | AU | ABS construction flow (UNVERIFIED) |
+| Fiscal Monitor monthly | CA | open.canada.ca CKAN per-month ZIPs |
+| UK quarterly housing supply | UK | DLUHC Excel |
+| Services-trade panels | JP/AU | BOP quarterly (verified, unpaneled) |

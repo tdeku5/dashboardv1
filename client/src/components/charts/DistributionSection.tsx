@@ -44,9 +44,11 @@ export function buildDistribution(
   allData: Record<string, WD[]>,
   codes: readonly string[],
   buckets: readonly DistBucket[],
+  /** YoY lag in periods — 12 for monthly series (default), 4 for quarterly (AU CPI). */
+  lag = 12,
 ): Array<Record<string, number | string>> {
   const yoyBySeries = codes
-    .map(c => computeChangePct(allData[c] ?? [], 12))
+    .map(c => computeChangePct(allData[c] ?? [], lag))
     .filter(s => s.length > 0)
   const dates = new Set<string>()
   for (const s of yoyBySeries) for (const p of s) if (p.value != null) dates.add(p.date)
