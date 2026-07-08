@@ -35,6 +35,10 @@ const CAConsumerHealthContent = lazy(() => import('./CAConsumerHealthContent').t
 const JPGDPContent = lazy(() => import('./JPGDPContent').then(m => ({ default: m.JPGDPContent })))
 const JPConsumptionContent = lazy(() => import('./JPConsumptionContent').then(m => ({ default: m.JPConsumptionContent })))
 const JPTradeContent = lazy(() => import('./JPTradeContent').then(m => ({ default: m.JPTradeContent })))
+const EU3GDPContent = lazy(() => import('./EU3GDPContent').then(m => ({ default: m.EU3GDPContent })))
+const EU3RetailContent = lazy(() => import('./EU3RetailContent').then(m => ({ default: m.EU3RetailContent })))
+const EU3TradeContent = lazy(() => import('./EU3TradeContent').then(m => ({ default: m.EU3TradeContent })))
+const EU3SentimentContent = lazy(() => import('./EU3SentimentContent').then(m => ({ default: m.EU3SentimentContent })))
 
 const GROWTH_SECTIONS = [
   { key: 'ngdp', label: 'NOMINAL GDP' },
@@ -79,12 +83,26 @@ const JP_GROWTH_SECTIONS = [
   { key: 'trade', label: 'TRADE' },
 ] as const
 
+// DE/FR/IT shared structure; SENTIMENT = harmonized DG-ECFIN surveys
+// (decision e). No monthly GDP / consumer-health concepts.
+const EU3_GROWTH_SECTIONS = [
+  { key: 'gdp', label: 'GDP' },
+  { key: 'retail', label: 'RETAIL' },
+  { key: 'trade', label: 'TRADE' },
+  { key: 'sentiment', label: 'SENTIMENT' },
+] as const
+
 const GROWTH_NAV: Record<string, CountrySections> = {
   us: { sections: GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#f87171' },
   uk: { sections: UK_GROWTH_SECTIONS, defaultKey: 'ngdp', accent: '#14b8a6' },
   ca: { sections: CA_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#f59e0b' },
   jp: { sections: JP_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#e879f9' },
+  de: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#a3e635' },
+  fr: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#60a5fa' },
+  it: { sections: EU3_GROWTH_SECTIONS, defaultKey: 'gdp', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function GrowthPage() {
   const { country, setCountry, cfg, section, setSection } = useCountrySections(GROWTH_NAV)
@@ -153,6 +171,13 @@ export function GrowthPage() {
             {section === 'gdp' && <JPGDPContent />}
             {section === 'consumption' && <JPConsumptionContent />}
             {section === 'trade' && <JPTradeContent />}
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'gdp' && <EU3GDPContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'retail' && <EU3RetailContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'trade' && <EU3TradeContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'sentiment' && <EU3SentimentContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

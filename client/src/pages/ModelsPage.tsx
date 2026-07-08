@@ -21,7 +21,7 @@ export function ModelsPage() {
       <main className={styles.body}>
         <CountryCategoryNav country={country} onSelectCountry={setCountry} />
 
-        {country !== 'us' && country !== 'uk' && country !== 'ca' && country !== 'jp' && (
+        {!['us', 'uk', 'ca', 'jp', 'de', 'fr', 'it'].includes(country) && (
           <div className={styles.comingSoon}>
             {COUNTRIES.find(c => c.key === country)?.label} models coming soon
           </div>

@@ -385,7 +385,9 @@
       "Bash(awk -F, 'NR>1 {print $5}' de_items.csv)",
       "Bash(command -v jq)",
       "Bash(command -v python3)",
-      "Bash(awk -F, '$10==\"p\"')"
+      "Bash(awk -F, '$10==\"p\"')",
+      "Bash(echo \"my-file-errors=$?\")",
+      "Bash(../node_modules/.bin/vitest run *)"
     ]
   },
   "sandbox": {

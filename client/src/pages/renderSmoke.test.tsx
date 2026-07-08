@@ -69,6 +69,22 @@ import { JPIIPContent } from './JPIIPContent'
 import { JPPPIContent } from './JPPPIContent'
 import { JPBankLendingContent } from './JPBankLendingContent'
 
+import { EU3HICPContent } from './EU3HICPContent'
+import { EU3HICPProjectionsContent } from './EU3HICPProjectionsContent'
+import { EU3OtherInflationContent } from './EU3OtherInflationContent'
+import { EU3GDPContent } from './EU3GDPContent'
+import { EU3RetailContent } from './EU3RetailContent'
+import { EU3TradeContent } from './EU3TradeContent'
+import { EU3SentimentContent } from './EU3SentimentContent'
+import { EU3UnemploymentContent } from './EU3UnemploymentContent'
+import { EU3EmploymentContent } from './EU3EmploymentContent'
+import { EU3VacanciesContent } from './EU3VacanciesContent'
+import { EU3LabourCostsContent } from './EU3LabourCostsContent'
+import { EU3IndustrialContent } from './EU3IndustrialContent'
+import { EU3HousingContent } from './EU3HousingContent'
+import { EU3FiscalContent } from './EU3FiscalContent'
+import { EU3LendingContent } from './EU3LendingContent'
+
 describe('US pages consuming refactored shared components', () => {
   it('RetailSalesDashboardPage renders', () => {
     const html = renderToStaticMarkup(<MemoryRouter><RetailSalesDashboardPage /></MemoryRouter>)
@@ -164,6 +180,47 @@ describe('Japan content components render', () => {
     ['JPIIPContent', () => <JPIIPContent />],
     ['JPPPIContent', () => <JPPPIContent />],
     ['JPBankLendingContent', () => <JPBankLendingContent />],
+  ]
+  for (const [name, make] of cases) {
+    it(`${name} renders`, () => {
+      const html = renderToStaticMarkup(<MemoryRouter>{make()}</MemoryRouter>)
+      expect(html.length).toBeGreaterThan(0)
+    })
+  }
+})
+
+describe('EU3 content components render (parameterized, all three countries)', () => {
+  const cases: Array<[string, () => JSX.Element]> = [
+    ['EU3HICPContent (DE)', () => <EU3HICPContent cc="DE" />],
+    ['EU3HICPContent (FR)', () => <EU3HICPContent cc="FR" />],
+    ['EU3HICPContent (IT)', () => <EU3HICPContent cc="IT" />],
+    ['EU3HICPProjectionsContent (DE)', () => <EU3HICPProjectionsContent cc="DE" />],
+    ['EU3HICPProjectionsContent (IT)', () => <EU3HICPProjectionsContent cc="IT" />],
+    ['EU3OtherInflationContent (DE)', () => <EU3OtherInflationContent cc="DE" />],
+    ['EU3OtherInflationContent (FR)', () => <EU3OtherInflationContent cc="FR" />],
+    ['EU3GDPContent (DE)', () => <EU3GDPContent cc="DE" />],
+    ['EU3GDPContent (FR)', () => <EU3GDPContent cc="FR" />],
+    ['EU3GDPContent (IT)', () => <EU3GDPContent cc="IT" />],
+    ['EU3RetailContent (DE)', () => <EU3RetailContent cc="DE" />],
+    ['EU3TradeContent (FR)', () => <EU3TradeContent cc="FR" />],
+    ['EU3SentimentContent (IT)', () => <EU3SentimentContent cc="IT" />],
+    ['EU3UnemploymentContent (DE)', () => <EU3UnemploymentContent cc="DE" />],
+    ['EU3UnemploymentContent (FR)', () => <EU3UnemploymentContent cc="FR" />],
+    ['EU3UnemploymentContent (IT)', () => <EU3UnemploymentContent cc="IT" />],
+    ['EU3EmploymentContent (FR)', () => <EU3EmploymentContent cc="FR" />],
+    ['EU3VacanciesContent (DE)', () => <EU3VacanciesContent cc="DE" />],
+    ['EU3VacanciesContent (FR)', () => <EU3VacanciesContent cc="FR" />],
+    ['EU3VacanciesContent (IT)', () => <EU3VacanciesContent cc="IT" />],
+    ['EU3LabourCostsContent (DE)', () => <EU3LabourCostsContent cc="DE" />],
+    ['EU3IndustrialContent (DE ip)', () => <EU3IndustrialContent cc="DE" section="ip" />],
+    ['EU3IndustrialContent (IT construction)', () => <EU3IndustrialContent cc="IT" section="construction" />],
+    ['EU3HousingContent (DE prices)', () => <EU3HousingContent cc="DE" section="prices" />],
+    ['EU3HousingContent (DE permits)', () => <EU3HousingContent cc="DE" section="permits" />],
+    ['EU3HousingContent (IT permits)', () => <EU3HousingContent cc="IT" section="permits" />],
+    ['EU3FiscalContent (IT balance)', () => <EU3FiscalContent cc="IT" section="balance" />],
+    ['EU3FiscalContent (DE debt)', () => <EU3FiscalContent cc="DE" section="debt" />],
+    ['EU3LendingContent (DE)', () => <EU3LendingContent cc="DE" />],
+    ['EU3LendingContent (FR)', () => <EU3LendingContent cc="FR" />],
   ]
   for (const [name, make] of cases) {
     it(`${name} renders`, () => {

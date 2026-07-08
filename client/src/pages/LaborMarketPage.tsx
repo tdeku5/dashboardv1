@@ -28,6 +28,10 @@ const JPLFSContent = lazy(() => import('./JPLFSContent').then(m => ({ default: m
 const JPJobOffersContent = lazy(() => import('./JPJobOffersContent').then(m => ({ default: m.JPJobOffersContent })))
 const JPWagesContent = lazy(() => import('./JPWagesContent').then(m => ({ default: m.JPWagesContent })))
 const JPLaborProjectionContent = lazy(() => import('./JPLaborProjectionContent').then(m => ({ default: m.JPLaborProjectionContent })))
+const EU3UnemploymentContent = lazy(() => import('./EU3UnemploymentContent').then(m => ({ default: m.EU3UnemploymentContent })))
+const EU3EmploymentContent = lazy(() => import('./EU3EmploymentContent').then(m => ({ default: m.EU3EmploymentContent })))
+const EU3VacanciesContent = lazy(() => import('./EU3VacanciesContent').then(m => ({ default: m.EU3VacanciesContent })))
+const EU3LabourCostsContent = lazy(() => import('./EU3LabourCostsContent').then(m => ({ default: m.EU3LabourCostsContent })))
 
 const LABOR_SECTIONS = [
   { key: 'projection', label: 'U-3 PROJECTION' },
@@ -65,12 +69,26 @@ const JP_LABOR_SECTIONS = [
   { key: 'projection', label: 'PROJECTION' },
 ] as const
 
+// DE/FR/IT shared structure; no claims concept, no projection tab (decision i
+// — quarterly inputs under-determine a monthly mechanical model).
+const EU3_LABOR_SECTIONS = [
+  { key: 'unemployment', label: 'UNEMPLOYMENT' },
+  { key: 'employment', label: 'EMPLOYMENT' },
+  { key: 'vacancies', label: 'VACANCIES' },
+  { key: 'labour-costs', label: 'LABOUR COSTS' },
+] as const
+
 const LABOR_NAV: Record<string, CountrySections> = {
   us: { sections: LABOR_SECTIONS, defaultKey: 'cps', accent: '#f87171' },
   uk: { sections: UK_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#14b8a6' },
   ca: { sections: CA_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#f59e0b' },
   jp: { sections: JP_LABOR_SECTIONS, defaultKey: 'lfs', accent: '#e879f9' },
+  de: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#a3e635' },
+  fr: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#60a5fa' },
+  it: { sections: EU3_LABOR_SECTIONS, defaultKey: 'unemployment', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function LaborMarketPage() {
   const { country, setCountry, cfg, section, setSection } = useCountrySections(LABOR_NAV)
@@ -130,6 +148,13 @@ export function LaborMarketPage() {
             {section === 'joboffers' && <JPJobOffersContent />}
             {section === 'wages' && <JPWagesContent />}
             {section === 'projection' && <JPLaborProjectionContent />}
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'unemployment' && <EU3UnemploymentContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'employment' && <EU3EmploymentContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'vacancies' && <EU3VacanciesContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'labour-costs' && <EU3LabourCostsContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

@@ -57,9 +57,9 @@ describe('?country= selects the country branch', () => {
     expect(html).toContain('PCE PROJECTIONS')
   })
   it('country without content shows coming-soon with country bar intact', () => {
-    const html = renderAt('/models/fiscal?country=de', '/models/fiscal', <FiscalPage />)
-    expect(html).toContain('GERMANY fiscal models coming soon')
-    expect(html).toContain('>GERMANY<') // country bar still rendered
+    const html = renderAt('/models/fiscal?country=au', '/models/fiscal', <FiscalPage />)
+    expect(html).toContain('AUSTRALIA fiscal models coming soon')
+    expect(html).toContain('>AUSTRALIA<') // country bar still rendered
   })
 })
 
@@ -152,7 +152,46 @@ describe('ModelsPage landing', () => {
     expect(html).not.toContain('models coming soon')
   })
   it('shows coming-soon for countries without content', () => {
-    const html = renderAt('/models?country=de', '/models', <ModelsPage />)
-    expect(html).toContain('GERMANY models coming soon')
+    const html = renderAt('/models?country=au', '/models', <ModelsPage />)
+    expect(html).toContain('AUSTRALIA models coming soon')
+  })
+})
+
+describe('EU3 country params (DE/FR/IT Phase 3)', () => {
+  it('country=de renders the EU3 inflation branch (HICP, no PCE)', () => {
+    const html = renderAt('/models/inflation?country=de', '/models/inflation', <InflationPage />)
+    expect(html).toContain('HICP PROJECTIONS')
+    expect(html).not.toContain('PCE PROJECTIONS')
+  })
+  it('country=fr and country=it share the EU3 structure', () => {
+    for (const cc of ['fr', 'it']) {
+      const html = renderAt(`/models/growth?country=${cc}`, '/models/growth', <GrowthPage />)
+      expect(html).toContain('SENTIMENT')
+      expect(activeSections(html)).toContain('GDP')
+    }
+  })
+  it('categoryPath carries country=de', () => {
+    expect(categoryPath('/models/labor', 'de')).toBe('/models/labor?country=de')
+  })
+  it('DE fiscal defaults to BALANCE (invalid tab falls back)', () => {
+    const html = renderAt('/models/fiscal?country=de&tab=zzz', '/models/fiscal', <FiscalPage />)
+    expect(activeSections(html)).toContain('BALANCE')
+  })
+  it('IT fiscal tab=debt deep link restores DEBT', () => {
+    const html = renderAt('/models/fiscal?country=it&tab=debt', '/models/fiscal', <FiscalPage />)
+    expect(activeSections(html)).toContain('DEBT')
+  })
+  it('FR labor tab=labour-costs deep link restores LABOUR COSTS', () => {
+    const html = renderAt('/models/labor?country=fr&tab=labour-costs', '/models/labor', <LaborMarketPage />)
+    expect(activeSections(html)).toContain('LABOUR COSTS')
+  })
+  it('IT industrial tab=construction deep link restores CONSTRUCTION', () => {
+    const html = renderAt('/models/industrial?country=it&tab=construction', '/models/industrial', <IndustrialProductionPage />)
+    expect(activeSections(html)).toContain('CONSTRUCTION')
+  })
+  it('DE housing renders the EU3 sections (PRICES/PERMITS), not the US bar', () => {
+    const html = renderAt('/models/housing?country=de', '/models/housing', <HousingPage />)
+    expect(html).toContain('PERMITS')
+    expect(html).not.toContain('DEMAND')
   })
 })

@@ -245,3 +245,55 @@ break-marker surfacing has real data behind it.
 German factory orders (decision f — Destatis GENESIS, registration-gated); national CPIs
 (decision a — not needed); labor projection tabs (decision i); PPI `sts_inpp_m` (v1 scope);
 2026 HICP weights (not yet published — forward-fill 2025); IT vacancy levels (not published).
+
+---
+
+## Phase 3 Addendum (2026-07-08) — Frontend Complete (all three countries in one session)
+
+### The trio bet, realized
+**15 parameterized components serve all 42 country-tabs** — each takes `cc: 'DE'|'FR'|'IT'`
+(Industrial/Housing/Fiscal also take `section`), with per-country divergences carried in
+cc-keyed note maps and the `eu3Caveat(key, cc)` registry. Hub wiring: three map entries per hub
+sharing one EU3 section list + one grouped content branch. Accents: DE #a3e635 / FR #60a5fa /
+IT #34d399.
+
+### Pages shipped (identical tab structure ×3)
+- **Inflation**: HICP (weights-based contribution panels — 2025-vintage forward-fill captioned;
+  divisions/aggregates/27-item distribution/explorer; **EA reference overlay** per decision g,
+  levels safe on the shared 2025=100 base) · HICP PROJECTIONS (NSA method, caption page-level +
+  per-panel, badge, ECB-2% reference) · OTHER (goods/services, energy & food wedge, NEIG,
+  durability)
+- **Growth**: GDP (Eurostat-published QoQ contributions + rates, per-country history-start
+  captions, DE p-flag note) · RETAIL · TRADE · SENTIMENT (ESI/consumer/industry badged
+  `sentiment_survey` + saving rate)
+- **Labor**: UNEMPLOYMENT (headline SA + youth + levels, **runtime break markers** at DE 2009 /
+  FR 2003+2024 / IT 2004) · EMPLOYMENT (SAL_DC payrolls proxy badged, FR SA-only caption) ·
+  VACANCIES (per-country visible captions: FR d-flag/10+, IT rate-only; Beveridge scatter) ·
+  LABOUR COSTS (published YoY, DE 2022 break markers, real-wage-squeeze overlay)
+- **Industrial**: IP (MIGs; IT one-month-lag caption; DE "no factory-orders series" note per
+  decision f) · CONSTRUCTION (IT superbonus note)
+- **Housing**: PRICES (HPI + published YoY, dynamic p-flag caption) · PERMITS — **the
+  acceptance case: DE's 24 e-flagged observations render as amber ▲ markers with a count
+  caption (gated — FR/IT suppress it); break ReferenceLines wired**; index-form caption; badges
+- **Fiscal**: BALANCE (trailing-4Q terminal-computed view; raw NSA bars with seasonality
+  warning; **IT NSA-only caption visible**; DE provisional note) · DEBT (Maastricht 60%
+  reference; DE 63.5 / FR 116.2 / IT 137.1)
+- **Credit**: BANK LENDING (BSI HH/NFC outstanding + ECB-published growth, badged)
+Omitted per decisions, genuinely absent: factory orders (f), projection tabs (i), IT vacancy
+levels, national CPIs (a), transactions/DSR housing.
+
+### Regression results
+- Shared components: NONE modified (consumption only). New additive infra: `/api/ecb` generic
+  route (rates-side euFundamental route untouched), `client/src/lib/eurostat.ts` (obs_flag-aware
+  fetchers + breakDates/estimateCount helpers).
+- Suite **126/126**: nav matrix +8 EU3 cases (de/fr/it branch selection, categoryPath carry,
+  invalid-tab fallback, debt/labour-costs/construction deep links, DE housing sections replace
+  the US-bar fallback) — the two old "Germany = coming soon" cases moved to Australia; smoke
+  +30 EU3 renders across all three countries and both section props. `tsc --noEmit` strict
+  clean both workspaces; vite build clean; all 66+ consumed codes curl-verified per country by
+  the build agents. US/UK/CA/JP content pages: zero diffs.
+
+### Deferred follow-ups (unchanged from Phase 2)
+Destatis factory orders; 2026 HICP weights (swap when published); PPI (`sts_inpp_m`); labor
+projections; IT vacancy levels (source-absent). Australia remains the only COUNTRIES entry
+without content.

@@ -12,6 +12,7 @@ const UKFiscalPSFContent = lazy(() => import('./UKFiscalPSFContent').then(m => (
 const UKHMRCReceiptsContent = lazy(() => import('./UKHMRCReceiptsContent').then(m => ({ default: m.UKHMRCReceiptsContent })))
 const CAFiscalGFSContent = lazy(() => import('./CAFiscalGFSContent').then(m => ({ default: m.CAFiscalGFSContent })))
 const CAFiscalDebtContent = lazy(() => import('./CAFiscalDebtContent').then(m => ({ default: m.CAFiscalDebtContent })))
+const EU3FiscalContent = lazy(() => import('./EU3FiscalContent').then(m => ({ default: m.EU3FiscalContent })))
 
 const FISCAL_SECTIONS = [
   { key: 'dts', label: 'DTS FLOWS' },
@@ -32,11 +33,23 @@ const CA_FISCAL_SECTIONS = [
   { key: 'debt', label: 'FEDERAL DEBT' },
 ] as const
 
+// DE/FR/IT: quarterly ESA restructure (Eurostat gov_10q; no daily/monthly
+// cash-flow analog — docs/eu3-models-mapping.md decision b).
+const EU3_FISCAL_SECTIONS = [
+  { key: 'balance', label: 'BALANCE' },
+  { key: 'debt', label: 'DEBT' },
+] as const
+
 const FISCAL_NAV: Record<string, CountrySections> = {
   us: { sections: FISCAL_SECTIONS, defaultKey: 'dts', accent: '#f87171' },
   uk: { sections: UK_FISCAL_SECTIONS, defaultKey: 'psf', accent: '#14b8a6' },
   ca: { sections: CA_FISCAL_SECTIONS, defaultKey: 'gfs', accent: '#f59e0b' },
+  de: { sections: EU3_FISCAL_SECTIONS, defaultKey: 'balance', accent: '#a3e635' },
+  fr: { sections: EU3_FISCAL_SECTIONS, defaultKey: 'balance', accent: '#60a5fa' },
+  it: { sections: EU3_FISCAL_SECTIONS, defaultKey: 'balance', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function FiscalPage() {
   const { country, setCountry, cfg, section, setSection } = useCountrySections(FISCAL_NAV)
@@ -77,6 +90,13 @@ export function FiscalPage() {
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'gfs' && <CAFiscalGFSContent />}
             {section === 'debt' && <CAFiscalDebtContent />}
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <EU3FiscalContent
+              cc={EU3_CC[country as keyof typeof EU3_CC]}
+              section={section === 'debt' ? 'debt' : 'balance'}
+            />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

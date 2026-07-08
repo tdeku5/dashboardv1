@@ -24,6 +24,9 @@ const JPCPIContent = lazy(() => import('./JPCPIContent').then(m => ({ default: m
 const JPCPIProjectionsContent = lazy(() => import('./JPCPIProjectionsContent').then(m => ({ default: m.JPCPIProjectionsContent })))
 const JPTokyoCPIContent = lazy(() => import('./JPTokyoCPIContent').then(m => ({ default: m.JPTokyoCPIContent })))
 const JPOtherInflationContent = lazy(() => import('./JPOtherInflationContent').then(m => ({ default: m.JPOtherInflationContent })))
+const EU3HICPContent = lazy(() => import('./EU3HICPContent').then(m => ({ default: m.EU3HICPContent })))
+const EU3HICPProjectionsContent = lazy(() => import('./EU3HICPProjectionsContent').then(m => ({ default: m.EU3HICPProjectionsContent })))
+const EU3OtherInflationContent = lazy(() => import('./EU3OtherInflationContent').then(m => ({ default: m.EU3OtherInflationContent })))
 
 const INFLATION_SECTIONS = [
   { key: 'cpi', label: 'CPI' },
@@ -60,12 +63,25 @@ const JP_INFLATION_SECTIONS = [
   { key: 'other', label: 'OTHER' },
 ] as const
 
+// DE/FR/IT share one HICP-primary structure (docs/eu3-models-mapping.md);
+// no PCE/PPI. Sections identical — only the accent differs per country.
+const EU3_INFLATION_SECTIONS = [
+  { key: 'hicp', label: 'HICP' },
+  { key: 'hicp-proj', label: 'HICP PROJECTIONS' },
+  { key: 'other', label: 'OTHER' },
+] as const
+
 const INFLATION_NAV: Record<string, CountrySections> = {
   us: { sections: INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#f87171' },
   uk: { sections: UK_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#14b8a6' },
   ca: { sections: CA_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#f59e0b' },
   jp: { sections: JP_INFLATION_SECTIONS, defaultKey: 'cpi', accent: '#e879f9' },
+  de: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#a3e635' },
+  fr: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#60a5fa' },
+  it: { sections: EU3_INFLATION_SECTIONS, defaultKey: 'hicp', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function InflationPage() {
   const { country, setCountry, cfg, section, setSection } = useCountrySections(INFLATION_NAV)
@@ -121,6 +137,12 @@ export function InflationPage() {
             {section === 'cpi-proj' && <JPCPIProjectionsContent />}
             {section === 'tokyo' && <JPTokyoCPIContent />}
             {section === 'other' && <JPOtherInflationContent />}
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            {section === 'hicp' && <EU3HICPContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'hicp-proj' && <EU3HICPProjectionsContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
+            {section === 'other' && <EU3OtherInflationContent cc={EU3_CC[country as keyof typeof EU3_CC]} />}
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

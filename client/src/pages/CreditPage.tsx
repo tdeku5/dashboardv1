@@ -10,6 +10,7 @@ const BankCreditDashboardContent = lazy(() => import('./BankCreditDashboardPage'
 const UKMoneyCreditContent = lazy(() => import('./UKMoneyCreditContent').then(m => ({ default: m.UKMoneyCreditContent })))
 const CAHouseholdCreditContent = lazy(() => import('./CAHouseholdCreditContent').then(m => ({ default: m.CAHouseholdCreditContent })))
 const JPBankLendingContent = lazy(() => import('./JPBankLendingContent').then(m => ({ default: m.JPBankLendingContent })))
+const EU3LendingContent = lazy(() => import('./EU3LendingContent').then(m => ({ default: m.EU3LendingContent })))
 
 const CREDIT_SECTIONS = [
   { key: 'bank-credit', label: 'BANK CREDIT' },
@@ -29,12 +30,22 @@ const JP_CREDIT_SECTIONS = [
   { key: 'lending', label: 'BANK LENDING' },
 ] as const
 
+// DE/FR/IT: thin BSI lending build (decision h — verified).
+const EU3_CREDIT_SECTIONS = [
+  { key: 'bank-lending', label: 'BANK LENDING' },
+] as const
+
 const CREDIT_NAV: Record<string, CountrySections> = {
   us: { sections: CREDIT_SECTIONS, defaultKey: 'bank-credit', accent: '#f87171' },
   uk: { sections: UK_CREDIT_SECTIONS, defaultKey: 'money-credit', accent: '#14b8a6' },
   ca: { sections: CA_CREDIT_SECTIONS, defaultKey: 'household-credit', accent: '#f59e0b' },
   jp: { sections: JP_CREDIT_SECTIONS, defaultKey: 'lending', accent: '#e879f9' },
+  de: { sections: EU3_CREDIT_SECTIONS, defaultKey: 'bank-lending', accent: '#a3e635' },
+  fr: { sections: EU3_CREDIT_SECTIONS, defaultKey: 'bank-lending', accent: '#60a5fa' },
+  it: { sections: EU3_CREDIT_SECTIONS, defaultKey: 'bank-lending', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function CreditPage() {
   const { country, setCountry, cfg, section } = useCountrySections(CREDIT_NAV)
@@ -75,6 +86,10 @@ export function CreditPage() {
         ) : country === 'jp' ? (
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             <JPBankLendingContent />
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <EU3LendingContent cc={EU3_CC[country as keyof typeof EU3_CC]} />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>

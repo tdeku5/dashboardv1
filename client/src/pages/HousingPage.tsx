@@ -30,6 +30,7 @@ const UK_HOUSING_SECTIONS = [
 
 const UKHousingContent = lazy(() => import('./UKHousingContent').then(m => ({ default: m.UKHousingContent })))
 const CAHousingContent = lazy(() => import('./CAHousingContent').then(m => ({ default: m.CAHousingContent })))
+const EU3HousingContent = lazy(() => import('./EU3HousingContent').then(m => ({ default: m.EU3HousingContent })))
 
 // Canada Housing has no DEMAND tab: no public transactions series exists
 // (CREA MLS / Teranet-NB are private — docs/ca-models-mapping.md decision c).
@@ -39,11 +40,22 @@ const CA_HOUSING_SECTIONS = [
   { key: 'credit', label: 'CREDIT' },
 ] as const
 
+// DE/FR/IT: prices + permits only (index-form permits; no transactions data).
+const EU3_HOUSING_SECTIONS = [
+  { key: 'prices', label: 'PRICES' },
+  { key: 'permits', label: 'PERMITS' },
+] as const
+
 const HOUSING_NAV: Record<string, CountrySections> = {
   us: { sections: HOUSING_SECTIONS, defaultKey: 'supply', accent: '#f87171' },
   uk: { sections: UK_HOUSING_SECTIONS, defaultKey: 'demand', accent: '#14b8a6' },
   ca: { sections: CA_HOUSING_SECTIONS, defaultKey: 'supply', accent: '#f59e0b' },
+  de: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#a3e635' },
+  fr: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#60a5fa' },
+  it: { sections: EU3_HOUSING_SECTIONS, defaultKey: 'prices', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 const HOUSING_SERIES = [
   'HOUST', 'HOUST1F', 'HOUST2F', 'HOUST5F',
@@ -948,6 +960,13 @@ export function HousingPage() {
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {/* section is validated against CA_HOUSING_SECTIONS keys when country === 'ca' */}
             <CAHousingContent section={section as 'supply' | 'prices' | 'credit'} />
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <EU3HousingContent
+              cc={EU3_CC[country as keyof typeof EU3_CC]}
+              section={section === 'permits' ? 'permits' : 'prices'}
+            />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>{COUNTRIES.find((c) => c.key === country)?.label} housing models coming soon</div>

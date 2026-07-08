@@ -48,6 +48,7 @@ import { bojTsRouter } from './routes/bojTs'
 import { syncBojTsSeries } from './bojTsCollector'
 import { syncJpTrade } from './jpTradeCsv'
 import { eurostatRouter } from './routes/eurostat'
+import { ecbRouter } from './routes/ecb'
 import { verifyEurostatMetadata, syncAllEurostatSeries } from './fetchAllEurostatSeries'
 import { tvRouter } from './routes/tv'
 import { tvYieldCurveRouter } from './routes/tvYieldCurve'
@@ -107,6 +108,7 @@ app.use('/api/statcan',      statcanRouter)
 app.use('/api/estat',        estatRouter)
 app.use('/api/boj-ts',       bojTsRouter)
 app.use('/api/eurostat',     eurostatRouter)
+app.use('/api/ecb',          ecbRouter)
 app.use('/api/tv/yield-curve', tvYieldCurveRouter)
 app.use('/api/tv',           tvRouter)
 app.use('/api/global',       globalRouter)

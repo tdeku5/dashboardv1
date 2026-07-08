@@ -11,6 +11,7 @@ const UKIoPContent = lazy(() => import('./UKIoPContent').then(m => ({ default: m
 const CAIndustrialContent = lazy(() => import('./CAIndustrialContent').then(m => ({ default: m.CAIndustrialContent })))
 const JPIIPContent = lazy(() => import('./JPIIPContent').then(m => ({ default: m.JPIIPContent })))
 const JPPPIContent = lazy(() => import('./JPPPIContent').then(m => ({ default: m.JPPPIContent })))
+const EU3IndustrialContent = lazy(() => import('./EU3IndustrialContent').then(m => ({ default: m.EU3IndustrialContent })))
 
 const IP_SECTIONS = [
   { key: 'ip-explorer', label: 'IP EXPLORER' },
@@ -30,12 +31,23 @@ const JP_IP_SECTIONS = [
   { key: 'ppi', label: 'PPI (BOJ)' },
 ] as const
 
+// DE/FR/IT: IP + construction (no German factory orders — decision f).
+const EU3_IP_SECTIONS = [
+  { key: 'ip', label: 'IP' },
+  { key: 'construction', label: 'CONSTRUCTION' },
+] as const
+
 const IP_NAV: Record<string, CountrySections> = {
   us: { sections: IP_SECTIONS, defaultKey: 'ip-explorer', accent: '#f87171' },
   uk: { sections: UK_IP_SECTIONS, defaultKey: 'iop', accent: '#14b8a6' },
   ca: { sections: CA_IP_SECTIONS, defaultKey: 'industrial', accent: '#f59e0b' },
   jp: { sections: JP_IP_SECTIONS, defaultKey: 'iip', accent: '#e879f9' },
+  de: { sections: EU3_IP_SECTIONS, defaultKey: 'ip', accent: '#a3e635' },
+  fr: { sections: EU3_IP_SECTIONS, defaultKey: 'ip', accent: '#60a5fa' },
+  it: { sections: EU3_IP_SECTIONS, defaultKey: 'ip', accent: '#34d399' },
 }
+
+const EU3_CC = { de: 'DE', fr: 'FR', it: 'IT' } as const
 
 export function IndustrialProductionPage() {
   const { country, setCountry, cfg, section, setSection } = useCountrySections(IP_NAV)
@@ -58,7 +70,7 @@ export function IndustrialProductionPage() {
           activeCategory="industrial"
           sections={cfg?.sections}
           activeSection={section}
-          onSelectSection={country === 'jp' ? setSection : undefined}
+          onSelectSection={country === 'jp' || country in EU3_CC ? setSection : undefined}
           sectionAccent={cfg?.accent}
         />
 
@@ -78,6 +90,13 @@ export function IndustrialProductionPage() {
           <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
             {section === 'iip' && <JPIIPContent />}
             {section === 'ppi' && <JPPPIContent />}
+          </Suspense>
+        ) : country in EU3_CC ? (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <EU3IndustrialContent
+              cc={EU3_CC[country as keyof typeof EU3_CC]}
+              section={section === 'construction' ? 'construction' : 'ip'}
+            />
           </Suspense>
         ) : (
           <div className={styles.comingSoon}>
