@@ -194,6 +194,14 @@ Key variables defined in `globals.css`:
 - `--font-mono` — monospace font stack
 - Colors: green `#22c55e`, red `#ef4444`, muted `#64748B`, `#4e6070`
 
+## Phase-gate attestation
+
+For phased jobs with approval gates:
+
+1. **At every gate, before reporting completion**, re-read the original prompt (or the earliest version of the spec available in the session/transcript) and diff the implementation against every element of the relevant spec section. The gate report must include an explicit attestation: *"Implementation diffed against the prompt spec — nothing dropped"*, or a list of deliberate deviations with rationale.
+2. **Gate demonstrations must exercise every major spec feature** introduced in that phase, not only the happy path. If a spec defines a union of behaviors (transform types, series kinds, endpoints), include at least one demonstration or test per member.
+3. **If context compaction has occurred during the session**, treat the compaction summary as untrusted with respect to spec details: re-read the prompt file from disk before the attestation.
+
 ## Instructions for Claude
 
 1. **Do NOT search or explore files** unless specifically told to. Use the paths listed above.
