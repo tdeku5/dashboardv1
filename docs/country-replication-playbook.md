@@ -293,7 +293,9 @@ empirically-resolved IDs and warns that prior guide docs were wrong; read it bef
 ## Closing Addendum (2026-07-08) — Program Complete: Eight Countries
 
 US, UK, Canada, Japan, Germany, France, Italy, Australia — every country in the nav is live.
-The consolidated deferred-items backlog lives in `docs/au-models-mapping.md` (Phase 3 addendum).
+The consolidated deferred-items backlog lives in `docs/au-models-mapping.md` (Phase 3 addendum),
+and the full gap/omission fate of every US panel across all seven replications is in
+`docs/gaps-and-omissions.md` (master matrix + per-country detail).
 Lessons from the final run worth carrying to any future source integration:
 
 1. **Derive tolerances, don't tune them.** Australia's GDP contributions-sum assertion failed
