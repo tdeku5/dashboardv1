@@ -1090,6 +1090,54 @@ export function getEstatLatestDate(seriesCode: string): string | null {
   return row?.d ?? null
 }
 
+// ── Series catalog (AI Chart Agent, Phase 0) ─────────────────────────────────
+// Machine-readable catalog of every series the terminal holds, populated by
+// server/src/scripts/build-series-catalog.ts (full-refresh in a transaction).
+// This is the ONLY table that script writes; all other reads are read-only.
+// series_kind: 'single' | 'contract_family' (dated futures roots) |
+// 'parameterized' (one entry = a family selected by a fetch-time parameter,
+// e.g. gilt_yield_curve maturities). member_count is NULL only for 'single'.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS series_catalog (
+    catalog_id         INTEGER PRIMARY KEY,
+    series_id          TEXT NOT NULL,
+    series_kind        TEXT NOT NULL,
+    source_table       TEXT NOT NULL,
+    source_db          TEXT NOT NULL,
+    description        TEXT,
+    units              TEXT,
+    frequency          TEXT,
+    data_source        TEXT,
+    country            TEXT,
+    category           TEXT,
+    first_date         TEXT,
+    last_date          TEXT,
+    obs_count          INTEGER,
+    member_count       INTEGER,
+    description_source TEXT,
+    updated_at         TEXT,
+    UNIQUE (series_id, source_table, source_db)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_series_catalog_lookup
+    ON series_catalog(category, data_source, country);
+`)
+
+// Additive migrations (FRED metadata backfill follow-up, 2026-07): the AI
+// chart agent needs the SA/NSA flag at series-resolution time. Guarded —
+// no-ops when the columns already exist.
+{
+  const metaCols = db.prepare(`PRAGMA table_info(series_metadata)`).all() as Array<{ name: string }>
+  if (!metaCols.some(c => c.name === 'seasonal_adjustment')) {
+    db.exec(`ALTER TABLE series_metadata ADD COLUMN seasonal_adjustment TEXT`)
+  }
+  const catCols = db.prepare(`PRAGMA table_info(series_catalog)`).all() as Array<{ name: string }>
+  if (!catCols.some(c => c.name === 'seasonal_adjustment')) {
+    db.exec(`ALTER TABLE series_catalog ADD COLUMN seasonal_adjustment TEXT`)
+  }
+}
+
 // ── Bank of Japan Time-Series Data Search API ────────────────────────────────
 // Japanese financial-side series for the JP Economic Data Models (PPI PR01,
 // bank lending/deposits MD13). Same per-source table pattern. The BoJ requires

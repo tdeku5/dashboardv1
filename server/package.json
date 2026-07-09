@@ -10,7 +10,8 @@
     "econ-calendar": "tsx src/scripts/runEconomicCalendar.ts",
     "econ-backfill": "tsx src/scripts/backfillEconomicCalendar.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build-catalog": "tsx src/scripts/build-series-catalog.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

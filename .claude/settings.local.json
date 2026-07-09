@@ -411,7 +411,18 @@
       "Bash(awk -F, 'NR>1 {print $2\".\"$3\".\"$4\".\"$5\".\"$6\" = \"$10}')",
       "Bash(echo \"my-file errors: $?\")",
       "Bash(git -C /home/tdeku/dashboardv1 status --porcelain)",
-      "Bash(git -C /home/tdeku/dashboardv1 log --oneline -2 -- client/src/pages/HousingPage.tsx)"
+      "Bash(git -C /home/tdeku/dashboardv1 log --oneline -2 -- client/src/pages/HousingPage.tsx)",
+      "Bash(echo \"=== tv_series distinct: $\\(sqlite3 'file:fred_data.db?mode=ro' 'SELECT COUNT\\(DISTINCT symbol\\) FROM tv_series'\\)\")",
+      "Bash(echo \"=== tv_ohlcv distinct: $\\(sqlite3 'file:fred_data.db?mode=ro' 'SELECT COUNT\\(DISTINCT symbol\\) FROM tv_ohlcv'\\)\")",
+      "Bash(awk '/^### `eurostat/,/^### `[^e]/' /tmp/phase0-inventory.md)",
+      "Bash(awk -F'|' '{print $2}')",
+      "Bash(awk '/^### `ecb/,/^### `[^e]/' /tmp/phase0-inventory.md)",
+      "Bash(awk '/^### `au_/,/^### `[^a]/' /tmp/phase0-inventory.md)",
+      "Bash(awk '/\\\\| root \\\\|/,/^$/' /tmp/phase0-inventory.md)",
+      "Bash(awk '/^### /{t=$2} /unresolved\\\\*\\\\*/{c[t]++} END{for \\(k in c\\) print k, c[k]}' /tmp/phase0-inventory.md)",
+      "Bash(sort -k2 -rn)",
+      "Bash(pkill -f \"tsx watch src/index.ts\")",
+      "Bash(pkill -f \"tsx watch\")"
     ]
   },
   "sandbox": {
