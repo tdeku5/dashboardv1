@@ -1,6 +1,7 @@
 import { NavDropdown } from '../components/NavDropdown'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { HeadlineCoreCpiChart } from './miscCharts/HeadlineCoreCpiChart'
+import { SavedChartsSection } from './miscCharts/SavedChartsSection'
 import styles from './MiscChartsPage.module.css'
 
 /*
@@ -34,6 +35,9 @@ export function MiscChartsPage() {
       </nav>
 
       <div className={styles.body}>
+        {/* Hephaestus saved charts — data-driven, renders nothing while empty */}
+        <SavedChartsSection />
+
         <div className={styles.pageHeader}>
           <div className={styles.pageTitle}>MISC. CHARTS</div>
           <div className={styles.pageSubtitle}>Standalone charts &amp; quick references</div>
