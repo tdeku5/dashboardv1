@@ -16,7 +16,9 @@ const DATE_RE                   = /^\d{4}-\d{2}-\d{2}$/
 
 const fetchLocks = new Map<string, Promise<void>>()
 
-async function ensureFresh(seriesId: string): Promise<void> {
+// Exported for the Hephaestus render engine, which reuses the same
+// staleness/lock/negative-cache path for FRED-backed catalog entries.
+export async function ensureFresh(seriesId: string): Promise<void> {
   // Already fresh — nothing to do
   if (!isSeriesStale(seriesId, STALE_HOURS)) return
 

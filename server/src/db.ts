@@ -1786,3 +1786,51 @@ export function getUnclassifiedEvents(): UnclassifiedEventSummary[] {
     ORDER BY count DESC, event ASC
   `).all() as UnclassifiedEventSummary[]
 }
+
+// ── Hephaestus saved charts (AI Chart Agent, Phase 1) ────────────────────────
+// One row per user-saved chart spec. spec_json holds a validated ChartSpecV1;
+// rendering always goes back through the render engine (specs reference
+// catalog entries only — no data values are ever stored here). v1 editing is
+// rename-only, so updated_at moves only on rename.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS saved_charts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    spec_json  TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+`)
+
+export interface SavedChartRow {
+  id: number
+  name: string
+  spec_json: string
+  created_at: string
+  updated_at: string
+}
+
+export function listSavedCharts(): SavedChartRow[] {
+  return db.prepare('SELECT * FROM saved_charts ORDER BY created_at DESC, id DESC').all() as SavedChartRow[]
+}
+
+export function getSavedChart(id: number): SavedChartRow | undefined {
+  return db.prepare('SELECT * FROM saved_charts WHERE id = ?').get(id) as SavedChartRow | undefined
+}
+
+export function insertSavedChart(name: string, specJson: string): SavedChartRow {
+  const info = db.prepare('INSERT INTO saved_charts (name, spec_json) VALUES (?, ?)').run(name, specJson)
+  return getSavedChart(Number(info.lastInsertRowid)) as SavedChartRow
+}
+
+export function renameSavedChart(id: number, name: string): boolean {
+  const info = db.prepare(
+    "UPDATE saved_charts SET name = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(name, id)
+  return info.changes > 0
+}
+
+export function deleteSavedChart(id: number): boolean {
+  return db.prepare('DELETE FROM saved_charts WHERE id = ?').run(id).changes > 0
+}

@@ -51,6 +51,7 @@ import { eurostatRouter } from './routes/eurostat'
 import { ecbRouter } from './routes/ecb'
 import { absRouter } from './routes/abs'
 import { catalogRouter } from './routes/catalog'
+import { hephaestusRouter } from './routes/hephaestus'
 import { verifyAbsEconMetadata, syncAllAbsSeries } from './fetchAllAbsSeries'
 import { verifyEurostatMetadata, syncAllEurostatSeries } from './fetchAllEurostatSeries'
 import { tvRouter } from './routes/tv'
@@ -128,6 +129,7 @@ app.use('/api/fx',           fxRouter)
 app.use('/api/macro',        macroRouter)
 app.use('/api/overnight-rates', overnightRatesRouter)
 app.use('/api/economic-calendar', economicCalendarRouter)
+app.use('/api/hephaestus',   hephaestusRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
