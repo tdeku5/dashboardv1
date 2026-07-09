@@ -52,6 +52,13 @@ hephaestusRouter.post('/chat', async (req: Request, res: Response) => {
     }
 
     const result = await runHephaestusChat({ messages, model })
+    // Server-log only (acceptance: model toggle verified via logs): model,
+    // iterations, tool calls, token usage.
+    console.log(
+      `[hephaestus] chat model=${model} iterations=${result.iterations} ` +
+      `spec=${result.spec ? 'yes' : 'no'} tools=[${result.toolTrace.map(t => t.tool).join(',')}] ` +
+      `tokens=${result.usage.input_tokens}in/${result.usage.output_tokens}out`
+    )
     res.json(result)
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected chat error'

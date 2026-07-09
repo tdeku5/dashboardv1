@@ -37,7 +37,7 @@ function makeDeps(turns: Anthropic.Message[], catalog: Map<string, CatalogRow>):
     search: () => ({ total: 1, results: [...catalog.values()] }),
     lookup: id => catalog.get(id),
     listParamsFn: () => [],
-    peek: () => [{ date: '2026-07-01', value: 4.2 }],
+    peek: () => ({ latest_points: [{ date: '2026-07-01', value: 4.2 }], count: 1, min: 4.2, max: 4.2 }),
     now: () => 0,   // frozen clock — never times out in tests
   }
 }
@@ -66,7 +66,7 @@ describe('runHephaestusChat', () => {
     const r = await runHephaestusChat(input, deps)
 
     expect(r.spec).not.toBeNull()
-    expect(r.spec?.series[0].id).toBe('DGS10')
+    expect(r.spec?.series[0]).toMatchObject({ kind: 'direct', id: 'DGS10' })
     expect(r.iterations).toBe(2)
     expect(r.reply).toBe('Corrected the series id.')
 

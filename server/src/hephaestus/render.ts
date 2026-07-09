@@ -21,8 +21,9 @@
 
 import { db } from '../db'
 import { ensureFresh as fredEnsureFresh } from '../routes/fred'
-import type { CatalogRow, ChartSpecV1 } from './chartSpec'
+import type { CatalogRow, ChartSpecV1, SeriesInput, Transform } from './chartSpec'
 import { lookupCatalog, listParams } from './catalogSearch'
+import { applyTransform, computeDerived, frequencyBucket } from './transforms'
 
 export const MAX_POINTS_PER_SERIES = 15000
 
@@ -208,12 +209,15 @@ export function fetchSeriesPoints(row: CatalogRow, param: string | undefined, op
 
 export interface RenderedSeries {
   key: string               // rows column key: s0, s1, …
-  id: string
+  kind: 'direct' | 'derived'
+  id: string                // direct: series_id; derived: "a.id op b.id"
   param?: string
   label: string
   axis: 'left' | 'right'
   units: string | null
   frequency: string | null
+  seasonal_adjustment: string | null
+  transform: Transform['type']
   pointCount: number
 }
 
@@ -243,9 +247,12 @@ export async function renderSpec(spec: ChartSpecV1, deps: RenderDeps = defaultRe
   const series: RenderedSeries[] = []
   const perSeriesPoints: Point[][] = []
 
-  for (const [i, ref] of spec.series.entries()) {
-    const row = deps.lookup(ref.id)
-    if (!row) throw new Error(`series '${ref.id}' is not in the series catalog`)
+  // Resolve one input ref: catalog lookup, FRED-only freshness gate, fetch.
+  // Fetched WITHOUT the `from` bound so lookback transforms (yoy/mom/diff/
+  // rolling) have history to compute against; the range is applied after.
+  const resolveInput = async (input: SeriesInput, path: string): Promise<{ row: CatalogRow; points: Point[] }> => {
+    const row = deps.lookup(input.id)
+    if (!row) throw new Error(`${path} '${input.id}' is not in the series catalog`)
 
     // FRED-only freshness gate: BEA_* ids live in series_observations too but
     // must never trigger a FRED API call (data_source distinguishes them).
@@ -257,18 +264,73 @@ export async function renderSpec(spec: ChartSpecV1, deps: RenderDeps = defaultRe
       }
     }
 
-    const points = deps.fetchPoints(row, ref.param, { from: spec.from, to: spec.to })
-    if (points.length === 0) warnings.push(`'${ref.id}' returned no observations in the requested range`)
-    if (points.length >= MAX_POINTS_PER_SERIES) warnings.push(`'${ref.id}' hit the ${MAX_POINTS_PER_SERIES}-point cap — oldest points truncated`)
+    const points = deps.fetchPoints(row, input.param, { to: spec.to })
+    // The cap keeps the most recent points; only warn when the truncation
+    // actually cuts into the requested range (earliest kept point is later
+    // than `from`, or no `from` was given at all).
+    if (points.length >= MAX_POINTS_PER_SERIES && (!spec.from || (points[0] && points[0].date > spec.from))) {
+      const w = `'${input.id}' hit the ${MAX_POINTS_PER_SERIES}-point cap — oldest points truncated`
+      if (!warnings.includes(w)) warnings.push(w)
+    }
+    return { row, points }
+  }
+
+  const applyRange = (points: Point[]): Point[] =>
+    spec.from ? points.filter(p => p.date >= spec.from!) : points
+
+  for (const [i, s] of spec.series.entries()) {
+    let points: Point[]
+    let meta: Pick<RenderedSeries, 'kind' | 'id' | 'param' | 'label' | 'units' | 'frequency' | 'seasonal_adjustment'>
+
+    if (s.kind === 'derived') {
+      const [ra, rb] = [await resolveInput(s.a, `series[${i}].a`), await resolveInput(s.b, `series[${i}].b`)]
+      // Derived ops compute ONLY on shared native observation dates (no fill).
+      // Mixed input frequencies therefore yield at most the coarser frequency.
+      const fa = frequencyBucket(ra.row.frequency)
+      const fb = frequencyBucket(rb.row.frequency)
+      const mixedFreq = fa !== null && fb !== null && fa !== fb
+      if (mixedFreq) {
+        warnings.push(`'${s.label}' mixes ${fa} and ${fb} inputs — derived points exist only on shared observation dates (at most ${fb === 'daily' ? fa : fb})`)
+      }
+      points = computeDerived(s.op, ra.points, rb.points)
+      meta = {
+        kind: 'derived',
+        id: `${s.a.id} ${s.op} ${s.b.id}`,
+        param: undefined,
+        label: s.label,
+        units: s.op === 'ratio' ? 'ratio' : (ra.row.units === rb.row.units ? ra.row.units : null),
+        frequency: mixedFreq ? `mixed (${fa} / ${fb})` : ra.row.frequency,
+        seasonal_adjustment: ra.row.seasonal_adjustment === rb.row.seasonal_adjustment ? (ra.row.seasonal_adjustment ?? null) : 'mixed',
+      }
+    } else {
+      const r = await resolveInput(s, `series[${i}]`)
+      points = r.points
+      meta = {
+        kind: 'direct',
+        id: s.id,
+        param: s.param,
+        label: s.label ?? r.row.description ?? s.id,
+        units: r.row.units,
+        frequency: r.row.frequency,
+        seasonal_adjustment: r.row.seasonal_adjustment ?? null,
+      }
+    }
+
+    // Transform/range ordering: lookback transforms (yoy/mom/diff/rolling/
+    // zscore) run BEFORE the range cut so they can see pre-range history;
+    // rebase100 runs AFTER it — its base is the first point IN RANGE.
+    const t = s.transform
+    const needsHistory = t !== undefined && t.type !== 'level' && t.type !== 'rebase100'
+    points = needsHistory
+      ? applyRange(applyTransform(points, t))
+      : applyTransform(applyRange(points), t)
+    if (points.length === 0) warnings.push(`'${meta.label}' returned no observations in the requested range`)
 
     series.push({
       key: `s${i}`,
-      id: ref.id,
-      param: ref.param,
-      label: ref.label ?? row.description ?? ref.id,
-      axis: ref.axis ?? 'left',
-      units: row.units,
-      frequency: row.frequency,
+      ...meta,
+      axis: s.axis ?? 'left',
+      transform: s.transform?.type ?? 'level',
       pointCount: points.length,
     })
     perSeriesPoints.push(points)
