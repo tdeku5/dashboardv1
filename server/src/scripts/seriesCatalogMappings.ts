@@ -113,6 +113,134 @@ const VOL_SYMBOLS: ReadonlyArray<[sym: string, desc: string, src: string]> = [
   ['VX2', 'VIX futures — continuous second month', 'server/src/vixCurve.ts'],
 ]
 
+// ── Manual mapping session, 2026-07-09 (user-confirmed; resolves the 84
+//    gate-frozen symbols). Category vocabulary extended with 'crypto'
+//    (BTC/ETH/SOL); listed crypto-exposure securities are 'equities'.
+//    Known duplicates cataloged as-is per instruction (T5YIFR≡5y5y,
+//    GN02Y/GN10Y/GN30Y≡CN02Y/CN10Y/CN30Y) — nothing removed from tv_series.
+const MANUAL_SRC = 'manual mapping session 2026-07-09 (user-confirmed)'
+
+const MANUAL_BREAKEVENS: ReadonlyArray<[sym: string, desc: string]> = [
+  ['10YBE', 'US 10-Year Breakeven Inflation Rate'],
+  ['30YBE', 'US 30-Year Breakeven Inflation Rate'],
+  ['5YBE', 'US 5-Year Breakeven Inflation Rate'],
+  ['5y5y', 'US 5-Year, 5-Year Forward Inflation Expectation Rate'],
+  ['7YBE', 'US 7-Year Breakeven Inflation Rate'],
+  ['T5YIFR', 'US 5-Year, 5-Year Forward Inflation Expectation Rate (duplicate of 5y5y)'],
+]
+
+const MANUAL_YIELDS: ReadonlyArray<[sym: string, desc: string, country: string]> = [
+  ['CN01Y', 'China 1-Year Government Bond Yield', 'CN'],
+  ['CN02Y', 'China 2-Year Government Bond Yield', 'CN'],
+  ['CN03Y', 'China 3-Year Government Bond Yield', 'CN'],
+  ['CN05Y', 'China 5-Year Government Bond Yield', 'CN'],
+  ['CN07Y', 'China 7-Year Government Bond Yield', 'CN'],
+  ['CN10Y', 'China 10-Year Government Bond Yield', 'CN'],
+  ['CN20Y', 'China 20-Year Government Bond Yield', 'CN'],
+  ['CN30Y', 'China 30-Year Government Bond Yield', 'CN'],
+  ['EU01MY', 'Euro Area 1-Month Government Bond Yield', 'EU'],
+  ['EU01Y', 'Euro Area 1-Year Government Bond Yield', 'EU'],
+  ['EU03MY', 'Euro Area 3-Month Government Bond Yield', 'EU'],
+  ['EU03Y', 'Euro Area 3-Year Government Bond Yield', 'EU'],
+  ['EU07Y', 'Euro Area 7-Year Government Bond Yield', 'EU'],
+  ['EU20Y', 'Euro Area 20-Year Government Bond Yield', 'EU'],
+  ['GN02Y', 'China 2-Year Government Bond Yield (duplicate of CN02Y)', 'CN'],
+  ['GN10Y', 'China 10-Year Government Bond Yield (duplicate of CN10Y)', 'CN'],
+  ['GN30Y', 'China 30-Year Government Bond Yield (duplicate of CN30Y)', 'CN'],
+  ['NZ02Y', 'New Zealand 2-Year Government Bond Yield', 'NZ'],
+  ['NZ10Y', 'New Zealand 10-Year Government Bond Yield', 'NZ'],
+  ['SE02Y', 'Sweden 2-Year Government Bond Yield', 'SE'],
+  ['SE10Y', 'Sweden 10-Year Government Bond Yield', 'SE'],
+]
+
+const MANUAL_UST_FUTURES: ReadonlyArray<[sym: string, desc: string]> = [
+  ['TN', 'Ultra 10-Year US Treasury Note Futures (continuous)'],
+  ['UB', 'Ultra US Treasury Bond Futures (continuous)'],
+  ['ZB', '30-Year US Treasury Bond Futures (continuous)'],
+  ['ZF', '5-Year US Treasury Note Futures (continuous)'],
+  ['ZN', '10-Year US Treasury Note Futures (continuous)'],
+  ['ZT', '2-Year US Treasury Note Futures (continuous)'],
+]
+
+const MANUAL_EQUITY_INDICES: ReadonlyArray<[sym: string, desc: string, country: string]> = [
+  ['BIST', 'BIST 100 Index (Turkey)', 'TR'],
+  ['COLCAP', 'MSCI COLCAP Index (Colombia)', 'CO'],
+  ['ES', 'E-mini S&P 500 Futures (continuous)', 'US'],
+  ['IBOV', 'Ibovespa Index (Brazil)', 'BR'],
+  ['IDX', 'IDX Composite Index (Indonesia)', 'ID'],
+  ['IPC', 'S&P/BMV IPC Index (Mexico)', 'MX'],
+  ['NIFTY50', 'NIFTY 50 Index (India)', 'IN'],
+  ['OMX30', 'OMX Stockholm 30 Index', 'SE'],
+  ['SA40', 'FTSE/JSE Top 40 Index (South Africa)', 'ZA'],
+  ['STI', 'Straits Times Index (Singapore)', 'SG'],
+]
+
+const MANUAL_COMMODITIES: ReadonlyArray<[sym: string, desc: string, country: string]> = [
+  ['ACF', 'Coking Coal Futures (continuous)', 'multi'],
+  ['CC', 'Cocoa Futures (ICE, continuous)', 'US'],
+  ['COPPER', 'Spot Copper Price (XCU/USD)', 'multi'],
+  ['CT', 'Cotton No. 2 Futures (ICE, continuous)', 'US'],
+  ['FEF', 'SGX TSI Iron Ore CFR China 62% Fe Futures (continuous)', 'CN'],
+  ['GF', 'Feeder Cattle Futures (CME, continuous)', 'US'],
+  ['HE', 'Lean Hogs Futures (CME, continuous)', 'US'],
+  ['KC', 'Coffee C Futures (ICE, continuous)', 'US'],
+  ['LBR', 'Lumber Futures (CME, continuous)', 'US'],
+  ['LE', 'Live Cattle Futures (CME, continuous)', 'US'],
+  // OIL: TradingView source (TVC:USOIL) extends to 1862; the local tv_series
+  // copy starts 1954 per the export window — catalog dates come from local data.
+  ['OIL', 'WTI Crude Oil Spot (TVC:USOIL)', 'US'],
+  ['REBAR', 'Steel Rebar Futures (SHFE, continuous)', 'CN'],
+  ['STEEL', 'Steel Long Futures (continuous)', 'multi'],
+  ['SB', 'Sugar No. 11 Futures (ICE, continuous)', 'US'],
+  ['ZC', 'Corn Futures (CBOT, continuous)', 'US'],
+  ['ZS', 'Soybean Futures (CBOT, continuous)', 'US'],
+  ['ZW', 'Chicago SRW Wheat Futures (CBOT, continuous)', 'US'],
+]
+
+const MANUAL_BOND_ETFS: ReadonlyArray<[sym: string, desc: string]> = [
+  ['HYG', 'iShares iBoxx $ High Yield Corporate Bond ETF'],
+  ['IEF', 'iShares 7-10 Year Treasury Bond ETF'],
+  ['MBB', 'iShares MBS ETF'],
+  ['TIP', 'iShares TIPS Bond ETF'],
+  ['TLT', 'iShares 20+ Year Treasury Bond ETF'],
+]
+
+const MANUAL_EQUITY_ETFS: ReadonlyArray<[sym: string, desc: string]> = [
+  ['GDX', 'VanEck Gold Miners ETF'],
+  ['KRE', 'SPDR S&P Regional Banking ETF'],
+  ['SMH', 'VanEck Semiconductor ETF'],
+  ['XBI', 'SPDR S&P Biotech ETF'],
+  ['XHB', 'SPDR S&P Homebuilders ETF'],
+  ['XOP', 'SPDR S&P Oil & Gas Exploration & Production ETF'],
+]
+
+const MANUAL_COMMODITY_ETFS: ReadonlyArray<[sym: string, desc: string]> = [
+  ['DBC', 'Invesco DB Commodity Index Tracking Fund'],
+  ['GLD', 'SPDR Gold Shares'],
+]
+
+const MANUAL_CRYPTO: ReadonlyArray<[sym: string, desc: string]> = [
+  ['BTC', 'Bitcoin / US Dollar'],
+  ['ETH', 'Ether / US Dollar'],
+  ['SOL', 'Solana / US Dollar'],
+]
+
+const MANUAL_CRYPTO_EQUITIES: ReadonlyArray<[sym: string, desc: string]> = [
+  ['GBTC', 'Grayscale Bitcoin Trust'],
+  ['IBIT', 'iShares Bitcoin Trust ETF'],
+  ['MSTR', 'Strategy Inc. (MicroStrategy) Common Stock'],
+  ['PURR', 'Hyperliquid Digital Asset Treasury Company (US-listed equity)'],
+  ['THYP', 'Hyperliquid ETF'],
+]
+
+// FX additions — countries per the confirmed mapping table (unlike the
+// generated pairs, which use 'multi'). USDSAR: STALE FEED (last obs
+// 2026-05-07) — logged in the resolution summary, cataloged as-is.
+const MANUAL_FX: ReadonlyArray<[sym: string, desc: string, country: string]> = [
+  ['USDGBP', 'USD/GBP exchange rate (US dollar in pound sterling)', 'UK'],
+  ['USDSAR', 'USD/SAR exchange rate (US dollar in Saudi riyal)', 'SA'],
+]
+
 export function buildTvContinuousMap(): Record<string, TvMapEntry> {
   const map: Record<string, TvMapEntry> = {}
   for (const [cc, country, name, tenors] of YIELD_CURVES) {
@@ -141,6 +269,19 @@ export function buildTvContinuousMap(): Record<string, TvMapEntry> {
   map['BRDTH200'] = e('S&P 500 breadth — % of members above the 200-day moving average', 'breadth', 'US', '%', 'server/src/breadth.ts')
   // Dollar index — DxyForeignYieldsChart.tsx.
   map['DXY'] = e('US dollar index (DXY)', 'fx', 'US', 'index level', 'client/src/components/DxyForeignYieldsChart.tsx')
+  // Manual mapping session additions (user-confirmed, 2026-07-09):
+  for (const [sym, desc] of MANUAL_BREAKEVENS) map[sym] = e(desc, 'inflation', 'US', '%', MANUAL_SRC)
+  for (const [sym, desc, country] of MANUAL_YIELDS) map[sym] = e(desc, 'rates', country, '%', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_UST_FUTURES) map[sym] = e(desc, 'rates', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc, country] of MANUAL_EQUITY_INDICES) map[sym] = e(desc, 'equities', country, 'index level', MANUAL_SRC)
+  for (const [sym, desc, country] of MANUAL_COMMODITIES) map[sym] = e(desc, 'commodities', country, 'price', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_BOND_ETFS) map[sym] = e(desc, 'rates', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_EQUITY_ETFS) map[sym] = e(desc, 'equities', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_COMMODITY_ETFS) map[sym] = e(desc, 'commodities', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_CRYPTO) map[sym] = e(desc, 'crypto', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc] of MANUAL_CRYPTO_EQUITIES) map[sym] = e(desc, 'equities', 'US', 'price', MANUAL_SRC)
+  for (const [sym, desc, country] of MANUAL_FX) map[sym] = e(desc, 'fx', country, 'price', MANUAL_SRC)
+  map['VVIX'] = e('Cboe VVIX Index (volatility of VIX)', 'vol', 'US', 'index level', MANUAL_SRC)
   return map
 }
 

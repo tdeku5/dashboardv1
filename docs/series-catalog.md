@@ -377,23 +377,42 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 
 ### TradingView
 
+- `ACF` — Coking Coal Futures (continuous) — price — daily — 2015-02-13→2026-07-07
 - `BRN` — Brent Crude — continuous front-month price — price — daily — 1989-03-02→2026-07-08
 - `BRN:contracts` [F×67] — Brent Crude futures — dated contracts — price — daily — 2019-04-16→2026-07-08
+- `CC` — Cocoa Futures (ICE, continuous) — price — daily — 1979-12-19→2026-07-08
 - `CL` — Crude Oil (WTI) — continuous front-month price — price — daily — 1983-03-30→2026-07-08
 - `CL:contracts` [F×67] — WTI Crude Oil futures — dated contracts — price — daily — 2017-11-21→2026-07-08
+- `COPPER` — Spot Copper Price (XCU/USD) — price — daily — 2012-05-09→2026-07-08
+- `CT` — Cotton No. 2 Futures (ICE, continuous) — price — daily — 1972-08-21→2026-07-08
+- `DBC` — Invesco DB Commodity Index Tracking Fund — price — daily — 2006-02-03→2026-07-07
+- `FEF` — SGX TSI Iron Ore CFR China 62% Fe Futures (continuous) — price — daily — 2014-06-12→2026-07-08
 - `GC` — Gold — continuous front-month price — price — daily — 1975-01-02→2026-07-08
 - `GC:contracts` [F×27] — Gold futures — dated contracts — price — daily — 2020-06-28→2026-07-08
+- `GF` — Feeder Cattle Futures (CME, continuous) — price — daily — 1976-06-02→2026-07-07
+- `GLD` — SPDR Gold Shares — price — daily — 2004-11-18→2026-07-07
 - `GOLD` — Gold (spot) — continuous front-month price — price — daily — 1954-01-04→2026-07-08
+- `HE` — Lean Hogs Futures (CME, continuous) — price — daily — 1970-01-05→2026-07-07
 - `HG` — Copper — continuous front-month price — price — daily — 1988-07-28→2026-07-08
 - `HG:contracts` [F×31] — Copper futures — dated contracts — price — daily — 2021-04-28→2026-07-08
+- `KC` — Coffee C Futures (ICE, continuous) — price — daily — 1973-08-16→2026-07-08
+- `LBR` — Lumber Futures (CME, continuous) — price — daily — 2022-08-04→2026-07-07
+- `LE` — Live Cattle Futures (CME, continuous) — price — daily — 1976-02-23→2026-07-07
 - `NG` — Natural Gas — continuous front-month price — price — daily — 1990-04-02→2026-07-08
+- `OIL` — WTI Crude Oil Spot (TVC:USOIL) — price — daily — 1954-01-04→2026-07-08
 - `PA` — Palladium — continuous front-month price — price — daily — 1985-08-25→2026-07-08
 - `PL` — Platinum — continuous front-month price — price — daily — 1985-06-17→2026-07-08
 - `RBOB` — RBOB Gasoline — continuous front-month price — price — daily — 1984-12-03→2026-07-08
+- `REBAR` — Steel Rebar Futures (SHFE, continuous) — price — daily — 2010-01-04→2026-07-08
+- `SB` — Sugar No. 11 Futures (ICE, continuous) — price — daily — 1971-10-03→2026-07-08
 - `SI` — Silver — continuous front-month price — price — daily — 1970-01-05→2026-07-08
 - `SI:contracts` [F×27] — Silver futures — dated contracts — price — daily — 2021-07-28→2026-07-08
 - `SILVER` — Silver (spot) — continuous front-month price — price — daily — 2012-05-09→2026-07-08
+- `STEEL` — Steel Long Futures (continuous) — price — daily — 2021-01-18→2026-07-07
 - `UHO` — Heating Oil — continuous front-month price — price — daily — 2006-04-23→2026-07-08
+- `ZC` — Corn Futures (CBOT, continuous) — price — daily — 1970-01-05→2026-07-08
+- `ZS` — Soybean Futures (CBOT, continuous) — price — daily — 1968-12-05→2026-07-08
+- `ZW` — Chicago SRW Wheat Futures (CBOT, continuous) — price — daily — 1970-01-05→2026-07-08
 
 
 ## credit
@@ -458,25 +477,54 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `CA_NW_TO_DI` — Canada — Net worth as a percentage — percent — quarterly — 1990-01-01→2026-01-01
 
 
+## crypto
+
+### TradingView
+
+- `BTC` — Bitcoin / US Dollar — price — daily — 2011-08-18→2026-07-08
+- `ETH` — Ether / US Dollar — price — daily — 2015-08-09→2026-07-08
+- `SOL` — Solana / US Dollar — price — daily — 2022-08-24→2026-07-08
+
+
 ## equities
 
 ### TradingView
 
 - `ASX` — Australia S&P/ASX index — index level — daily — 2000-04-03→2026-07-08
+- `BIST` — BIST 100 Index (Turkey) — index level — daily — 1986-02-06→2026-07-08
 - `CAC40` — France CAC 40 index — index level — daily — 2016-05-22→2026-07-08
+- `COLCAP` — MSCI COLCAP Index (Colombia) — index level — daily — 2012-10-10→2026-07-07
 - `DAX` — Germany DAX index — index level — daily — 1970-01-02→2026-07-08
 - `DJI` — Dow Jones Industrial Average — index level — daily — 1954-01-04→2026-07-07
+- `ES` — E-mini S&P 500 Futures (continuous) — index level — daily — 1997-09-08→2026-07-08
 - `FTMIB` — Italy FTSE MIB index — index level — daily — 1997-12-31→2026-07-08
 - `FTSE100` — United Kingdom FTSE 100 index — index level — daily — 2016-09-07→2026-07-08
+- `GBTC` — Grayscale Bitcoin Trust — price — daily — 2015-05-03→2026-07-07
+- `GDX` — VanEck Gold Miners ETF — price — daily — 2006-05-21→2026-07-07
 - `HSI` — Hong Kong Hang Seng index — index level — daily — 1986-12-31→2026-07-08
+- `IBIT` — iShares Bitcoin Trust ETF — price — daily — 2024-01-11→2026-07-07
+- `IBOV` — Ibovespa Index (Brazil) — index level — daily — 1994-03-18→2026-07-07
+- `IDX` — IDX Composite Index (Indonesia) — index level — daily — 1990-04-05→2026-07-08
+- `IPC` — S&P/BMV IPC Index (Mexico) — index level — daily — 1991-11-08→2026-07-07
+- `KRE` — SPDR S&P Regional Banking ETF — price — daily — 2006-06-21→2026-07-07
+- `MSTR` — Strategy Inc. (MicroStrategy) Common Stock — price — daily — 1998-06-10→2026-07-07
 - `NDX` — Nasdaq 100 — index level — daily — 1985-01-31→2026-07-07
+- `NIFTY50` — NIFTY 50 Index (India) — index level — daily — 1990-07-02→2026-07-08
 - `NKY` — Japan Nikkei 225 index — index level — daily — 2016-05-22→2026-07-08
 - `NZX50` — New Zealand NZX 50 index — index level — daily — 2003-07-08→2026-07-08
+- `OMX30` — OMX Stockholm 30 Index — index level — daily — 1999-03-02→2026-07-08
+- `PURR` — Hyperliquid Digital Asset Treasury Company (US-listed equity) — price — daily — 2025-12-03→2026-07-07
 - `RSP` — S&P 500 equal-weight (RSP) — index level — daily — 2003-04-29→2026-07-07
 - `RUT` — Russell 2000 — index level — daily — 1987-06-28→2026-07-07
+- `SA40` — FTSE/JSE Top 40 Index (South Africa) — index level — daily — 2002-06-24→2026-07-08
+- `SMH` — VanEck Semiconductor ETF — price — daily — 2000-05-04→2026-07-07
 - `SPX` — S&P 500 — index level — daily — 1954-01-04→2026-07-07
 - `SPY` — SPDR S&P 500 ETF (SPY) — index level — daily — 1993-01-29→2026-07-07
+- `STI` — Straits Times Index (Singapore) — index level — daily — 1992-09-27→2026-07-08
+- `THYP` — Hyperliquid ETF — price — daily — 2026-05-11→2026-07-07
 - `TSX:TSX` — Canada S&P/TSX Composite index — index level — daily — 1980-07-27→2026-07-07
+- `XBI` — SPDR S&P Biotech ETF — price — daily — 2006-02-06→2026-07-07
+- `XHB` — SPDR S&P Homebuilders ETF — price — daily — 2006-02-06→2026-07-07
 - `XLB` — S&P 500 sector ETF — Materials — price — daily — 1998-12-22→2026-07-07
 - `XLC` — S&P 500 sector ETF — Communication Services — price — daily — 2018-06-18→2026-07-07
 - `XLE` — S&P 500 sector ETF — Energy — price — daily — 1998-12-22→2026-07-07
@@ -488,6 +536,7 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `XLU` — S&P 500 sector ETF — Utilities — price — daily — 1998-12-22→2026-07-07
 - `XLV` — S&P 500 sector ETF — Health Care — price — daily — 1998-12-22→2026-07-07
 - `XLY` — S&P 500 sector ETF — Consumer Discretionary — price — daily — 1998-12-22→2026-07-07
+- `XOP` — SPDR S&P Oil & Gas Exploration & Production ETF — price — daily — 2006-06-21→2026-07-07
 
 
 ## fiscal
@@ -658,6 +707,7 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `USDCLP` — USD/CLP exchange rate (US dollar in Chilean peso) — price — daily — 2012-06-05→2026-07-08
 - `USDCNH` — USD/CNH exchange rate (US dollar in offshore Chinese yuan) — price — daily — 1981-01-02→2026-07-08
 - `USDCOP` — USD/COP exchange rate (US dollar in Colombian peso) — price — daily — 1989-11-08→2026-07-08
+- `USDGBP` — USD/GBP exchange rate (US dollar in pound sterling) — price — daily — 2012-06-05→2026-07-08
 - `USDHUF` — USD/HUF exchange rate (US dollar in Hungarian forint) — price — daily — 2012-05-09→2026-07-08
 - `USDIDR` — USD/IDR exchange rate (US dollar in Indonesian rupiah) — price — daily — 1990-11-19→2026-07-08
 - `USDINR` — USD/INR exchange rate (US dollar in Indian rupee) — price — daily — 1973-01-02→2026-07-08
@@ -669,6 +719,7 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `USDPHP` — USD/PHP exchange rate (US dollar in Philippine peso) — price — daily — 2012-05-09→2026-07-08
 - `USDPLN` — USD/PLN exchange rate (US dollar in Polish zloty) — price — daily — 2012-05-09→2026-07-08
 - `USDRUB` — USD/RUB exchange rate (US dollar in Russian rouble) — price — daily — 2012-06-05→2026-07-08
+- `USDSAR` — USD/SAR exchange rate (US dollar in Saudi riyal) — price — daily — 1991-03-19→2026-05-07
 - `USDSEK` — USD/SEK exchange rate (US dollar in Swedish krona) — price — daily — 1971-01-05→2026-07-08
 - `USDSGD` — USD/SGD exchange rate (US dollar in Singapore dollar) — price — daily — 2002-05-06→2026-07-08
 - `USDTHB` — USD/THB exchange rate (US dollar in Thai baht) — price — daily — 2012-06-05→2026-07-08
@@ -2212,6 +2263,15 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `CPI_TRIM` — Canada CPI-trim — BoC preferred core (YoY %, published rate) — percent — monthly — 1990-01-01→2026-05-01
 - `CPI_XFE` — Canada CPI — all-items ex food & energy (index) — index — monthly — 1961-01-01→2026-05-01
 
+### TradingView
+
+- `10YBE` — US 10-Year Breakeven Inflation Rate — % — daily — 2003-01-03→2026-07-07
+- `30YBE` — US 30-Year Breakeven Inflation Rate — % — daily — 2010-02-02→2026-07-07
+- `5y5y` — US 5-Year, 5-Year Forward Inflation Expectation Rate — % — daily — 2003-01-03→2026-07-08
+- `5YBE` — US 5-Year Breakeven Inflation Rate — % — daily — 2003-01-03→2026-07-08
+- `7YBE` — US 7-Year Breakeven Inflation Rate — % — daily — 2003-01-02→2026-07-07
+- `T5YIFR` — US 5-Year, 5-Year Forward Inflation Expectation Rate (duplicate of 5y5y) — % — daily — 2003-01-03→2026-07-08
+
 ### UMich
 
 - `UMICH_PX5` — US UMich 5-year inflation expectations (median) — % — monthly — 1979-02-01→2026-06-01
@@ -2572,6 +2632,14 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `CA10Y` — Canada 10-year government bond yield — % — daily — 1986-01-02→2026-07-07
 - `CA20Y` — Canada 20-year government bond yield — % — daily — 1994-03-15→2026-07-08
 - `CA30Y` — Canada 30-year government bond yield — % — daily — 1994-03-16→2026-07-08
+- `CN01Y` — China 1-Year Government Bond Yield — % — daily — 2001-03-13→2026-07-08
+- `CN02Y` — China 2-Year Government Bond Yield — % — daily — 2004-03-01→2026-07-08
+- `CN03Y` — China 3-Year Government Bond Yield — % — daily — 2004-03-01→2026-07-08
+- `CN05Y` — China 5-Year Government Bond Yield — % — daily — 2001-03-13→2026-07-08
+- `CN07Y` — China 7-Year Government Bond Yield — % — daily — 2016-04-26→2026-07-08
+- `CN10Y` — China 10-Year Government Bond Yield — % — daily — 2002-06-02→2026-07-07
+- `CN20Y` — China 20-Year Government Bond Yield — % — daily — 2002-06-02→2026-07-08
+- `CN30Y` — China 30-Year Government Bond Yield — % — daily — 2002-06-02→2026-07-08
 - `CRA:contracts` [F×7] — 3-month CORRA futures — dated contracts — price (100 − rate) — daily — 2023-09-20→2026-07-08
 - `DE01MY` — Germany 1-month government bill/money-market yield — % — daily — 1994-02-10→2026-07-08
 - `DE01Y` — Germany 1-year government bond yield — % — daily — 1994-02-10→2026-07-08
@@ -2583,9 +2651,15 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `DE10Y` — Germany 10-year government bond yield — % — daily — 1979-12-24→2026-07-08
 - `DE20Y` — Germany 20-year government bond yield — % — daily — 1996-10-31→2026-07-08
 - `DE30Y` — Germany 30-year government bond yield — % — daily — 1994-02-10→2026-07-08
+- `EU01MY` — Euro Area 1-Month Government Bond Yield — % — daily — 2012-05-14→2026-07-08
+- `EU01Y` — Euro Area 1-Year Government Bond Yield — % — daily — 2012-05-14→2026-07-08
 - `EU02Y` — Euro area 2-year government bond yield — % — daily — 2012-05-14→2026-07-08
+- `EU03MY` — Euro Area 3-Month Government Bond Yield — % — daily — 2012-05-14→2026-07-08
+- `EU03Y` — Euro Area 3-Year Government Bond Yield — % — daily — 2012-05-14→2026-07-08
 - `EU05Y` — Euro area 5-year government bond yield — % — daily — 2012-05-14→2026-07-08
+- `EU07Y` — Euro Area 7-Year Government Bond Yield — % — daily — 2012-05-14→2026-07-08
 - `EU10Y` — Euro area 10-year government bond yield — % — daily — 2012-05-14→2026-07-08
+- `EU20Y` — Euro Area 20-Year Government Bond Yield — % — daily — 2012-05-14→2026-07-08
 - `EU30Y` — Euro area 30-year government bond yield — % — daily — 2012-05-14→2026-07-08
 - `EUR:contracts` [F×20] — 3-month Euribor futures — dated contracts — price (100 − rate) — daily — 2020-06-15→2026-07-08
 - `FF:contracts` [F×48] — 30-day Fed Funds futures — dated contracts — price (100 − rate) — daily — 2020-09-20→2026-07-08
@@ -2609,6 +2683,11 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `GB10Y` — United Kingdom 10-year government bond yield — % — daily — 1979-12-24→2026-07-08
 - `GB20Y` — United Kingdom 20-year government bond yield — % — daily — 1987-12-31→2026-07-08
 - `GB30Y` — United Kingdom 30-year government bond yield — % — daily — 1994-01-26→2026-07-08
+- `GN02Y` — China 2-Year Government Bond Yield (duplicate of CN02Y) — % — daily — 2004-03-01→2026-07-08
+- `GN10Y` — China 10-Year Government Bond Yield (duplicate of CN10Y) — % — daily — 2002-06-02→2026-07-07
+- `GN30Y` — China 30-Year Government Bond Yield (duplicate of CN30Y) — % — daily — 2002-06-02→2026-07-08
+- `HYG` — iShares iBoxx $ High Yield Corporate Bond ETF — price — daily — 2007-04-10→2026-07-07
+- `IEF` — iShares 7-10 Year Treasury Bond ETF — price — daily — 2002-07-25→2026-07-07
 - `IT01MY` — Italy 1-month government bill/money-market yield — % — daily — 1994-02-14→2026-07-08
 - `IT01Y` — Italy 1-year government bond yield — % — daily — 2012-08-13→2026-07-08
 - `IT02Y` — Italy 2-year government bond yield — % — daily — 1989-07-02→2026-07-08
@@ -2629,12 +2708,21 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `JP20Y` — Japan 20-year government bond yield — % — daily — 2006-07-19→2026-07-08
 - `JP30Y` — Japan 30-year government bond yield — % — daily — 2006-07-26→2026-07-08
 - `JP40Y` — Japan 40-year government bond yield — % — daily — 2007-11-06→2026-07-08
+- `MBB` — iShares MBS ETF — price — daily — 2007-03-15→2026-07-07
+- `NZ02Y` — New Zealand 2-Year Government Bond Yield — % — daily — 2016-04-26→2026-07-08
+- `NZ10Y` — New Zealand 10-Year Government Bond Yield — % — daily — 2016-04-26→2026-07-08
+- `SE02Y` — Sweden 2-Year Government Bond Yield — % — daily — 2012-08-13→2026-07-08
+- `SE10Y` — Sweden 10-Year Government Bond Yield — % — daily — 2012-09-06→2026-07-08
 - `SO3:contracts` [F×20] — 3-month SONIA futures — dated contracts — price (100 − rate) — daily — 2020-09-15→2026-07-08
 - `SR1:contracts` [F×9] — CME 1-Month SOFR futures — dated contracts — price (100 − rate) — daily — 2023-04-30→2026-07-07
 - `SR3:contracts` [F×27] — CME 3-Month SOFR futures — dated contracts — price (100 − rate) — daily — 2019-09-26→2026-07-08
+- `TIP` — iShares TIPS Bond ETF — price — daily — 2003-12-05→2026-07-07
+- `TLT` — iShares 20+ Year Treasury Bond ETF — price — daily — 2002-07-25→2026-07-07
+- `TN` — Ultra 10-Year US Treasury Note Futures (continuous) — price — daily — 2016-01-11→2026-07-08
 - `TOA3:contracts` [F×19] — 3-month TONA futures — dated contracts — price (100 − rate) — daily — 2023-05-28→2026-07-08
 - `TVC:US01MY` — United States 1-month Treasury yield (TVC, OHLCV bars) — % — daily — 2012-06-05→2026-07-08
 - `TVC:US03MY` — United States 3-month Treasury yield (TVC, OHLCV bars) — % — daily — 1954-01-04→2026-07-08
+- `UB` — Ultra US Treasury Bond Futures (continuous) — price — daily — 2010-01-11→2026-07-08
 - `US01MY` — United States 1-month government bill/money-market yield — % — daily — 2001-12-27→2026-07-08
 - `US01Y` — United States 1-year government bond yield — % — daily — 1962-01-02→2026-07-08
 - `US02Y` — United States 2-year government bond yield — % — daily — 1988-02-26→2026-07-08
@@ -2645,6 +2733,10 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `US10Y` — United States 10-year government bond yield — % — daily — 1954-01-04→2026-07-08
 - `US20Y` — United States 20-year government bond yield — % — daily — 2020-05-21→2026-07-08
 - `US30Y` — United States 30-year government bond yield — % — daily — 1987-08-03→2026-07-08
+- `ZB` — 30-Year US Treasury Bond Futures (continuous) — price — daily — 1977-08-21→2026-07-08
+- `ZF` — 5-Year US Treasury Note Futures (continuous) — price — daily — 1988-05-26→2026-07-08
+- `ZN` — 10-Year US Treasury Note Futures (continuous) — price — daily — 1982-05-02→2026-07-08
+- `ZT` — 2-Year US Treasury Note Futures (continuous) — price — daily — 1990-06-21→2026-07-07
 
 ### central banks
 
@@ -2926,93 +3018,6 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `CA_HH_COMP` — Canada — Compensation of employees — dollars — quarterly — 1961-01-01→2026-01-01
 - `CA_NPISH_R` — Canada — Non-profit institutions — dollars — quarterly — 1961-01-01→2026-01-01
 
-### TradingView
-
-- `10YBE` — *(unresolved)* — — — daily — 2003-01-03→2026-07-07
-- `30YBE` — *(unresolved)* — — — daily — 2010-02-02→2026-07-07
-- `5y5y` — *(unresolved)* — — — daily — 2003-01-03→2026-07-08
-- `5YBE` — *(unresolved)* — — — daily — 2003-01-03→2026-07-08
-- `7YBE` — *(unresolved)* — — — daily — 2003-01-02→2026-07-07
-- `ACF` — *(unresolved)* — — — daily — 2015-02-13→2026-07-07
-- `BIST` — *(unresolved)* — — — daily — 1986-02-06→2026-07-08
-- `BTC` — *(unresolved)* — — — daily — 2011-08-18→2026-07-08
-- `CC` — *(unresolved)* — — — daily — 1979-12-19→2026-07-08
-- `CN01Y` — *(unresolved)* — — — daily — 2001-03-13→2026-07-08
-- `CN02Y` — *(unresolved)* — — — daily — 2004-03-01→2026-07-08
-- `CN03Y` — *(unresolved)* — — — daily — 2004-03-01→2026-07-08
-- `CN05Y` — *(unresolved)* — — — daily — 2001-03-13→2026-07-08
-- `CN07Y` — *(unresolved)* — — — daily — 2016-04-26→2026-07-08
-- `CN10Y` — *(unresolved)* — — — daily — 2002-06-02→2026-07-07
-- `CN20Y` — *(unresolved)* — — — daily — 2002-06-02→2026-07-08
-- `CN30Y` — *(unresolved)* — — — daily — 2002-06-02→2026-07-08
-- `COLCAP` — *(unresolved)* — — — daily — 2012-10-10→2026-07-07
-- `COPPER` — *(unresolved)* — — — daily — 2012-05-09→2026-07-08
-- `CT` — *(unresolved)* — — — daily — 1972-08-21→2026-07-08
-- `DBC` — *(unresolved)* — — — daily — 2006-02-03→2026-07-07
-- `ES` — *(unresolved)* — — — daily — 1997-09-08→2026-07-08
-- `ETH` — *(unresolved)* — — — daily — 2015-08-09→2026-07-08
-- `EU01MY` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `EU01Y` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `EU03MY` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `EU03Y` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `EU07Y` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `EU20Y` — *(unresolved)* — — — daily — 2012-05-14→2026-07-08
-- `FEF` — *(unresolved)* — — — daily — 2014-06-12→2026-07-08
-- `GBTC` — *(unresolved)* — — — daily — 2015-05-03→2026-07-07
-- `GDX` — *(unresolved)* — — — daily — 2006-05-21→2026-07-07
-- `GF` — *(unresolved)* — — — daily — 1976-06-02→2026-07-07
-- `GLD` — *(unresolved)* — — — daily — 2004-11-18→2026-07-07
-- `GN02Y` — *(unresolved)* — — — daily — 2004-03-01→2026-07-08
-- `GN10Y` — *(unresolved)* — — — daily — 2002-06-02→2026-07-07
-- `GN30Y` — *(unresolved)* — — — daily — 2002-06-02→2026-07-08
-- `HE` — *(unresolved)* — — — daily — 1970-01-05→2026-07-07
-- `HYG` — *(unresolved)* — — — daily — 2007-04-10→2026-07-07
-- `IBIT` — *(unresolved)* — — — daily — 2024-01-11→2026-07-07
-- `IBOV` — *(unresolved)* — — — daily — 1994-03-18→2026-07-07
-- `IDX` — *(unresolved)* — — — daily — 1990-04-05→2026-07-08
-- `IEF` — *(unresolved)* — — — daily — 2002-07-25→2026-07-07
-- `IPC` — *(unresolved)* — — — daily — 1991-11-08→2026-07-07
-- `KC` — *(unresolved)* — — — daily — 1973-08-16→2026-07-08
-- `KRE` — *(unresolved)* — — — daily — 2006-06-21→2026-07-07
-- `LBR` — *(unresolved)* — — — daily — 2022-08-04→2026-07-07
-- `LE` — *(unresolved)* — — — daily — 1976-02-23→2026-07-07
-- `MBB` — *(unresolved)* — — — daily — 2007-03-15→2026-07-07
-- `MSTR` — *(unresolved)* — — — daily — 1998-06-10→2026-07-07
-- `NIFTY50` — *(unresolved)* — — — daily — 1990-07-02→2026-07-08
-- `NZ02Y` — *(unresolved)* — — — daily — 2016-04-26→2026-07-08
-- `NZ10Y` — *(unresolved)* — — — daily — 2016-04-26→2026-07-08
-- `OIL` — *(unresolved)* — — — daily — 1954-01-04→2026-07-08
-- `OMX30` — *(unresolved)* — — — daily — 1999-03-02→2026-07-08
-- `PURR` — *(unresolved)* — — — daily — 2025-12-03→2026-07-07
-- `REBAR` — *(unresolved)* — — — daily — 2010-01-04→2026-07-08
-- `SA40` — *(unresolved)* — — — daily — 2002-06-24→2026-07-08
-- `SB` — *(unresolved)* — — — daily — 1971-10-03→2026-07-08
-- `SE02Y` — *(unresolved)* — — — daily — 2012-08-13→2026-07-08
-- `SE10Y` — *(unresolved)* — — — daily — 2012-09-06→2026-07-08
-- `SMH` — *(unresolved)* — — — daily — 2000-05-04→2026-07-07
-- `SOL` — *(unresolved)* — — — daily — 2022-08-24→2026-07-08
-- `STEEL` — *(unresolved)* — — — daily — 2021-01-18→2026-07-07
-- `STI` — *(unresolved)* — — — daily — 1992-09-27→2026-07-08
-- `T5YIFR` — *(unresolved)* — — — daily — 2003-01-03→2026-07-08
-- `THYP` — *(unresolved)* — — — daily — 2026-05-11→2026-07-07
-- `TIP` — *(unresolved)* — — — daily — 2003-12-05→2026-07-07
-- `TLT` — *(unresolved)* — — — daily — 2002-07-25→2026-07-07
-- `TN` — *(unresolved)* — — — daily — 2016-01-11→2026-07-08
-- `UB` — *(unresolved)* — — — daily — 2010-01-11→2026-07-08
-- `USDGBP` — *(unresolved)* — — — daily — 2012-06-05→2026-07-08
-- `USDSAR` — *(unresolved)* — — — daily — 1991-03-19→2026-05-07
-- `VVIX` — *(unresolved)* — — — daily — 2006-03-06→2026-07-07
-- `XBI` — *(unresolved)* — — — daily — 2006-02-06→2026-07-07
-- `XHB` — *(unresolved)* — — — daily — 2006-02-06→2026-07-07
-- `XOP` — *(unresolved)* — — — daily — 2006-06-21→2026-07-07
-- `ZB` — *(unresolved)* — — — daily — 1977-08-21→2026-07-08
-- `ZC` — *(unresolved)* — — — daily — 1970-01-05→2026-07-08
-- `ZF` — *(unresolved)* — — — daily — 1988-05-26→2026-07-08
-- `ZN` — *(unresolved)* — — — daily — 1982-05-02→2026-07-08
-- `ZS` — *(unresolved)* — — — daily — 1968-12-05→2026-07-08
-- `ZT` — *(unresolved)* — — — daily — 1990-06-21→2026-07-07
-- `ZW` — *(unresolved)* — — — daily — 1970-01-05→2026-07-08
-
 
 ## vol
 
@@ -3027,6 +3032,7 @@ Kinds: [F] contract family (member_count contracts), [P] parameterized. Unresolv
 - `OVOL` — Crude oil volatility index (Cboe OVX) — index level — daily — 2012-04-25→2026-07-07
 - `VIX` — Cboe VIX index (30-day S&P 500 implied vol) — index level — daily — 1990-01-03→2026-07-08
 - `VIX3M` — Cboe VIX3M index (3-month S&P 500 implied vol) — index level — daily — 2007-12-05→2026-07-07
+- `VVIX` — Cboe VVIX Index (volatility of VIX) — index level — daily — 2006-03-06→2026-07-07
 - `VX:contracts` [F×8] — Cboe VIX futures — dated monthly contracts — price — daily — 2025-09-21→2026-07-08
 - `VX1` — VIX futures — continuous front month — index level — daily — 2004-03-26→2026-07-08
 - `VX2` — VIX futures — continuous second month — index level — daily — 2004-03-26→2026-07-08
