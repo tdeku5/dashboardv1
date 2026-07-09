@@ -1,13 +1,54 @@
-/* ── Shell ────────────────────────────────────────────────────────────────── */
+/*
+ * Hephaestus — chat surface theme (design pass).
+ * Dark blue/gray, scoped to this page via the --hp-* tokens on .shell.
+ * The top bar and breadcrumb keep the terminal's shared chrome; everything
+ * below the breadcrumb runs on the Hephaestus palette. Global theme
+ * variables are never modified here.
+ *
+ * Typography: IBM Plex Sans (self-hosted variable font) is the default face
+ * for all Hephaestus chrome and prose; only inline series-id chips
+ * (--hp-font-mono) and everything inside SpecChart stay monospace.
+ */
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+}
+
+/* ── Theme tokens ─────────────────────────────────────────────────────────── */
 
 .shell {
+  --hp-bg:            #0E1621;   /* page canvas */
+  --hp-surface:       #121A27;   /* header, composer bar */
+  --hp-surface-card:  #131C29;   /* chart card */
+  --hp-raised:        #1B2637;   /* composer input, mono chips */
+  --hp-bubble:        #1E2A3C;   /* user message bubble */
+  --hp-border:        #26334A;   /* hairline */
+  --hp-border-strong: #2C3B52;   /* bubble + input borders */
+  --hp-text:          #DDE4ED;   /* primary */
+  --hp-text-prose:    #C4CEDB;   /* assistant body copy */
+  --hp-text-dim:      #8695AA;   /* labels */
+  --hp-text-faint:    #5C6B80;   /* status lines, placeholders, axis */
+  --hp-accent:        #5B9DD9;   /* steel blue: send, status dot, focus */
+  --hp-negative:      #E06C6C;   /* error text on the navy canvas */
+  --hp-font-sans:     'IBM Plex Sans', var(--font-sans);
+  --hp-font-mono:     var(--font-mono);
+
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
+  /* Sans is the page's default face for ALL Hephaestus chrome; components
+     that must stay mono (series-id chips) opt back in via --hp-font-mono.
+     SpecChart internals declare their own faces and are unaffected. */
+  font-family: var(--hp-font-sans);
 }
 
-/* ── Top bar ──────────────────────────────────────────────────────────────── */
+/* ── Top bar + breadcrumb — shared terminal chrome, unchanged ─────────────── */
 
 .topBar {
   display: flex;
@@ -40,8 +81,6 @@
   padding-left: 10px;
 }
 
-/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
-
 .breadcrumb {
   display: flex;
   align-items: center;
@@ -52,7 +91,6 @@
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   font-size: 11px;
-  font-family: var(--font-mono);
   letter-spacing: 0.06em;
   color: #64748B;
 }
@@ -61,197 +99,370 @@
   color: #94A3B8;
 }
 
-/* ── Body ─────────────────────────────────────────────────────────────────── */
+/* ── Thread canvas ────────────────────────────────────────────────────────── */
 
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  background: var(--hp-bg);
+  padding: 28px 20px 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   min-height: 0;
 }
-
-/* ── Page header ──────────────────────────────────────────────────────────── */
-
-.pageHeader {
-  flex-shrink: 0;
-}
-
-.pageTitle {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-primary);
-}
-
-.pageSubtitle {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  color: #4e6070;
-  font-family: var(--font-mono);
-  margin-top: 4px;
-}
-
-
-/* ── Chat feed ────────────────────────────────────────────────────────────── */
 
 .feed {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  max-width: 1100px;
+  gap: 22px;
+  max-width: 760px;
   width: 100%;
   margin: 0 auto;
+  flex: 1;
 }
+
+/* ── User turn: right-aligned bubble ──────────────────────────────────────── */
 
 .turnUser {
   align-self: flex-end;
-  max-width: 70%;
-  background: var(--surface-header);
-  border: 1px solid var(--border-accent);
-  border-radius: 3px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: var(--text-primary);
+  max-width: 78%;
+  background: var(--hp-bubble);
+  border: 1px solid var(--hp-border-strong);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--hp-text);
   white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
+
+/* ── Assistant turn: bare prose on the canvas ─────────────────────────────── */
 
 .turnAssistant {
   align-self: stretch;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
-.assistantText {
-  font-size: 12px;
-  line-height: 1.55;
-  color: #94A3B8;
-  white-space: pre-wrap;
-}
-
-.assistantError {
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--negative, #ef4444);
-}
-
-.forging {
+.statusLine {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
-  color: #64748B;
+  gap: 7px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--hp-text-faint);
+  text-transform: uppercase;
 }
 
-.forging::before {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border: 1px solid #64748B;
-  border-top-color: transparent;
+.statusDot {
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.emptyState {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 80px 24px;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  color: #4e6070;
-  text-align: center;
-}
-
-/* ── Chart actions ────────────────────────────────────────────────────────── */
-
-.chartActions {
-  display: flex;
-  gap: 8px;
+  background: var(--hp-accent);
   flex-shrink: 0;
 }
 
-.actionBtn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 3px 10px;
+.assistantText {
+  font-size: 14px;
+  line-height: 1.68;
+  color: var(--hp-text-prose);
+  max-width: 72ch;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.assistantError {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--hp-negative);
+  max-width: 72ch;
+  white-space: pre-wrap;
+}
+
+/* Inline series-id chip inside assistant prose — identifiers stay mono */
+.chip {
+  font-family: var(--hp-font-mono);
+  font-size: 0.86em;
+  background: var(--hp-raised);
+  border: 1px solid var(--hp-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--hp-text);
+  white-space: nowrap;
+}
+
+/* ── Forging (loading) state ──────────────────────────────────────────────── */
+
+.forgingDot {
+  composes: statusDot;
+  animation: hpPulse 1.4s ease-in-out infinite;
+}
+
+.forgingWord::after {
+  content: '';
+  display: inline-block;
+  width: 3ch;
+  text-align: left;
+  animation: hpEllipsis 1.4s steps(4, end) infinite;
+}
+
+@keyframes hpPulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 1; }
+}
+
+@keyframes hpEllipsis {
+  0%   { content: ''; }
+  25%  { content: '.'; }
+  50%  { content: '..'; }
+  75%  { content: '...'; }
+}
+
+/* ── Chart card — breaks wider than the prose column ──────────────────────── */
+
+.chartCard {
+  background: var(--hp-surface-card);
+  border: 1px solid var(--hp-border);
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 2px -40px 0;
+}
+
+@media (max-width: 900px) {
+  .chartCard { margin: 2px 0 0; }
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--hp-border);
+}
+
+.cardTitleWrap { min-width: 0; }
+
+.cardTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hp-text-dim);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardAnnotation {
   font-size: 10px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  color: #94A3B8;
+  letter-spacing: 0.05em;
+  color: var(--hp-text-faint);
+  margin-top: 3px;
+  text-transform: none;
+}
+
+.cardActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.iconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--hp-text-dim);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.iconBtn:hover {
+  background: var(--hp-raised);
+  color: var(--hp-text);
+}
+
+.iconBtn:focus-visible {
+  outline: none;
+  border-color: var(--hp-accent);
+}
+
+.iconBtnDone {
+  color: var(--hp-accent);
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+
+.emptyState {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 0 36px;
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--hp-text);
+}
+
+.emptyBody {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--hp-text-dim);
+  max-width: 60ch;
+}
+
+.exampleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.exampleChip {
+  font-family: inherit;   /* buttons don't inherit by default */
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--hp-text-dim);
+  background: var(--hp-raised);
+  border: 1px solid var(--hp-border);
+  border-radius: 8px;
+  padding: 7px 12px;
   cursor: pointer;
   transition: border-color 0.15s, color 0.15s;
 }
 
-.actionBtn:hover {
-  border-color: var(--border-accent);
-  color: var(--text-primary);
+.exampleChip:hover {
+  border-color: var(--hp-accent);
+  color: var(--hp-text);
 }
 
-/* ── Input bar ────────────────────────────────────────────────────────────── */
+.exampleChip:focus-visible {
+  outline: none;
+  border-color: var(--hp-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hp-accent) 20%, transparent);
+}
 
-.inputBar {
+/* ── Composer ─────────────────────────────────────────────────────────────── */
+
+.composerBar {
   flex-shrink: 0;
-  border-top: 1px solid var(--border-accent);
-  background: var(--surface-header);
-  padding: 12px 20px;
+  background: var(--hp-surface);
+  border-top: 1px solid var(--hp-border);
+  padding: 12px 20px 14px;
+}
+
+.composer {
   display: flex;
-  gap: 10px;
+  align-items: flex-end;
+  gap: 0;
+  max-width: 760px;
+  margin: 0 auto;
+  background: var(--hp-raised);
+  border: 1px solid var(--hp-border-strong);
+  border-radius: 12px;
+  padding: 6px 8px 6px 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.composer:focus-within {
+  border-color: var(--hp-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hp-accent) 18%, transparent);
+}
+
+.modelWrap {
+  display: flex;
   align-items: center;
+  align-self: stretch;
+  padding: 0 4px 0 10px;
+  border-right: 1px solid var(--hp-border);
+}
+
+.modelSelect {
+  appearance: none;
+  background: transparent;
+  border: none;
+  font-family: inherit;   /* selects don't inherit by default */
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--hp-text-dim);
+  /* Wide enough for the longest option ("Sonnet 5" / "Opus 4.8") at the sans
+     face, plus the caret gutter — no truncation at unchanged font size. */
+  min-width: 88px;
+  padding: 4px 16px 4px 4px;
+  cursor: pointer;
+  outline: none;
+  /* caret drawn via the wrapper's ::after to keep the select native */
+}
+
+.modelWrap::after {
+  content: '▾';
+  font-size: 8px;
+  color: var(--hp-text-faint);
+  margin-left: -14px;
+  pointer-events: none;
+}
+
+.modelSelect:focus-visible {
+  color: var(--hp-text);
+}
+
+.modelSelect option {
+  background: var(--hp-raised);
+  color: var(--hp-text);
 }
 
 .inputBox {
   flex: 1;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 9px 12px;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  resize: none;
+  font-family: inherit;   /* textareas don't inherit by default */
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--hp-text);
+  padding: 7px 12px;
   outline: none;
+  max-height: 140px;
+  overflow-y: auto;
 }
 
-.inputBox:focus { border-color: var(--border-accent); }
+.inputBox::placeholder {
+  color: var(--hp-text-faint);
+}
 
 .sendBtn {
-  background: none;
-  border: 1px solid var(--border-accent);
-  border-radius: 3px;
-  padding: 9px 18px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  font-family: var(--font-mono);
-  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  background: var(--hp-accent);
+  color: var(--hp-bg);
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
   transition: opacity 0.15s;
 }
 
-.sendBtn:disabled { opacity: 0.35; cursor: default; }
+.sendBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
 
-.modelSelect {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 8px 8px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-  color: #94A3B8;
-  outline: none;
-  cursor: pointer;
+.sendBtn:focus-visible {
+  outline: 2px solid var(--hp-text);
+  outline-offset: 1px;
 }

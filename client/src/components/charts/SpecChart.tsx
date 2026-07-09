@@ -14,6 +14,14 @@ import styles from './ChartKit.module.css'
  * no-fill alignment rule, a lower-frequency series has null cells on the
  * higher-frequency x-axis dates — connectNulls draws it as a continuous line
  * between its true observations instead of disconnected dots.
+ *
+ * Structure (Hephaestus design pass): the data lifecycle lives in
+ * useSpecChart(), and the legend + plot + warnings live in <SpecChartCore>.
+ * <SpecChart> itself is the ChartKit CARD around the core — it is what
+ * Misc. Charts renders and its output is unchanged. The Hephaestus page
+ * composes useSpecChart + SpecChartCore inside its own themed card instead.
+ * Chart internals (axes, tooltip, grid, palette) are shared and identical on
+ * both pages.
  */
 
 // Distinct line palette; first two match the Misc. Charts headline/core
@@ -29,7 +37,15 @@ function annotationFor(result: RenderResult): string | null {
   return notes.length > 0 ? notes.join(' · ') : null
 }
 
-export function SpecChart({ spec, headerExtra }: { spec: ChartSpecV1; headerExtra?: ReactNode }) {
+export interface SpecChartState {
+  result: RenderResult | null
+  error: string | null
+  annotation: string | null
+  hidden: Set<string>
+  toggle: (key: string) => void
+}
+
+export function useSpecChart(spec: ChartSpecV1): SpecChartState {
   const [result, setResult] = useState<RenderResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
@@ -50,19 +66,19 @@ export function SpecChart({ spec, headerExtra }: { spec: ChartSpecV1; headerExtr
     return n
   })
 
+  return { result, error, annotation: result ? annotationFor(result) : null, hidden, toggle }
+}
+
+/**
+ * Legend + plot + loading/error/warnings — everything INSIDE the card.
+ * ChartKit-styled on every surface; the card framing is the caller's.
+ */
+export function SpecChartCore({ state }: { state: SpecChartState }) {
+  const { result, error, hidden, toggle } = state
   const hasRight = result?.series.some(s => s.axis === 'right') ?? false
-  const annotation = result ? annotationFor(result) : null
 
   return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <div>
-          <div className={styles.sectionTitle}>{spec.title}</div>
-          {annotation && <div className={styles.sectionSubtitle}>⚠ {annotation}</div>}
-        </div>
-        {headerExtra}
-      </div>
-
+    <>
       {result && (
         <div className={styles.legendRow}>
           <div className={styles.legend}>
@@ -125,6 +141,24 @@ export function SpecChart({ spec, headerExtra }: { spec: ChartSpecV1; headerExtr
           {result.warnings.join(' · ')}
         </div>
       )}
+    </>
+  )
+}
+
+/** ChartKit card framing — what Misc. Charts renders (output unchanged). */
+export function SpecChart({ spec, headerExtra }: { spec: ChartSpecV1; headerExtra?: ReactNode }) {
+  const state = useSpecChart(spec)
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeader}>
+        <div>
+          <div className={styles.sectionTitle}>{spec.title}</div>
+          {state.annotation && <div className={styles.sectionSubtitle}>⚠ {state.annotation}</div>}
+        </div>
+        {headerExtra}
+      </div>
+      <SpecChartCore state={state} />
     </div>
   )
 }

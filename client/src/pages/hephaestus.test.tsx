@@ -1,32 +1,41 @@
 // Hephaestus frontend smoke tests — static-markup renders (same convention as
 // renderSmoke.test.tsx: no DOM, no fetch; useEffect does not run, so initial
-// states are what render).
+// states are what render). Interaction tests live in hephaestusComposer.test.tsx.
 import { describe, it, expect } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { HephaestusPage } from './HephaestusPage'
+import { HephaestusPage, EXAMPLE_PROMPTS } from './HephaestusPage'
 import { MiscChartsPage } from './MiscChartsPage'
 import { SpecChart } from '../components/charts/SpecChart'
 import { NavDropdown } from '../components/NavDropdown'
 import { getStoredModel, DEFAULT_MODEL, type ChartSpecV1 } from '../lib/hephaestus'
 
 describe('Hephaestus frontend', () => {
-  it('HephaestusPage renders the empty state with model selector and input', () => {
+  it('HephaestusPage renders the empty state, example chips, model selector, and a disabled send', () => {
     const html = renderToStaticMarkup(<MemoryRouter><HephaestusPage /></MemoryRouter>)
-    expect(html).toContain('HEPHAESTUS')
-    expect(html).toContain('Ask for a chart in plain language.')
+    expect(html).toContain('Ask Hephaestus for a chart.')
+    for (const p of EXAMPLE_PROMPTS) expect(html).toContain(p)
     expect(html).toContain('Sonnet 5')
     expect(html).toContain('Opus 4.8')
-    expect(html).toContain('FORGE')
+    // Send is disabled while the composer is empty (initial state) —
+    // attribute order is React's, so extract the tag and check it.
+    const sendTag = html.match(/<button[^>]*aria-label="Send"[^>]*>/)?.[0] ?? ''
+    expect(sendTag).toContain('disabled')
   })
 
-  it('SpecChart initial render shows the themed loading state', () => {
+  it('SpecChart initial render keeps the ChartKit card chrome (Misc. Charts protection)', () => {
     const spec: ChartSpecV1 = {
       version: 1, title: 'US 10Y', series: [{ kind: 'direct', id: 'DGS10' }],
     }
     const html = renderToStaticMarkup(<SpecChart spec={spec} />)
     expect(html).toContain('US 10Y')
     expect(html).toContain('Forging…')
+    // The Misc. Charts framing must remain the ChartKit classes — the
+    // Hephaestus page supplies its own card, but this wrapper must not change.
+    expect(html).toMatch(/_section_/)
+    expect(html).toMatch(/_sectionHeader_/)
+    expect(html).toMatch(/_sectionTitle_/)
+    expect(html).toMatch(/_statusBlock_/)
   })
 
   it('MiscChartsPage still renders its existing content (Saved Charts section is empty-silent)', () => {
