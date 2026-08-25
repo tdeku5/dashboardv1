@@ -80,6 +80,7 @@ import { auFundamentalRouter } from './routes/auFundamental'
 import { syncIncremental as syncIncrementalAbs } from './collectors/absCollector'
 import { syncEconomicCalendar, backfillMissingCategories, mergeDuplicateReleases } from './economicCalendar'
 import { economicCalendarRouter } from './routes/economicCalendar'
+import { positionSizingRouter } from './routes/positionSizing'
 
 dotenv.config({ path: '../.env' })
 
@@ -130,6 +131,7 @@ app.use('/api/macro',        macroRouter)
 app.use('/api/overnight-rates', overnightRatesRouter)
 app.use('/api/economic-calendar', economicCalendarRouter)
 app.use('/api/hephaestus',   hephaestusRouter)
+app.use('/api/portfolio/position-sizing', positionSizingRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 

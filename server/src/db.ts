@@ -1834,3 +1834,201 @@ export function renameSavedChart(id: number, name: string): boolean {
 export function deleteSavedChart(id: number): boolean {
   return db.prepare('DELETE FROM saved_charts WHERE id = ?').run(id).changes > 0
 }
+
+// ── Position Sizing (Portfolio Analytics) ────────────────────────────────────
+// Port of the position_sizing.xlsx model (Setup / Instruments / Sizing Grid).
+// These tables hold ONLY the model's inputs — all grid math lives client-side
+// in client/src/lib/positionSizing.ts. Percentages are stored as fractions
+// (0.0025 = 0.25%), matching the workbook. Tick specs are exchange contract
+// terms and are read-only via the API; initial_margin is user-editable.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ps_settings (
+    id                      INTEGER PRIMARY KEY CHECK (id = 1),
+    principle               REAL NOT NULL,
+    current_portfolio_value REAL NOT NULL,
+    market_money_pct        REAL NOT NULL,
+    max_drawdown_pct        REAL NOT NULL,
+    unit_risk_pct           REAL NOT NULL,
+    max_units_risk_pct      REAL NOT NULL,
+    updated_at              TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ps_instruments (
+    symbol            TEXT PRIMARY KEY,
+    group_name        TEXT NOT NULL,
+    tick_size_display TEXT NOT NULL,
+    tick_size_decimal REAL NOT NULL,
+    tick_value        REAL NOT NULL,
+    initial_margin    REAL,
+    sort_order        INTEGER NOT NULL,
+    updated_at        TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS ps_stop_ladder (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    stop_ticks INTEGER NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS ps_contract_ladder (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    contracts  INTEGER NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL
+  );
+`)
+
+// Seed: Setup!B4/B5/B7/B10/B12/B14. INSERT OR IGNORE so user edits survive restarts.
+db.prepare(`
+  INSERT OR IGNORE INTO ps_settings
+    (id, principle, current_portfolio_value, market_money_pct, max_drawdown_pct, unit_risk_pct, max_units_risk_pct, updated_at)
+  VALUES (1, 500000, 500000, 0.25, 0.05, 0.0025, 0.02, datetime('now'))
+`).run()
+
+// Seed: the workbook's 37 Instruments rows, verbatim. 6J's tick size really is
+// 0.0000005 (five-tenths of a millionth) — that is why its $/point is 12.5M.
+// symbol | group | tick display | tick decimal | tick value | initial margin
+const PS_INSTRUMENT_SEED: Array<[string, string, string, number, number, number]> = [
+  ['ES',  'Equity Index', '0.25',      0.25,       12.5,    22980.1],
+  ['MES', 'Equity Index', '0.25',      0.25,       1.25,    2297.9],
+  ['NQ',  'Equity Index', '0.25',      0.25,       5,       43667.8],
+  ['MNQ', 'Equity Index', '0.25',      0.25,       0.5,     4367],
+  ['RTY', 'Equity Index', '0.1',       0.1,        5,       9941.8],
+  ['VX',  'Volatility',   '0.05',      0.05,       50,      8525],
+  ['ZT',  'Rates',        "0'001",     0.00390625, 7.8125,  1320],
+  ['ZF',  'Rates',        "0'002",     0.0078125,  7.8125,  1375],
+  ['ZN',  'Rates',        "0'005",     0.015625,   15.625,  2062.5],
+  ['TN',  'Rates',        "0'005",     0.015625,   15.625,  2805],
+  ['ZB',  'Rates',        "0'01",      0.03125,    31.25,   4070],
+  ['UB',  'Rates',        "0'01",      0.03125,    31.25,   5665],
+  ['SR3', 'STIR',         '0.005',     0.005,      12.5,    475],
+  ['SR1', 'STIR',         '0.0025',    0.0025,     10.4175, 300],
+  ['ZQ',  'STIR',         '0.005',     0.005,      20.835,  375],
+  ['GC',  'Metals',       '0.1',       0.1,        10,      26211.9],
+  ['MGC', 'Metals',       '0.1',       0.1,        1,       2621.3],
+  ['SI',  'Metals',       '0.005',     0.005,      25,      46845.7],
+  ['HG',  'Metals',       '0.0005',    0.0005,     12.5,    11000],
+  ['MHG', 'Metals',       '0.0005',    0.0005,     1.25,    1100],
+  ['PL',  'Metals',       '0.1',       0.1,        5,       12130.8],
+  ['PA',  'Metals',       '0.5',       0.5,        50,      23093.4],
+  ['CL',  'Energy',       '0.01',      0.01,       10,      3858.8],
+  ['MCL', 'Energy',       '0.01',      0.01,       1,       388.3],
+  ['BZ',  'Energy',       '0.01',      0.01,       10,      3934.7],
+  ['NG',  'Energy',       '0.001',     0.001,      10,      5888.3],
+  ['ZC',  'Grains',       '1/4 cent',  0.25,       12.5,    935],
+  ['ZW',  'Grains',       '1/4 cent',  0.25,       12.5,    1870],
+  ['ZS',  'Grains',       '1/4 cent',  0.25,       12.5,    2090],
+  ['SB',  'Softs',        '0.01',      0.01,       11.2,    114620],
+  ['6E',  'FX',           '0.00005',   0.00005,    6.25,    2310],
+  ['6J',  'FX',           '0.0000005', 0.0000005,  6.25,    2640],
+  ['6B',  'FX',           '0.0001',    0.0001,     6.25,    1870],
+  ['6A',  'FX',           '0.0001',    0.0001,     10,      1925],
+  ['6C',  'FX',           '0.00005',   0.00005,    5,       880],
+  ['6S',  'FX',           '0.0001',    0.0001,     12.5,    3960],
+  ['6N',  'FX',           '0.0001',    0.0001,     10,      1320],
+]
+
+{
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO ps_instruments
+      (symbol, group_name, tick_size_display, tick_size_decimal, tick_value, initial_margin, sort_order, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  `)
+  db.transaction(() => {
+    PS_INSTRUMENT_SEED.forEach((row, i) => stmt.run(...row, i + 1))
+  })()
+
+  // Ladders are replace-on-edit (users can delete rows), so only seed when empty —
+  // INSERT OR IGNORE would resurrect deleted rows on every restart.
+  const stopCount = (db.prepare('SELECT COUNT(*) AS n FROM ps_stop_ladder').get() as { n: number }).n
+  if (stopCount === 0) {
+    const ins = db.prepare('INSERT INTO ps_stop_ladder (stop_ticks, sort_order) VALUES (?, ?)')
+    db.transaction(() => {
+      [20, 40, 60, 80, 100, 120, 160, 200].forEach((t, i) => ins.run(t, i + 1))
+    })()
+  }
+  const contractCount = (db.prepare('SELECT COUNT(*) AS n FROM ps_contract_ladder').get() as { n: number }).n
+  if (contractCount === 0) {
+    const ins = db.prepare('INSERT INTO ps_contract_ladder (contracts, sort_order) VALUES (?, ?)')
+    db.transaction(() => {
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].forEach((c, i) => ins.run(c, i + 1))
+    })()
+  }
+}
+
+export interface PsSettingsRow {
+  id: number
+  principle: number
+  current_portfolio_value: number
+  market_money_pct: number
+  max_drawdown_pct: number
+  unit_risk_pct: number
+  max_units_risk_pct: number
+  updated_at: string | null
+}
+
+export function getPsSettings(): PsSettingsRow {
+  return db.prepare('SELECT * FROM ps_settings WHERE id = 1').get() as PsSettingsRow
+}
+
+export function updatePsSettings(s: Omit<PsSettingsRow, 'id' | 'updated_at'>): PsSettingsRow {
+  db.prepare(`
+    UPDATE ps_settings SET
+      principle               = @principle,
+      current_portfolio_value = @current_portfolio_value,
+      market_money_pct        = @market_money_pct,
+      max_drawdown_pct        = @max_drawdown_pct,
+      unit_risk_pct           = @unit_risk_pct,
+      max_units_risk_pct      = @max_units_risk_pct,
+      updated_at              = datetime('now')
+    WHERE id = 1
+  `).run(s)
+  return getPsSettings()
+}
+
+export interface PsInstrumentRow {
+  symbol: string
+  group_name: string
+  tick_size_display: string
+  tick_size_decimal: number
+  tick_value: number
+  initial_margin: number | null
+  sort_order: number
+  updated_at: string | null
+}
+
+export function getPsInstruments(): PsInstrumentRow[] {
+  return db.prepare('SELECT * FROM ps_instruments ORDER BY sort_order ASC').all() as PsInstrumentRow[]
+}
+
+export function updatePsInstrumentMargin(symbol: string, initialMargin: number): PsInstrumentRow | undefined {
+  const info = db.prepare(`
+    UPDATE ps_instruments SET initial_margin = ?, updated_at = datetime('now') WHERE symbol = ?
+  `).run(initialMargin, symbol)
+  if (info.changes === 0) return undefined
+  return db.prepare('SELECT * FROM ps_instruments WHERE symbol = ?').get(symbol) as PsInstrumentRow
+}
+
+export function getPsLadders(): { stopLadder: number[]; contractLadder: number[] } {
+  const stopLadder = (db.prepare('SELECT stop_ticks FROM ps_stop_ladder ORDER BY sort_order ASC')
+    .all() as Array<{ stop_ticks: number }>).map(r => r.stop_ticks)
+  const contractLadder = (db.prepare('SELECT contracts FROM ps_contract_ladder ORDER BY sort_order ASC')
+    .all() as Array<{ contracts: number }>).map(r => r.contracts)
+  return { stopLadder, contractLadder }
+}
+
+export function replacePsStopLadder(values: number[]): void {
+  const ins = db.prepare('INSERT INTO ps_stop_ladder (stop_ticks, sort_order) VALUES (?, ?)')
+  db.transaction(() => {
+    db.prepare('DELETE FROM ps_stop_ladder').run()
+    values.forEach((v, i) => ins.run(v, i + 1))
+  })()
+}
+
+export function replacePsContractLadder(values: number[]): void {
+  const ins = db.prepare('INSERT INTO ps_contract_ladder (contracts, sort_order) VALUES (?, ?)')
+  db.transaction(() => {
+    db.prepare('DELETE FROM ps_contract_ladder').run()
+    values.forEach((v, i) => ins.run(v, i + 1))
+  })()
+}
