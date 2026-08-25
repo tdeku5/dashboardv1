@@ -1,0 +1,528 @@
+/* ── Shell / chrome (copied from MtsPage.module.css base) ─────────────────── */
+
+.shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 46px;
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border-accent);
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.barLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.barCenter { flex: 1; }
+.barRight  { flex-shrink: 0; }
+
+.logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text-primary);
+  border-left: 1px solid var(--border-accent);
+  padding-left: 10px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px;
+  height: 34px;
+  background: var(--surface-header);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #64748B;
+}
+
+.breadcrumbLink {
+  color: #64748B;
+  text-decoration: none;
+  transition: color 0.12s;
+}
+
+.breadcrumbLink:hover { color: #94A3B8; }
+.breadcrumbSep { opacity: 0.4; }
+.breadcrumbCurrent { color: #94A3B8; }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 0;
+  max-width: 1280px;
+}
+
+/* ── Sections ─────────────────────────────────────────────────────────────── */
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--border-accent);
+  border-radius: 3px;
+  min-width: 0;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94A3B8;
+}
+
+.collapseSummary {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #94A3B8;
+  padding: 11px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: #64748B;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.saveError {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 3px;
+  color: #fca5a5;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 9px 14px;
+}
+
+/* ── Setup panel ──────────────────────────────────────────────────────────── */
+
+.setupWrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 24px;
+  padding: 16px;
+}
+
+.setupTable {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.setupTable th {
+  text-align: left;
+  font-weight: 400;
+  color: #94A3B8;
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.setupTable td {
+  text-align: right;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Workbook colour convention: computed = plain, editable = blue,
+   the two headline inputs = yellow key-assumption treatment. */
+.computed {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.editable {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: #60a5fa;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  width: 130px;
+  padding: 2px 4px;
+}
+
+.editable:hover { border-color: var(--border-accent); }
+.editable:focus {
+  outline: none;
+  border-color: #60a5fa;
+  background: #0a1220;
+}
+
+.keyInput {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.07);
+}
+
+/* Workbook Setup!C4 annotation — spans the two yellow input rows. */
+.setupTable td.inlinePointer {
+  text-align: left;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: #4e6070;
+  padding-left: 12px;
+  border-bottom: none;
+}
+
+.keyInput:focus { border-color: #facc15; }
+
+/* ── Unit ladder ──────────────────────────────────────────────────────────── */
+
+.unitLadder { min-width: 0; }
+
+.ladderTable {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.ladderTable th {
+  text-align: right;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4e6070;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-accent);
+}
+
+.ladderTable td {
+  text-align: right;
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Instrument selector / spec strip ─────────────────────────────────────── */
+
+.instrumentSelect {
+  background: var(--surface-header);
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 5px 10px;
+  min-width: 140px;
+}
+
+.specStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+
+.spec {
+  flex: 1 1 120px;
+  padding: 10px 16px;
+  border-right: 1px solid var(--border);
+}
+
+.spec:last-child { border-right: none; }
+
+.specLabel {
+  display: block;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #4e6070;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+
+.specValue {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ── Sizing grids ─────────────────────────────────────────────────────────── */
+
+.tableWrap {
+  overflow-x: auto;
+  padding: 8px 16px 12px;
+}
+
+.gridTable {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  width: 100%;
+}
+
+.gridTable thead th {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #4e6070;
+  padding: 4px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.unitCell {
+  color: #94A3B8 !important;
+}
+
+.budgetCell {
+  border-bottom: 1px solid var(--border-accent) !important;
+}
+
+.rowHeadCell {
+  text-align: right;
+  font-weight: 400;
+  color: #94A3B8;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.bodyCell {
+  text-align: right;
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Breach fill (workbook #F4A9A9 → terminal --negative). The light text keeps
+   the – dash legible on the red fill — a red zero cell must not read empty. */
+.cellRed {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fecaca;
+}
+
+.footnote {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  line-height: 1.5;
+  color: #4e6070;
+  padding: 8px 16px 10px;
+}
+
+.gridEmpty,
+.gridWarning {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  color: #94A3B8;
+  padding: 14px 16px;
+}
+
+.gridWarning {
+  color: #facc15;
+  padding-bottom: 0;
+}
+
+.gridWarningCell {
+  font-size: 11px;
+  color: #facc15;
+  text-align: left !important;
+  line-height: 1.5;
+}
+
+/* ── Reference table / notes / ladder editors ─────────────────────────────── */
+
+.refTable {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  width: 100%;
+}
+
+.refTable thead th {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: #4e6070;
+  padding: 4px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-accent);
+  white-space: nowrap;
+}
+
+.refTable thead th:first-child,
+.refTable thead th:nth-child(2) { text-align: left; }
+
+.refTable tbody th {
+  text-align: left;
+  font-weight: 700;
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.refTable tbody td {
+  text-align: right;
+  color: var(--text-primary);
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.refTable tbody td:nth-child(2) {
+  text-align: left;
+  color: #94A3B8;
+}
+
+.notes {
+  margin: 0;
+  padding: 10px 16px 12px 32px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  line-height: 1.6;
+  color: #94A3B8;
+}
+
+.notes li { margin-bottom: 4px; }
+
+.ladderEditors {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ladderEditorsTitle {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #4e6070;
+}
+
+.ladderEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ladderEditorLabel {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: #94A3B8;
+}
+
+.ladderEditorRows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ladderEditorRow {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+}
+
+.ladderInput {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  width: 56px;
+  padding: 3px 6px;
+}
+
+.ladderInput:focus { outline: 1px solid #60a5fa; }
+
+.ladderRemove {
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: #64748B;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 3px 7px;
+}
+
+.ladderRemove:hover { color: #fca5a5; }
+
+.ladderAdd {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.ladderAdd .ladderInput {
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  width: 72px;
+}
+
+.ladderAddBtn {
+  background: var(--surface-header);
+  border: 1px solid var(--border-accent);
+  border-radius: 2px;
+  color: #94A3B8;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 3px 10px;
+}
+
+.ladderAddBtn:hover { color: var(--text-primary); }
+
+.ladderEmptyNote {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #4e6070;
+  font-style: italic;
+}
+
+@media (max-width: 1000px) {
+  .setupWrap { grid-template-columns: 1fr; }
+}

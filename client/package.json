@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "react": "^18.3.1",
@@ -16,11 +17,14 @@
     "recharts": "^3.7.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.20.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "happy-dom": "^20.10.6",
     "typescript": "^5.6.3",
-    "vite": "^6.0.1"
+    "vite": "^6.0.1",
+    "vitest": "^4.1.11"
   }
 }

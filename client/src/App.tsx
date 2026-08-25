@@ -40,6 +40,8 @@ import { BankCreditDashboardPage } from './pages/BankCreditDashboardPage'
 import { HousingPage } from './pages/HousingPage'
 import { MiscChartsPage } from './pages/MiscChartsPage'
 import { HephaestusPage } from './pages/HephaestusPage'
+import { PortfolioAnalyticsPage } from './pages/PortfolioAnalyticsPage'
+import { PositionSizingPage } from './pages/PositionSizingPage'
 
 function App() {
   return (
@@ -80,6 +82,8 @@ function App() {
         <Route path="/models/credit"                         element={<CreditPage />} />
         <Route path="/models/credit/bank-credit"             element={<BankCreditDashboardPage />} />
         <Route path="/stir"                         element={<STIRDashboardPage />} />
+        <Route path="/portfolio"                    element={<PortfolioAnalyticsPage />} />
+        <Route path="/portfolio/position-sizing"    element={<PositionSizingPage />} />
         <Route path="/treasury"                     element={<TreasuryAuctionPage />} />
         <Route path="/news"                         element={<NewsAggregatorPage />} />
         <Route path="/economic-log"                 element={<EconomicDataLogPage />} />

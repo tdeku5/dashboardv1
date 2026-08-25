@@ -6,6 +6,7 @@ const NAV_OPTIONS = [
   { path: '/',             label: 'US Macro Snapshot'        },
   { path: '/models',       label: 'Economic Data Models'     },
   { path: '/stir',         label: 'Asset Class Models'        },
+  { path: '/portfolio',    label: 'Portfolio Analytics'      },
   { path: '/news',         label: 'News Aggregator'          },
   { path: '/economic-log', label: 'Economic Calendar'        },
   { path: '/hephaestus',   label: 'Hephaestus'               },
