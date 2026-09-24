@@ -38,6 +38,7 @@ import { HIST_LOOKBACKS, histLookbackChange } from '../lib/historicalChanges'
 import styles from './STIRDashboardPage.module.css'
 
 const TreasuryAuctionContent = lazy(() => import('./TreasuryAuctionPage').then(m => ({ default: m.TreasuryAuctionContent })))
+const UsRatesVolContent = lazy(() => import('./UsRatesVolPage').then(m => ({ default: m.UsRatesVolPage })))
 import { CountryCurvePage } from './CountryCurvePage'
 import { GlobalRatesPage } from './GlobalRatesPage'
 import { CrudeOilPage } from './CrudeOilPage'
@@ -56,7 +57,7 @@ import { CadFxPage } from './CadFxPage'
 import { JpyFxPage } from './JpyFxPage'
 import { AusFxPage } from './AusFxPage'
 
-type ViewTab = 'strips' | 'pricing' | 'policy' | 'ust' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
+type ViewTab = 'strips' | 'pricing' | 'policy' | 'ust' | 'vol' | 'attribution' | 'credit' | 'money' | 'auctions' | 'gilt' | 'bund' | 'oat' | 'btp' | 'cad' | 'jgb' | 'agb'
 
 type AssetClass = 'macro' | 'rates' | 'equities' | 'fx' | 'commodities'
 
@@ -142,6 +143,7 @@ function getViewTabs(country: CountryCode): Array<{ key: ViewTab; label: string 
       { key: 'pricing', label: 'FORWARD PRICING' },
       { key: 'policy', label: 'POLICY RATE' },
       { key: 'ust', label: 'UST CURVE' },
+      { key: 'vol', label: 'VOL' },
       { key: 'attribution', label: 'YIELD ATTRIBUTION' },
       { key: 'credit', label: 'CREDIT' },
       { key: 'money', label: 'MONEY MARKETS' },
@@ -4641,6 +4643,12 @@ export function STIRDashboardPage() {
               )}
             </div>
           </div>
+        )}
+
+        {activeView === 'vol' && (
+          <Suspense fallback={<div className={styles.comingSoon}>Loading…</div>}>
+            <UsRatesVolContent />
+          </Suspense>
         )}
 
         {activeView === 'auctions' && (
