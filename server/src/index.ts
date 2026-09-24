@@ -65,6 +65,7 @@ import { macroRouter } from './routes/macro'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 import { runStaleTipCleanup } from './migrations/cleanStaleTips'
 import { runEcbHicpDatasetMigration } from './migrations/migrateEcbHicpDataset'
+import { ratesRouter } from './routes/rates'
 import { syncUsRatesRealizedVol } from './usRatesRealizedVol'
 import { syncIncrementalFredOvernight } from './overnightFred'
 import { syncIncrementalBocOvernight } from './overnightBoc'
@@ -133,6 +134,7 @@ app.use('/api/overnight-rates', overnightRatesRouter)
 app.use('/api/economic-calendar', economicCalendarRouter)
 app.use('/api/hephaestus',   hephaestusRouter)
 app.use('/api/portfolio/position-sizing', positionSizingRouter)
+app.use('/api/rates',        ratesRouter)
 
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
 
