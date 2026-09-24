@@ -561,6 +561,32 @@ if (rowCount('mts_fiscal_balance') > 0) {
     description_source: 'self-describing table (mts_fiscal_balance)',
   })
 }
+if (rowCount('us_rates_realized_vol') > 0) {
+  // Terminal-derived, not vendor data — data_source says so explicitly so the
+  // catalog never implies TradingView publishes these. Wide table, one entry
+  // per column, mirroring the uk_hpi convention (render.ts whitelists the set).
+  const US_RV_SERIES: Array<[string, string]> = [
+    ['rv_move', 'US realized MOVE — 21d zero-mean realized vol, 20/20/40/20 blend of 2y/5y/10y/30y'],
+    ['rv_2y',   'US 2y realized yield vol — 21d zero-mean, annualized'],
+    ['rv_5y',   'US 5y realized yield vol — 21d zero-mean, annualized'],
+    ['rv_10y',  'US 10y realized yield vol — 21d zero-mean, annualized'],
+    ['rv_30y',  'US 30y realized yield vol — 21d zero-mean, annualized'],
+  ]
+  for (const [col, description] of US_RV_SERIES) {
+    const r = db.prepare(
+      `SELECT COUNT(*) AS n, MIN(date) AS f, MAX(date) AS l FROM us_rates_realized_vol WHERE ${col} IS NOT NULL`
+    ).get() as { n: number; f: string | null; l: string | null }
+    if (r.n === 0) continue
+    push({
+      series_id: `USRVOL:${col}`, source_table: 'us_rates_realized_vol',
+      description,
+      units: 'annualized bp', frequency: 'daily', data_source: 'TND (derived)',
+      country: 'US', category: 'vol',
+      first_date: r.f?.slice(0, 10) ?? null, last_date: r.l?.slice(0, 10) ?? null, obs_count: r.n,
+      description_source: 'server/src/lib/realizedMove.ts',
+    })
+  }
+}
 if (rowCount('umich_inflation_expectations') > 0) {
   const r = db.prepare('SELECT COUNT(*) AS n, MIN(date) AS f, MAX(date) AS l FROM umich_inflation_expectations').get() as { n: number; f: string; l: string }
   push({

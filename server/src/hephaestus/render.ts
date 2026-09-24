@@ -59,6 +59,13 @@ const UK_HPI_METRICS = new Set([
   'monthly_change', 'price_detached', 'price_semi', 'price_terraced', 'price_flat', 'sales_volume',
 ])
 
+// us_rates_realized_vol is wide too (one column per tenor plus the blend).
+// Same whitelist treatment as uk_hpi — nothing model-authored reaches the
+// SELECT list. Terminal-derived, so there is no vendor freshness path.
+const US_RATES_RV_METRICS = new Set([
+  'rv_move', 'rv_2y', 'rv_5y', 'rv_10y', 'rv_30y',
+])
+
 function fetchAscWithWindow(sql: string, params: unknown[]): Point[] {
   // Queries are written ORDER BY date DESC LIMIT n so the cap keeps the most
   // recent points; reverse restores chronological order.
@@ -135,6 +142,25 @@ export function fetchSeriesPoints(row: CatalogRow, param: string | undefined, op
       params.push(opts.limit ?? MAX_POINTS_PER_SERIES)
       return fetchAscWithWindow(
         `SELECT date, ${metric} AS value FROM uk_hpi WHERE ${where} ORDER BY date DESC LIMIT ?`,
+        params,
+      )
+    }
+
+    case 'us_rates_realized_vol': {
+      // series_id = USRVOL:{column}. Nulls are filtered out rather than plotted,
+      // so a short-window date breaks the line instead of interpolating across it.
+      const parts = row.series_id.split(':')
+      const metric = parts[1]
+      if (parts.length !== 2 || !US_RATES_RV_METRICS.has(metric)) {
+        throw new Error(`unrecognized us_rates_realized_vol series_id shape: '${row.series_id}'`)
+      }
+      const params: unknown[] = []
+      let where = `${metric} IS NOT NULL`
+      if (opts.from) { where += ' AND date >= ?'; params.push(opts.from) }
+      if (opts.to) { where += ' AND date <= ?'; params.push(opts.to) }
+      params.push(opts.limit ?? MAX_POINTS_PER_SERIES)
+      return fetchAscWithWindow(
+        `SELECT date, ${metric} AS value FROM us_rates_realized_vol WHERE ${where} ORDER BY date DESC LIMIT ?`,
         params,
       )
     }

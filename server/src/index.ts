@@ -65,6 +65,7 @@ import { macroRouter } from './routes/macro'
 import { startTvCsvWatcher, stopTvCsvWatcher } from './tvCsvIngest'
 import { runStaleTipCleanup } from './migrations/cleanStaleTips'
 import { runEcbHicpDatasetMigration } from './migrations/migrateEcbHicpDataset'
+import { syncUsRatesRealizedVol } from './usRatesRealizedVol'
 import { syncIncrementalFredOvernight } from './overnightFred'
 import { syncIncrementalBocOvernight } from './overnightBoc'
 import { syncIncrementalBojOvernight } from './overnightBoj'
@@ -377,6 +378,33 @@ async function startup(): Promise<void> {
   syncIncrementalRbaOvernight().catch(err =>
     console.error('[startup] RBA overnight sync error:', err)
   )
+
+  // US rates realized vol — derived from tv_series yields, so it has no network
+  // fetch of its own and is cheap enough to run synchronously-ish here. It is a
+  // full backfill on an empty table and a trailing-40-day recompute otherwise.
+  // Wrapped rather than awaited so a failure never blocks startup.
+  try {
+    syncUsRatesRealizedVol()
+  } catch (err) {
+    console.error('[startup] US rates realized vol sync error:', err)
+  }
+
+  // US rates realized vol: every 4 hours, deliberately NOT pinned to the manual
+  // TradingView CSV drop. The drop slips, and cron on this machine misses runs
+  // when the laptop sleeps, so a once-daily slot tied to the drop would silently
+  // skip days. Each run recomputes only the trailing 40 business days and
+  // upserts, which is ~90ms against an already-loaded table — six runs a day
+  // cost essentially nothing and any one of them catches up the others. The
+  // upsert is idempotent: a run over unchanged data writes nothing and logs
+  // that it found nothing.
+  cron.schedule('0 */4 * * *', () => {
+    console.log('[cron] */4h — refreshing US rates realized vol…')
+    try {
+      syncUsRatesRealizedVol()
+    } catch (err) {
+      console.error('[cron] US rates realized vol error:', err)
+    }
+  })
 
   // Overnight rates: daily 03:00 UTC. Per the integration guide, this single
   // slot catches the final values for all four sources:

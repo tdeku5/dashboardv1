@@ -2032,3 +2032,29 @@ export function replacePsContractLadder(values: number[]): void {
     values.forEach((v, i) => ins.run(v, i + 1))
   })()
 }
+
+// ── US rates realized vol (derived) ──────────────────────────────────────────
+// Realized analogue of the ICE BofA MOVE, computed from TradingView 2y/5y/10y/30y
+// yields by server/src/lib/realizedMove.ts and filled by
+// server/src/usRatesRealizedVol.ts. Terminal-derived — no vendor writes here.
+//
+// `date` follows the terminal's existing raw-UTC labelling of tv_series epochs,
+// which labels BST sessions one calendar day early. That is deliberate, so this
+// table joins to tv_series/MOVE everywhere (Hephaestus included) without a
+// one-day offset. See docs/tradingview-date-convention.md.
+//
+// Every value column is nullable and a missing value stays NULL — 0 is never
+// written to mean "unknown".
+db.exec(`
+  CREATE TABLE IF NOT EXISTS us_rates_realized_vol (
+    date                 TEXT PRIMARY KEY,
+    rv_2y                REAL,
+    rv_5y                REAL,
+    rv_10y               REAL,
+    rv_30y               REAL,
+    rv_move              REAL,
+    weights_renormalized INTEGER NOT NULL DEFAULT 0,
+    n_obs                INTEGER NOT NULL DEFAULT 0,
+    updated_at           TEXT
+  );
+`)
