@@ -99,18 +99,9 @@ function deltaColorClass(v: number | null): string {
   return ''
 }
 
-// Front − 12m: positive = curve rising forward = hikes priced (red, bearish);
-// negative = curve falling forward = cuts priced (green). Same sign convention
-// as the yield-Δ and Terminal−OCR columns.
-function frontMinus12mColorClass(v: number | null): string {
-  if (v == null) return styles.cellNeutral
-  if (v > 0) return styles.cellNegative
-  if (v < 0) return styles.cellPositive
-  return ''
-}
-
-// Terminal − OCR: positive = hikes still required to reach terminal (red);
-// negative = cuts to reach terminal (green).
+// Terminal − OCR, and the two forward-vs-terminal columns: positive = hikes
+// still required to reach terminal (red); negative = cuts to reach terminal
+// (green). Shared so the three policy-spread columns colour identically.
 function terminalSpreadColorClass(v: number | null): string {
   if (v == null) return styles.cellNeutral
   if (v > 0) return styles.cellNegative
@@ -308,6 +299,12 @@ export function GlobalRatesPage() {
           const max5Y  = columnAbsMax(rows.map(r => r.delta5Y))
           const max10Y = columnAbsMax(rows.map(r => r.delta10Y))
           const max30Y = columnAbsMax(rows.map(r => r.delta30Y))
+          const max2s10s  = columnAbsMax(rows.map(r => r.delta2s10s))
+          const max10s30s = columnAbsMax(rows.map(r => r.delta10s30s))
+          // Window label comes from the RESPONSE, not the dropdown's local
+          // state, so the header can never describe a window the data is not
+          // actually from (e.g. mid-fetch after a dropdown change).
+          const regimeWindowLabel = `${summary.data.regimeLookbackDays}D`
           return (
           <table className={styles.summaryTable}>
             <thead>
@@ -318,10 +315,13 @@ export function GlobalRatesPage() {
                 <th className={styles.colDelta}>10Y Δ</th>
                 <th className={styles.colDelta}>30Y Δ</th>
                 <th className={styles.colRegime}>2s10s</th>
+                <th className={styles.colDelta}>2s10s Δ <span className={styles.unitSuffix}>({regimeWindowLabel})</span></th>
                 <th className={styles.colRegime}>10s30s</th>
+                <th className={styles.colDelta}>10s30s Δ <span className={styles.unitSuffix}>({regimeWindowLabel})</span></th>
                 <th className={styles.colNextMove}>Next CB Move</th>
                 <th className={styles.colSpread}>Terminal − OCR <span className={styles.unitSuffix}>(bps)</span></th>
-                <th className={styles.colSpread}>Front − 12m <span className={styles.unitSuffix}>(bps)</span></th>
+                <th className={styles.colSpread}>+6M − Terminal <span className={styles.unitSuffix}>(bps)</span></th>
+                <th className={styles.colSpread}>+12M − Terminal <span className={styles.unitSuffix}>(bps)</span></th>
               </tr>
             </thead>
             <tbody>
@@ -335,15 +335,20 @@ export function GlobalRatesPage() {
                   <td className={styles.colRegime} style={regimeCellStyle(row.regime2s10s)}>
                     {row.regime2s10s ? REGIME_SHORT_LABELS[row.regime2s10s] : '—'}
                   </td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta2s10s)}`} style={deltaCellStyle(row.delta2s10s, max2s10s)}>{fmtSignedBps(row.delta2s10s)}</td>
                   <td className={styles.colRegime} style={regimeCellStyle(row.regime10s30s)}>
                     {row.regime10s30s ? REGIME_SHORT_LABELS[row.regime10s30s] : '—'}
                   </td>
+                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta10s30s)}`} style={deltaCellStyle(row.delta10s30s, max10s30s)}>{fmtSignedBps(row.delta10s30s)}</td>
                   <td className={`${styles.colNextMove} ${nextMoveColorClass(row.nextMove)}`}>{row.nextMove ?? '—'}</td>
                   <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.terminalMinusOcr)}`}>
                     {fmtSignedBps(row.terminalMinusOcr)}
                   </td>
-                  <td className={`${styles.colSpread} ${frontMinus12mColorClass(row.frontMinus12m)}`}>
-                    {fmtSignedBps(row.frontMinus12m)}
+                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.fwd6mMinusTerminal)}`}>
+                    {fmtSignedBps(row.fwd6mMinusTerminal)}
+                  </td>
+                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.fwd12mMinusTerminal)}`}>
+                    {fmtSignedBps(row.fwd12mMinusTerminal)}
                   </td>
                 </tr>
               ))}

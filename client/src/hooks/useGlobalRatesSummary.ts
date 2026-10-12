@@ -14,10 +14,17 @@ export interface RatesSummaryRow {
   delta10Y: number | null
   delta30Y: number | null
   regime2s10s: CurveRegimeName | null
+  /** Spread Δ in bps over the REGIME lookback — the number behind the label
+   *  to its left, not the yield-Δ window. */
+  delta2s10s: number | null
   regime10s30s: CurveRegimeName | null
+  delta10s30s: number | null
   nextMove: NextMove
   terminalMinusOcr: number | null
-  frontMinus12m: number | null
+  /** Implied policy rate at curveDate+6M minus terminal, bps. Null when the
+   *  strip does not reach the horizon — never 0. */
+  fwd6mMinusTerminal: number | null
+  fwd12mMinusTerminal: number | null
 }
 
 export interface RatesSummaryResponse {
@@ -26,6 +33,13 @@ export interface RatesSummaryResponse {
   regimeLookbackDate: string
   yieldLookback: string
   regimeLookback: string
+  /** Trading days in the regime window. Drives the Δ column header labels, so
+   *  the label can never disagree with the data it describes. */
+  regimeLookbackDays: number
+  /** Strip date the forward horizons were anchored to (not the wall clock). */
+  curveDate: string
+  fwd6mDate: string
+  fwd12mDate: string
   rows: RatesSummaryRow[]
 }
 

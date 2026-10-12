@@ -1718,14 +1718,19 @@
 
 .summaryTable th {
   text-align: right;
-  padding: 8px 14px;
+  padding: 8px 10px;
   font-size: 12px;
   color: #cbd5e1;
   letter-spacing: 0.04em;
   border-bottom: 1px solid #1e293b;
   text-transform: uppercase;
   font-weight: 600;
-  white-space: nowrap;
+  /* Headers wrap; VALUES never do (see td below). The 13-column layout cannot
+     fit "+12M − Terminal (bps)" on one line inside 100px. vertical-align
+     bottom keeps a two-line header flush with its single-line neighbours, and
+     the row height stays uniform because table rows size to their tallest cell. */
+  white-space: normal;
+  vertical-align: bottom;
 }
 
 .summaryTable th:first-child {
@@ -1733,7 +1738,7 @@
 }
 
 .summaryTable td {
-  padding: 8px 14px;
+  padding: 8px 10px;
   text-align: right;
   font-weight: 600;
   white-space: nowrap;
@@ -1750,11 +1755,19 @@
 }
 
 /* Per-column widths for the summary table. */
-.colCountry  { width: 80px;  min-width: 80px; }
-.colDelta    { width: 90px;  min-width: 90px; }
-.colRegime   { width: 110px; min-width: 110px; text-align: center !important; text-transform: none !important; }
-.colNextMove { width: 120px; min-width: 120px; }
-.colSpread   { width: 110px; min-width: 110px; }
+/* 13 columns inside .globalSummarySection's 1200px max-width:
+     74 + 84x6 + 100x2 + 110 + 100x3 = 1188px, 12px headroom.
+   box-sizing: border-box is global, so padding sits INSIDE these widths —
+   which is why the width declarations, not the padding, are the lever here.
+   The two curve-Δ columns carry .colDelta (6 total) so they inherit the same
+   heatmap treatment as the yield-Δ columns. Widest rendered value across every
+   lookback combination is 6 characters ("+131.6", "-106.6"), ~47px at 13px
+   mono, so 84px − 20px padding = 64px of content box clears it. */
+.colCountry  { width: 74px;  min-width: 74px; }
+.colDelta    { width: 84px;  min-width: 84px; }
+.colRegime   { width: 100px; min-width: 100px; text-align: center !important; text-transform: none !important; }
+.colNextMove { width: 110px; min-width: 110px; }
+.colSpread   { width: 100px; min-width: 100px; }
 
 /* Visual separator: thin border + extra padding between the yield-Δ block
    (4 columns) and the regime block (2 columns). Targets the FIRST .colRegime
