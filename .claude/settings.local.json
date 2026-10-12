@@ -422,7 +422,10 @@
       "Bash(awk '/^### /{t=$2} /unresolved\\\\*\\\\*/{c[t]++} END{for \\(k in c\\) print k, c[k]}' /tmp/phase0-inventory.md)",
       "Bash(sort -k2 -rn)",
       "Bash(pkill -f \"tsx watch src/index.ts\")",
-      "Bash(pkill -f \"tsx watch\")"
+      "Bash(pkill -f \"tsx watch\")",
+      "Skill(claude-api)",
+      "Bash(tee /home/tdeku/.claude/jobs/2a570180/tmp/server.log)",
+      "Bash(xargs ls -la)"
     ]
   },
   "sandbox": {
