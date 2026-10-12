@@ -2,6 +2,15 @@ import { Router, Request, Response } from 'express'
 import { db, getObservations } from '../db'
 import { getTvCurve } from '../tvFutures'
 import { getMarket } from '../stirRegistry'
+import { computeSpreadDelta } from '../lib/curveSpreadDelta'
+import { SUMMARY_COUNTRIES, type SummaryCountry } from '../lib/globalSummaryCountries'
+import {
+  FORWARD_HORIZON_MONTHS,
+  forwardMinusTerminal,
+  type ForwardHorizonKey,
+  type ForwardVsTerminal,
+  type StripContract,
+} from '../lib/forwardPolicyPath'
 
 export const globalRouter = Router()
 
@@ -573,8 +582,10 @@ globalRouter.get('/daily-change-history', (req: Request, res: Response) => {
 
 // ── GET /api/global/rates-summary ────────────────────────────────────────────
 // Per-country at-a-glance: yield Δ at 2Y/5Y/10Y/30Y, 2s10s + 10s30s curve
-// regime, next CB move, terminal − OCR, front − 12m. Two configurable lookbacks
-// drive the yield deltas and the regime classification respectively.
+// regime and the spread Δ behind each label, next CB move, terminal − OCR, and
+// the implied path at +6M / +12M measured against that same terminal. Two
+// configurable lookbacks drive the yield deltas and the regime classification
+// (plus its spread Δ) respectively.
 
 type CurveRegime =
   | 'Bull Steepener' | 'Bear Steepener' | 'Steepener Twist'
@@ -596,20 +607,8 @@ function classifyRegime(shortChange: number, longChange: number, spreadChange: n
   return 'Neutral'
 }
 
-interface SummaryCountry {
-  country: 'US' | 'UK' | 'EU' | 'CA' | 'JP' | 'AU'
-  yieldPrefix: string   // tv_series prefix for the country's sovereign curve
-  stirMarketKey: string // STIR market key for the country
-}
-
-const SUMMARY_COUNTRIES: SummaryCountry[] = [
-  { country: 'US', yieldPrefix: 'US', stirMarketKey: 'SR3' },
-  { country: 'UK', yieldPrefix: 'GB', stirMarketKey: 'SO3' },
-  { country: 'EU', yieldPrefix: 'DE', stirMarketKey: 'EUR' },  // Bunds = EU benchmark
-  { country: 'CA', yieldPrefix: 'CA', stirMarketKey: 'CRA' },
-  { country: 'JP', yieldPrefix: 'JP', stirMarketKey: 'TOA3' },
-  { country: 'AU', yieldPrefix: 'AU', stirMarketKey: 'AUS' },
-]
+// Row list and per-country symbol/strip mapping live in
+// server/src/lib/globalSummaryCountries.ts (single source of truth).
 
 const YIELD_LOOKBACK_DAYS: Record<string, number> = {
   '1d': 1, '5d': 5, '1m': 21, '3m': 63, '6m': 126,
@@ -713,6 +712,81 @@ function findTerminalContract(contracts: TerminalContractPick[]): TerminalContra
   return contracts[contracts.length - 1]
 }
 
+// Horizons whose out-of-range failure has already been logged, keyed
+// market:horizon:reason. Keeps the warn to once per process per cause rather
+// than once per request — this route is polled by the page on every dropdown
+// change.
+const warnedForwardHorizons = new Set<string>()
+
+interface StripDerived {
+  curveDate: string
+  nextMove: 'HIKE' | 'CUT' | 'UNCH' | null
+  terminalMinusOcr: number | null
+  /** The terminal rate itself, so the forward columns measure against the
+   *  identical value behind terminalMinusOcr rather than recomputing it. */
+  terminalRate: number | null
+  forwards: Record<ForwardHorizonKey, ForwardVsTerminal | null>
+}
+
+/**
+ * Everything the STIR strip contributes to one summary row.
+ *
+ * Computed ONCE PER DISTINCT MARKET per request. DE, FR and IT all map to the
+ * EUR strip, so without this they would trigger three identical getTvCurve
+ * calls and three identical anchor lookups.
+ */
+function deriveStrip(stirMarketKey: string): StripDerived {
+  const curve = getTvCurve(stirMarketKey, 1)
+  const contracts = curve.currentCurve
+
+  // Next move: front two contracts. Front rate > next rate → cuts priced
+  // between now and the next CB meeting; front < next → hikes priced.
+  let nextMove: 'HIKE' | 'CUT' | 'UNCH' | null = null
+  if (contracts.length >= 2 && contracts[0].impliedRate != null && contracts[1].impliedRate != null) {
+    const diffBps = (contracts[0].impliedRate - contracts[1].impliedRate) * 100
+    if (diffBps > 0) nextMove = 'CUT'
+    else if (diffBps < 0) nextMove = 'HIKE'
+    else nextMove = 'UNCH'
+  }
+
+  // Terminal − OCR: terminal contract's implied rate minus the country's
+  // anchor rate. anchorSource is in registry; DFF is fetched live for US.
+  const terminal = findTerminalContract(contracts)
+  const anchor = getAnchorRate(stirMarketKey)
+  const terminalRate = terminal?.impliedRate ?? null
+  const terminalMinusOcr = (terminalRate != null && anchor != null)
+    ? +((terminalRate - anchor) * 100).toFixed(2)
+    : null
+
+  // +6M / +12M vs terminal, interpolated on contract dates from the strip's own
+  // curveDate — never the wall clock, so the values are stable across weekends
+  // and reproducible from stored data.
+  const stripContracts: StripContract[] = contracts.map(c => ({
+    symbol: c.symbol, expiryDate: c.expiryDate, impliedRate: c.impliedRate,
+  }))
+  const forwards = {} as Record<ForwardHorizonKey, ForwardVsTerminal | null>
+  for (const key of Object.keys(FORWARD_HORIZON_MONTHS) as ForwardHorizonKey[]) {
+    if (!curve.currentDate) { forwards[key] = null; continue }
+    const fwd = forwardMinusTerminal(
+      stripContracts, curve.currentDate, FORWARD_HORIZON_MONTHS[key], terminalRate,
+    )
+    if (fwd.failure !== null) {
+      const warnKey = `${stirMarketKey}:${key}:${fwd.failure}`
+      if (!warnedForwardHorizons.has(warnKey)) {
+        warnedForwardHorizons.add(warnKey)
+        console.warn(
+          `[global] rates-summary: ${stirMarketKey} strip does not reach +${key} ` +
+          `(target ${fwd.targetDate}, reason ${fwd.failure}, ${stripContracts.length} contracts, ` +
+          `last expiry ${stripContracts[stripContracts.length - 1]?.expiryDate ?? 'n/a'}) — returning null`
+        )
+      }
+    }
+    forwards[key] = fwd
+  }
+
+  return { curveDate: curve.currentDate, nextMove, terminalMinusOcr, terminalRate, forwards }
+}
+
 interface SummaryRow {
   country: string
   delta2Y: number | null
@@ -720,10 +794,15 @@ interface SummaryRow {
   delta10Y: number | null
   delta30Y: number | null
   regime2s10s: CurveRegime | null
+  // Spread Δ over the REGIME lookback, in bps — the number behind the label to
+  // its left. Deliberately not the yield-Δ window: it has to explain the regime.
+  delta2s10s: number | null
   regime10s30s: CurveRegime | null
+  delta10s30s: number | null
   nextMove: 'HIKE' | 'CUT' | 'UNCH' | null
   terminalMinusOcr: number | null
-  frontMinus12m: number | null
+  fwd6mMinusTerminal: number | null
+  fwd12mMinusTerminal: number | null
 }
 
 globalRouter.get('/rates-summary', (req: Request, res: Response) => {
@@ -736,7 +815,16 @@ globalRouter.get('/rates-summary', (req: Request, res: Response) => {
     let yieldLookbackDate = ''
     let regimeLookbackDate = ''
 
-    const rows: SummaryRow[] = SUMMARY_COUNTRIES.map(({ country, yieldPrefix, stirMarketKey }) => {
+    // One derivation per DISTINCT strip, before the row loop. DE/FR/IT all read
+    // the same EUR entry, so the ECB path is computed once and shared.
+    const stripByMarket = new Map<string, StripDerived>()
+    for (const { stirMarketKey } of SUMMARY_COUNTRIES) {
+      if (!stripByMarket.has(stirMarketKey)) {
+        stripByMarket.set(stirMarketKey, deriveStrip(stirMarketKey))
+      }
+    }
+
+    const rows: SummaryRow[] = SUMMARY_COUNTRIES.map(({ country, yieldPrefix, stirMarketKey }: SummaryCountry) => {
       // ── Yield deltas ──────────────────────────────────────────────────
       const tenorPair = (tenorSuffix: '02Y' | '05Y' | '10Y' | '30Y'): number | null => {
         const pair = getYieldPair(`${yieldPrefix}${tenorSuffix}`, yieldLookback)
@@ -751,64 +839,61 @@ globalRouter.get('/rates-summary', (req: Request, res: Response) => {
       const delta30Y = tenorPair('30Y')
 
       // ── Curve regimes (own lookback window, independent of yield delta) ─
+      // Returns the spread Δ alongside the label: the classifier was already
+      // computing spreadChange and throwing it away, so the Δ column is the
+      // same number that produced the label — not a parallel calculation.
       const regimePair = (
         shortSuffix: '02Y' | '10Y',
         longSuffix: '10Y' | '30Y',
-      ): CurveRegime | null => {
+      ): { regime: CurveRegime; spreadBps: number } | null => {
         const shortNow = getTvYieldAtLookback(`${yieldPrefix}${shortSuffix}`, 0)
         const longNow  = getTvYieldAtLookback(`${yieldPrefix}${longSuffix}`,  0)
         const shortPrev = getTvYieldAtLookback(`${yieldPrefix}${shortSuffix}`, regimeDays)
         const longPrev  = getTvYieldAtLookback(`${yieldPrefix}${longSuffix}`,  regimeDays)
         if (!shortNow || !longNow || !shortPrev || !longPrev) return null
         if (shortPrev.date > regimeLookbackDate) regimeLookbackDate = shortPrev.date
-        const shortChange = shortNow.value - shortPrev.value
-        const longChange  = longNow.value  - longPrev.value
-        const spreadChange = (longNow.value - shortNow.value) - (longPrev.value - shortPrev.value)
-        return classifyRegime(shortChange, longChange, spreadChange)
+        const d = computeSpreadDelta({
+          shortNow: shortNow.value, shortPrev: shortPrev.value,
+          longNow: longNow.value, longPrev: longPrev.value,
+        })
+        if (!d) return null
+        return {
+          regime: classifyRegime(d.shortChange, d.longChange, d.spreadChange),
+          spreadBps: d.spreadBps,
+        }
       }
-      const regime2s10s  = regimePair('02Y', '10Y')
-      const regime10s30s = regimePair('10Y', '30Y')
+      const pair2s10s  = regimePair('02Y', '10Y')
+      const pair10s30s = regimePair('10Y', '30Y')
 
-      // ── STIR-derived columns ──────────────────────────────────────────
-      const curve = getTvCurve(stirMarketKey, 1)
-      const contracts = curve.currentCurve
-
-      // Next move: front two contracts. Front rate > next rate → cuts priced
-      // between now and the next CB meeting; front < next → hikes priced.
-      let nextMove: 'HIKE' | 'CUT' | 'UNCH' | null = null
-      if (contracts.length >= 2 && contracts[0].impliedRate != null && contracts[1].impliedRate != null) {
-        const diffBps = (contracts[0].impliedRate - contracts[1].impliedRate) * 100
-        if (diffBps > 0) nextMove = 'CUT'
-        else if (diffBps < 0) nextMove = 'HIKE'
-        else nextMove = 'UNCH'
-      }
-
-      // Terminal − OCR: terminal contract's implied rate minus the country's
-      // anchor rate. anchorSource is in registry; DFF is fetched live for US.
-      const terminal = findTerminalContract(contracts)
-      const anchor = getAnchorRate(stirMarketKey)
-      const terminalMinusOcr = (terminal?.impliedRate != null && anchor != null)
-        ? +((terminal.impliedRate - anchor) * 100).toFixed(2)
-        : null
-
-      // Front − 12m: rate priced 12m forward minus the front rate. Positive
-      // means the curve is rising forward (hikes priced over the next year),
-      // negative means cuts priced. Same sign convention as the yield-Δ and
-      // Terminal−OCR columns: positive = bearish for fixed income.
-      let frontMinus12m: number | null = null
-      if (contracts.length >= 5 && contracts[0].impliedRate != null && contracts[4].impliedRate != null) {
-        frontMinus12m = +((contracts[4].impliedRate - contracts[0].impliedRate) * 100).toFixed(2)
-      }
+      // ── STIR-derived columns (shared per strip, computed above) ────────
+      const strip = stripByMarket.get(stirMarketKey) ?? null
 
       return {
         country,
         delta2Y, delta5Y, delta10Y, delta30Y,
-        regime2s10s, regime10s30s,
-        nextMove,
-        terminalMinusOcr,
-        frontMinus12m,
+        regime2s10s: pair2s10s?.regime ?? null,
+        delta2s10s: pair2s10s?.spreadBps ?? null,
+        regime10s30s: pair10s30s?.regime ?? null,
+        delta10s30s: pair10s30s?.spreadBps ?? null,
+        nextMove: strip?.nextMove ?? null,
+        terminalMinusOcr: strip?.terminalMinusOcr ?? null,
+        fwd6mMinusTerminal: strip?.forwards['6m']?.bps ?? null,
+        fwd12mMinusTerminal: strip?.forwards['12m']?.bps ?? null,
       }
     })
+
+    // Horizon metadata: every strip shares the same curveDate in practice, but
+    // report the max so the page never claims a date no strip actually carries.
+    let curveDate = ''
+    let fwd6mDate = ''
+    let fwd12mDate = ''
+    for (const d of stripByMarket.values()) {
+      if (d.curveDate > curveDate) curveDate = d.curveDate
+      const t6 = d.forwards['6m']?.targetDate ?? ''
+      const t12 = d.forwards['12m']?.targetDate ?? ''
+      if (t6 > fwd6mDate) fwd6mDate = t6
+      if (t12 > fwd12mDate) fwd12mDate = t12
+    }
 
     res.json({
       asOfDate,
@@ -816,6 +901,10 @@ globalRouter.get('/rates-summary', (req: Request, res: Response) => {
       regimeLookbackDate,
       yieldLookback,
       regimeLookback,
+      regimeLookbackDays: regimeDays,
+      curveDate,
+      fwd6mDate,
+      fwd12mDate,
       rows,
     })
   } catch (err) {
