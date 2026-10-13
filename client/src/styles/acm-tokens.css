@@ -1,0 +1,212 @@
+/*
+ * Asset Class Models — design tokens (additive).
+ *
+ * Every token is scoped to `.acm-root`; nothing here touches an existing
+ * :root variable, the global --font-mono, or any page until a page opts in
+ * by rendering inside an `.acm-root` element. Names carry an `acm-` prefix so
+ * the section never shadows the global --positive / --negative that
+ * unconverted pages (e.g. TreasuryAuctionPage) still read.
+ *
+ * COMPONENT-LEVEL ROOT RULE: every shared primitive, and every component that
+ * also renders on a route outside the section (TreasuryAuctionContent → the
+ * standalone /treasury route), puts `acm-root` on ITS OWN outermost element,
+ * so its tokens resolve wherever it mounts. Page-level `.acm-root` wrapping is
+ * fine for section pages; the component-level class protects cross-route ones.
+ * (Nested `.acm-root` elements are harmless — they redeclare the same values.)
+ *
+ * Spec: docs/prompts/asset-class-models-design-revamp*.md
+ * Working notes (rules + primitive spec): docs/asset-class-models-design-notes.md
+ * Contrast + distinctness are enforced by acmTokens.test.ts, which parses
+ * this file — edit a value here and the test re-checks it.
+ */
+
+/* ── Fonts ───────────────────────────────────────────────────────────────────
+ * Plex Sans is also declared in HephaestusPage.module.css. The duplicate is
+ * intentional (same source, harmless) — consolidating it is cleanup for the
+ * terminal-wide pass, which must not edit Hephaestus here.
+ * Plex Mono ships regular + medium only: numerics use weight 400 or 500,
+ * never 600 (a 600 request would be synthesized).
+ */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-500.woff2') format('woff2');
+}
+
+.acm-root {
+  /* ── Surfaces (Hephaestus elevation steps, darkest → lightest) ─────────── */
+  --acm-surface-bg:      #0E1621;   /* page canvas            (--hp-bg)      */
+  --acm-surface-panel:   #121A27;   /* panels, cards, tables  (--hp-surface) */
+  --acm-surface-raised:  #1B2637;   /* inputs, raised tiles   (--hp-raised)  */
+  --acm-surface-overlay: #1E2A3C;   /* tooltips, popovers, modals (--hp-bubble) */
+
+  /* ── Borders ───────────────────────────────────────────────────────────── */
+  --acm-border-hairline: #26334A;   /* row separators, panel edges */
+  --acm-border-emphasis: #2C3B52;   /* inputs, emphasised containers */
+
+  /* ── Text: four-step hierarchy ─────────────────────────────────────────────
+   * primary/secondary ≥ 4.5:1 and tertiary/disabled ≥ 3:1 on all 4 surfaces.
+   * disabled = Hephaestus faint #5C6B80 lightened along its own OKLCH hue in
+   * 0.0025-L steps until ≥ 3:1 everywhere (#5C6B80 itself is 2.67 on overlay).
+   * tertiary = OKLCH midpoint of disabled and secondary.
+   */
+  --acm-text-primary:   #DDE4ED;    /* --hp-text */
+  --acm-text-secondary: #8695AA;    /* --hp-text-dim */
+  --acm-text-tertiary:  #758499;
+  --acm-text-disabled:  #647489;
+
+  /* ── Accent ────────────────────────────────────────────────────────────────
+   * hover/active = accent ±0.06 OKLCH L. accent-active is a fill/border colour
+   * (non-text, ≥ 3:1); text uses accent or accent-hover.
+   */
+  --acm-accent:        #5B9DD9;     /* --hp-accent */
+  --acm-accent-hover:  #6EB0ED;
+  --acm-accent-active: #498AC5;
+  --acm-accent-muted:  color-mix(in srgb, var(--acm-accent) 16%, transparent); /* active-tab fill; bg/panel only */
+
+  /* ── Sign families (Decision 2; seeds from the phase-1-resume prompt) ──────
+   * Valence + direction colour value TEXT only, except inside the named
+   * heatmap components, which use --acm-heat-* fills (see below).
+   * Alert colours a background tint / badge / outline — never value text.
+   * Status colours notes and banners — never data cells.
+   */
+  --acm-positive:  #4CC38A;         /* valence: up is good (returns, P&L) */
+  --acm-negative:  #E16D6D;         /* valence: down is bad. Seed #E06C6C (--hp-negative)
+                                       is 4.499:1 on overlay; one +1/channel step → 4.553 */
+  --acm-dir-up:    #F0954A;         /* direction: yield/rate/spread up, hike */
+  --acm-dir-down:  #7CC4F2;         /* direction: yield/rate/spread down, cut */
+  --acm-alert-mild:   #E8C547;      /* |z| > 2, IV rank/pctile intensity */
+  --acm-alert-strong: #F05BA0;      /* |z| > 3, scarcity breach */
+  --acm-status-warning: #E8C547;    /* stale / data-quality notes */
+
+  /* Tints sit on bg/panel only (data cells, banners, nav rows). Each alpha is
+     the largest whole % at which primary + every valence/direction text token
+     (alert tints) or primary + secondary (status) still clear 4.5:1. */
+  --acm-alert-mild-tint:     color-mix(in srgb, var(--acm-alert-mild) 10%, transparent);
+  --acm-alert-strong-tint:   color-mix(in srgb, var(--acm-alert-strong) 15%, transparent);
+  --acm-status-warning-tint: color-mix(in srgb, var(--acm-status-warning) 8%, transparent);
+
+  /* ── Heatmap fills — the one exception to "sign colours text only" ────────
+   * Used ONLY by the named heatmap grids: the cellColor grid (direction) and
+   * ReturnsHeatmap (valence). No other component fills backgrounds with sign
+   * colours, and heatmap cells never also carry an alert treatment.
+   * Neutral (zero) = no fill: the surface shows through.
+   * Step 4 = the largest whole % at which primary text clears 4.5:1 over BOTH
+   * sides on bg + panel (same cap both sides so equal magnitudes read equal);
+   * steps 1–3 = 1/4, 2/4, 3/4 of it, rounded. Cell text is always primary.
+   */
+  --acm-heat-neutral: transparent;
+
+  --acm-heat-dir-up-1:   color-mix(in srgb, var(--acm-dir-up) 12%, transparent);
+  --acm-heat-dir-up-2:   color-mix(in srgb, var(--acm-dir-up) 23%, transparent);
+  --acm-heat-dir-up-3:   color-mix(in srgb, var(--acm-dir-up) 35%, transparent);
+  --acm-heat-dir-up-4:   color-mix(in srgb, var(--acm-dir-up) 46%, transparent);
+  --acm-heat-dir-down-1: color-mix(in srgb, var(--acm-dir-down) 12%, transparent);
+  --acm-heat-dir-down-2: color-mix(in srgb, var(--acm-dir-down) 23%, transparent);
+  --acm-heat-dir-down-3: color-mix(in srgb, var(--acm-dir-down) 35%, transparent);
+  --acm-heat-dir-down-4: color-mix(in srgb, var(--acm-dir-down) 46%, transparent);
+
+  --acm-heat-positive-1: color-mix(in srgb, var(--acm-positive) 13%, transparent);
+  --acm-heat-positive-2: color-mix(in srgb, var(--acm-positive) 26%, transparent);
+  --acm-heat-positive-3: color-mix(in srgb, var(--acm-positive) 38%, transparent);
+  --acm-heat-positive-4: color-mix(in srgb, var(--acm-positive) 51%, transparent);
+  --acm-heat-negative-1: color-mix(in srgb, var(--acm-negative) 13%, transparent);
+  --acm-heat-negative-2: color-mix(in srgb, var(--acm-negative) 26%, transparent);
+  --acm-heat-negative-3: color-mix(in srgb, var(--acm-negative) 38%, transparent);
+  --acm-heat-negative-4: color-mix(in srgb, var(--acm-negative) 51%, transparent);
+
+  /* ── Typography ───────────────────────────────────────────────────────────
+   * Sans for chrome, mono (tabular) for numerics. The mono token is
+   * section-scoped; the global --font-mono is untouched.
+   */
+  --acm-font-sans: 'IBM Plex Sans', var(--font-sans);
+  --acm-font-mono: 'IBM Plex Mono', var(--font-mono);
+
+  /* Type scale — six sizes, px to keep terminal density exact. */
+  --acm-fs-xs:  10px;   /* axis ticks, micro captions */
+  --acm-fs-sm:  11px;   /* labels, table headers, tabs */
+  --acm-fs-md:  12px;   /* table body, controls (base) */
+  --acm-fs-lg:  13px;   /* prose, panel titles */
+  --acm-fs-xl:  15px;   /* section titles, stat values */
+  --acm-fs-2xl: 20px;   /* page title, hero stat */
+
+  /* Weights — three. Mono uses 400/500 only (see @font-face note). */
+  --acm-fw-regular:  400;
+  --acm-fw-medium:   500;
+  --acm-fw-semibold: 600;
+
+  --acm-lh-tight: 1.25; /* tabular data, labels */
+  --acm-lh-prose: 1.5;  /* methodology / notes prose */
+
+  --acm-tracking-label: 0.05em; /* uppercase nav + section labels */
+  --acm-tracking-none:  0;      /* mono numerals */
+
+  /* ── Spacing — 4px base (one 2px half-step for hairline gaps) ──────────── */
+  --acm-space-0:   0;
+  --acm-space-0-5: 2px;
+  --acm-space-1:   4px;
+  --acm-space-2:   8px;
+  --acm-space-3:   12px;
+  --acm-space-4:   16px;
+  --acm-space-5:   20px;
+  --acm-space-6:   24px;
+  --acm-space-8:   32px;
+  --acm-space-10:  40px;
+  --acm-space-12:  48px;
+  --acm-space-16:  64px;
+  --acm-space-20:  80px;
+
+  /* ── Radii + border widths ─────────────────────────────────────────────── */
+  --acm-radius-sm:   2px;    /* tags, chips */
+  --acm-radius-md:   4px;    /* controls, tabs, panels */
+  --acm-radius-lg:   8px;    /* modals, popovers */
+  --acm-radius-pill: 999px;
+
+  --acm-border-width:        1px;
+  --acm-border-width-strong: 2px;
+
+  /* ── Focus ring ───────────────────────────────────────────────────────── */
+  --acm-focus-ring-color:  var(--acm-accent-hover);
+  --acm-focus-ring-width:  2px;
+  --acm-focus-ring-offset: 2px;
+
+  font-family: var(--acm-font-sans);
+  color: var(--acm-text-primary);
+}
+
+/* ── Utilities ──────────────────────────────────────────────────────────── */
+
+.acm-root :focus-visible {
+  outline: var(--acm-focus-ring-width) solid var(--acm-focus-ring-color);
+  outline-offset: var(--acm-focus-ring-offset);
+}
+
+/* A number is mono because it is a number: tables, stats, ticks. */
+.acm-root .acm-num {
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--acm-tracking-none);
+}
+
+/* Tabular figures inside sans prose (inline numerals that must not jiggle). */
+.acm-root .acm-tnum {
+  font-variant-numeric: tabular-nums;
+}

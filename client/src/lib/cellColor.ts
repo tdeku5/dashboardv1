@@ -3,27 +3,24 @@
 // full saturation. Returns undefined when there's no data or the row is empty,
 // which the caller should treat as "use the default surface background."
 //
-// Two themes are supported because two grids use different conventions:
-// - 'brown-teal' (default) — Global Bond Yields heatmap. Brown for positive
-//   moves (selloff), teal for negative moves (rally).
-// - 'red-blue' — UST Historical Yield Changes + BE/Real heatmap. Red for
-//   positive (selloff), blue for negative (rally), matching the delta bar
-//   chart and the latest-curve color used elsewhere on the UST tab.
+// One theme: 'red-blue' — red for positive (selloff), blue for negative
+// (rally). Every caller passes it explicitly. The unused 'brown-teal' theme
+// was removed (Asset Class Models revamp, Decision 2); this grid moves onto
+// the --acm-heat-dir-* scale when its pages are converted.
 //
 // The 0.7 power curve keeps mid-magnitude moves visible instead of crushing
 // them to near-neutral. 0.65 max opacity preserves text readability.
 
-export type CellColorTheme = 'brown-teal' | 'red-blue'
+export type CellColorTheme = 'red-blue'
 
 const THEME_RGB: Record<CellColorTheme, { positive: string; negative: string }> = {
-  'brown-teal': { positive: '180, 120, 60', negative: '78, 201, 176' },
   'red-blue':   { positive: '239, 83, 80',  negative: '96, 165, 250' },
 }
 
 export function getCellColor(
   value: number | null | undefined,
   rowMaxAbs: number,
-  theme: CellColorTheme = 'brown-teal',
+  theme: CellColorTheme = 'red-blue',
 ): string | undefined {
   if (value == null || !Number.isFinite(value) || rowMaxAbs === 0) return undefined
   const intensity = value / rowMaxAbs

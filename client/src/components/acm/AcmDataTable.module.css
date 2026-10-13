@@ -1,0 +1,70 @@
+/* Dense data table. Hairline row separators, never zebra striping. */
+
+.wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--acm-fs-md);
+  line-height: var(--acm-lh-tight);
+  color: var(--acm-text-primary);
+}
+
+.caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: var(--acm-space-2);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+}
+
+.th {
+  padding: var(--acm-space-1) var(--acm-space-2);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-secondary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
+  white-space: nowrap;
+}
+
+.td {
+  padding: var(--acm-space-1) var(--acm-space-2);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+  white-space: nowrap;
+}
+
+.tr:last-child .td { border-bottom: none; }
+
+.label {
+  text-align: left;
+  font-family: var(--acm-font-sans);
+}
+
+.num {
+  text-align: right;
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--acm-tracking-none);
+}
+
+/* Header cells keep sans even over numeric columns; only alignment follows. */
+.th.num {
+  font-family: var(--acm-font-sans);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.null { color: var(--acm-text-tertiary); }
+
+.sticky .th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--acm-surface-panel);
+}

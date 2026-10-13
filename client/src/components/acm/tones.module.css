@@ -1,0 +1,21 @@
+/* Channel rule (Rule 2): sign tones set COLOR only; alert levels set
+   BACKGROUND + OUTLINE only. Neither ever touches the other's property.
+   Heatmap fills are not offered here — they belong to the named heatmap
+   components only. */
+
+.positive { color: var(--acm-positive); }
+.negative { color: var(--acm-negative); }
+.dirUp    { color: var(--acm-dir-up); }
+.dirDown  { color: var(--acm-dir-down); }
+
+.alertMild {
+  background: var(--acm-alert-mild-tint);
+  outline: var(--acm-border-width) solid var(--acm-alert-mild);
+  outline-offset: calc(-1 * var(--acm-border-width));
+}
+
+.alertStrong {
+  background: var(--acm-alert-strong-tint);
+  outline: var(--acm-border-width) solid var(--acm-alert-strong);
+  outline-offset: calc(-1 * var(--acm-border-width));
+}

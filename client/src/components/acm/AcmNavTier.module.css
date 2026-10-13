@@ -1,0 +1,44 @@
+/* One active treatment for all three tiers. The tier changes size only. */
+
+.row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  margin-bottom: var(--acm-space-3);
+}
+
+.tab {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-sans);
+  font-weight: var(--acm-fw-medium);
+  line-height: var(--acm-lh-tight);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.tab + .tab { border-left-width: 0; }
+.tab:first-child { border-radius: var(--acm-radius-md) 0 0 var(--acm-radius-md); }
+.tab:last-child { border-radius: 0 var(--acm-radius-md) var(--acm-radius-md) 0; }
+.tab:only-child { border-radius: var(--acm-radius-md); }
+
+.tab:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.active,
+.active:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+/* An active tab sitting next to an inactive one keeps its left edge visible. */
+.tab + .active { box-shadow: calc(-1 * var(--acm-border-width)) 0 0 var(--acm-accent-active); }
+
+/* Tier sizes (size only — never colour). */
+.asset-class .tab { font-size: var(--acm-fs-lg); padding: var(--acm-space-2) var(--acm-space-5); }
+.country .tab     { font-size: var(--acm-fs-md); padding: var(--acm-space-2) var(--acm-space-5); }
+.section .tab     { font-size: var(--acm-fs-sm); padding: var(--acm-space-1) var(--acm-space-4); }
