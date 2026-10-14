@@ -20,6 +20,7 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import { STIRDashboardPage } from './STIRDashboardPage'
 import { UsRatesVolPage, buildPremiumChartData } from './UsRatesVolPage'
+import statTileStyles from '../components/acm/AcmStatTile.module.css'
 import type { UsRatesVolResponse, VolSeriesPoint } from '../hooks/useUsRatesVol'
 
 interface StatementLike { get(...a: unknown[]): unknown; all(...a: unknown[]): unknown[] }
@@ -105,12 +106,12 @@ function stubFetch(body: UsRatesVolResponse) {
 
 /**
  * The .stat card whose label matches, as a container for scoped queries.
- * Matched on the statLabel class rather than bare text: "Implied MOVE" also
- * appears as a chart legend chip, and the realized value repeats in the
+ * Matched on the AcmStatTile label class rather than bare text: "Implied MOVE"
+ * also appears as a chart legend chip, and the realized value repeats in the
  * contribution table's total row.
  */
 function statCard(label: string): HTMLElement {
-  const labels = Array.from(document.querySelectorAll('[class*="statLabel"]'))
+  const labels = Array.from(document.querySelectorAll(`.${statTileStyles.label}`))
     .filter(el => (el.textContent ?? '').trim() === label)
   expect(labels, `expected exactly one stat labelled "${label}"`).toHaveLength(1)
   return labels[0].parentElement as HTMLElement
@@ -180,7 +181,8 @@ describe('REAL DATA — stat strip reflects the live database', () => {
     expect(within(statCard('Implied MOVE')).getByText(last.move.toFixed(2))).toBeTruthy()
     expect(within(statCard('Realized (21d)')).getByText(last.rv_move.toFixed(2))).toBeTruthy()
 
-    const sign = expectedPremium >= 0 ? '+' : '−'
+    // ASCII '-' for negatives (revamp Decision 3: pastes into Excel as a number).
+    const sign = expectedPremium >= 0 ? '+' : '-'
     const premiumText = `${sign}${Math.abs(expectedPremium).toFixed(2)}`
     expect(within(statCard('Implied vol premium')).getByText(premiumText)).toBeTruthy()
     expect(within(statCard('Ratio')).getByText(`${expectedRatio.toFixed(3)}×`)).toBeTruthy()
@@ -326,14 +328,14 @@ describe('methodology panel documents the load-bearing conventions', () => {
     render(<MemoryRouter><UsRatesVolPage /></MemoryRouter>)
     await screen.findByText('Methodology')
     expect(screen.queryByText('Zero-mean, and why')).toBeNull()
-    fireEvent.click(screen.getByText('▸ Show'))
+    fireEvent.click(screen.getByText('Methodology')) // AcmCollapsible summary
     expect(screen.getByText('Zero-mean, and why')).toBeTruthy()
   })
 
   it('states the zero-mean convention and why', async () => {
     render(<MemoryRouter><UsRatesVolPage /></MemoryRouter>)
     await screen.findByText('Methodology')
-    fireEvent.click(screen.getByText('▸ Show'))
+    fireEvent.click(screen.getByText('Methodology')) // AcmCollapsible summary
     expect(screen.getByText(/no mean subtraction, and\s+an N \(not N−1\) denominator/)).toBeTruthy()
     expect(screen.getAllByText(/second moment/).length).toBeGreaterThan(0)
     expect(screen.getByText(/≈31.7bp annualized while/)).toBeTruthy()
@@ -342,7 +344,7 @@ describe('methodology panel documents the load-bearing conventions', () => {
   it('states the 21-day trailing vs same-date implied window convention', async () => {
     render(<MemoryRouter><UsRatesVolPage /></MemoryRouter>)
     await screen.findByText('Methodology')
-    fireEvent.click(screen.getByText('▸ Show'))
+    fireEvent.click(screen.getByText('Methodology')) // AcmCollapsible summary
     expect(screen.getByText(/21-day trailing realized against same-date implied/)).toBeTruthy()
     expect(screen.getByText(/prices volatility over the forward window/)).toBeTruthy()
   })
@@ -350,7 +352,7 @@ describe('methodology panel documents the load-bearing conventions', () => {
   it('states N = 21, the √252 annualization, the weights and the renormalization rule', async () => {
     render(<MemoryRouter><UsRatesVolPage /></MemoryRouter>)
     await screen.findByText('Methodology')
-    fireEvent.click(screen.getByText('▸ Show'))
+    fireEvent.click(screen.getByText('Methodology')) // AcmCollapsible summary
     expect(screen.getByText(/N = 21/)).toBeTruthy()
     expect(screen.getByText(/√252/)).toBeTruthy()
     expect(screen.getByText(/20% \/ 20% \/ 40% \/ 20%/)).toBeTruthy()

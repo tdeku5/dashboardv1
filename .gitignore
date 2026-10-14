@@ -37,3 +37,6 @@ python_env/
 fred_data.db
 fred_data.db-shm
 fred_data.db-wal
+
+# Design-review screenshots and probe scripts (local review artifacts)
+docs/design-review/

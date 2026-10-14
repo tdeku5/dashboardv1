@@ -62,6 +62,24 @@
 
 .null { color: var(--acm-text-tertiary); }
 
+.emphasis .td { font-weight: var(--acm-fw-medium); color: var(--acm-text-primary); }
+
+/* Inline magnitude bar: a fixed, transparent track filled to --acm-bar-pct,
+   so bar length stays proportional to the value. */
+.bar {
+  display: inline-block;
+  vertical-align: middle;
+  width: var(--acm-space-20);
+  height: var(--acm-space-2);
+  margin-right: var(--acm-space-2);
+  background: linear-gradient(
+    to right,
+    var(--acm-bar-fill) 0 var(--acm-bar-pct),
+    transparent var(--acm-bar-pct)
+  );
+  border-radius: var(--acm-radius-sm);
+}
+
 .sticky .th {
   position: sticky;
   top: 0;

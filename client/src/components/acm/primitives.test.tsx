@@ -220,11 +220,11 @@ describe('AcmDataTable — colour channels (Rule 2)', () => {
   it('CSS: tone classes set only color; alert classes set only background + outline', () => {
     const css = cssOf('tones.module.css')
     for (const t of ['positive', 'negative', 'dirUp', 'dirDown']) {
-      const d = declsFor(css, new RegExp(`^\\s*\\.${t}\\s*$`))
+      const d = declsFor(css, new RegExp(`^\\s*\\.${t}\\.${t}\\s*$`))
       expect(d.map(x => x.split(':')[0].trim())).toEqual(['color'])
     }
     for (const a of ['alertMild', 'alertStrong']) {
-      const props = declsFor(css, new RegExp(`^\\s*\\.${a}\\s*$`)).map(x => x.split(':')[0].trim())
+      const props = declsFor(css, new RegExp(`^\\s*\\.${a}\\.${a}\\s*$`)).map(x => x.split(':')[0].trim())
       expect(props).not.toContain('color')
       expect(props).toContain('background')
       expect(props).toContain('outline')
@@ -330,6 +330,51 @@ describe('AcmCollapsible', () => {
     const details = container.firstElementChild as HTMLDetailsElement
     fireEvent.click(screen.getByText('Methodology'))
     expect(details.open).toBe(true)
+  })
+})
+
+// ── Phase 2 extensions ──────────────────────────────────────────────────────
+
+describe('Phase 2 extensions', () => {
+  it('AcmPageHeader renders an actions slot beside the title', () => {
+    render(<AcmPageHeader title="T" actions={<button>↻ REFRESH</button>} />)
+    expect(screen.getByRole('button', { name: '↻ REFRESH' })).toBeTruthy()
+  })
+
+  it('AcmCollapsible keeps its body out of the DOM until opened, and closes again', () => {
+    const { container } = render(<AcmCollapsible title="Methodology"><p>Zero-mean, and why</p></AcmCollapsible>)
+    expect(screen.queryByText('Zero-mean, and why')).toBeNull()
+    fireEvent.click(screen.getByText('Methodology'))
+    expect(screen.getByText('Zero-mean, and why')).toBeTruthy()
+    expect((container.firstElementChild as HTMLDetailsElement).open).toBe(true)
+    fireEvent.click(screen.getByText('Methodology'))
+    expect(screen.queryByText('Zero-mean, and why')).toBeNull()
+  })
+
+  it('AcmDataTable draws an inline magnitude bar (clamped 0–100) and emphasises flagged rows', () => {
+    interface R { k: string; share: number | null; total: boolean }
+    const rows: R[] = [{ k: 'a', share: 42.5, total: false }, { k: 'b', share: null, total: false }, { k: 'c', share: 140, total: true }]
+    const { container } = render(
+      <AcmDataTable<R>
+        columns={[{ key: 's', header: 'Share', kind: 'num', value: r => r.share, format: v => `${v.toFixed(1)}%`, bar: r => r.share }]}
+        rows={rows} rowKey={r => r.k} rowEmphasis={r => r.total}
+      />,
+    )
+    const bars = container.querySelectorAll<HTMLElement>(`.${tableStyles.bar}`)
+    expect(bars).toHaveLength(2) // null row draws no bar
+    expect(bars[0].style.getPropertyValue('--acm-bar-pct')).toBe('42.5%')
+    expect(bars[1].style.getPropertyValue('--acm-bar-pct')).toBe('100%')
+    const trs = container.querySelectorAll('tbody tr')
+    expect(trs[2].className).toContain(tableStyles.emphasis)
+    expect(trs[0].className).not.toContain(tableStyles.emphasis)
+    expect(declsFor(cssOf('AcmDataTable.module.css'), /^\s*\.bar\s*$/).join(';')).toContain('var(--acm-bar-fill)')
+  })
+
+  it('AcmChartFrame accepts theme reference-line colours in the legend without warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    render(<AcmChartFrame title="T" height={100} legend={[{ label: '±1σ', color: 'var(--acm-text-disabled)', dashed: true }]}><div /></AcmChartFrame>)
+    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 })
 

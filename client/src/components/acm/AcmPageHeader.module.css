@@ -31,6 +31,13 @@
   color: var(--acm-text-secondary);
 }
 
+.side {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-3);
+  flex-shrink: 0;
+}
+
 .asOf {
   display: flex;
   align-items: baseline;

@@ -23,6 +23,11 @@ export interface AcmColumn<Row> {
   alert?: (row: Row) => AlertLevel | undefined
   /** Header tooltip / long name. */
   title?: string
+  /**
+   * Optional inline magnitude bar drawn before the value, 0–100 (e.g. share
+   * of a blend). Not a sign colour — always --acm-bar-fill. null → no bar.
+   */
+  bar?: (row: Row) => number | null
 }
 
 interface Props<Row> {
@@ -32,10 +37,12 @@ interface Props<Row> {
   /** Keep the header visible while the table scrolls inside a bounded parent. */
   stickyHeader?: boolean
   caption?: string
+  /** Rows to set in the emphasis weight (e.g. a total row). */
+  rowEmphasis?: (row: Row) => boolean
   className?: string
 }
 
-export function AcmDataTable<Row>({ columns, rows, rowKey, stickyHeader, caption, className }: Props<Row>) {
+export function AcmDataTable<Row>({ columns, rows, rowKey, stickyHeader, caption, rowEmphasis, className }: Props<Row>) {
   return (
     <div className={cx('acm-root', styles.wrap, className)}>
       <table className={cx(styles.table, stickyHeader && styles.sticky)}>
@@ -56,10 +63,11 @@ export function AcmDataTable<Row>({ columns, rows, rowKey, stickyHeader, caption
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={rowKey(row, i)} className={styles.tr}>
+            <tr key={rowKey(row, i)} className={cx(styles.tr, rowEmphasis?.(row) && styles.emphasis)}>
               {columns.map(c => {
                 const raw = c.value(row)
                 const isNull = displayValue(raw) === displayValue(null)
+                const bar = isNull ? null : c.bar?.(row) ?? null
                 return (
                   <td
                     key={c.key}
@@ -70,6 +78,13 @@ export function AcmDataTable<Row>({ columns, rows, rowKey, stickyHeader, caption
                       alertClass(c.alert?.(row)),
                     )}
                   >
+                    {bar != null && Number.isFinite(bar) && (
+                      <span
+                        aria-hidden="true"
+                        className={styles.bar}
+                        style={{ ['--acm-bar-pct' as string]: `${Math.max(0, Math.min(100, bar))}%` }}
+                      />
+                    )}
                     <span className={cx(isNull ? styles.null : toneClass(c.tone?.(row)))}>
                       {displayValue(raw, c.format)}
                     </span>

@@ -4,6 +4,7 @@ import styles from './AcmChartFrame.module.css'
 import { cx } from './acmFormat'
 import { allIdentityColors } from '../../constants/identityColors'
 import { SIGN_TOKENS } from './chartColors'
+import { referenceLines } from './chartTheme'
 
 export interface AcmLegendItem {
   label: string
@@ -32,9 +33,11 @@ interface Props {
 const ALLOWED_SERIES = new Set<string>([
   ...allIdentityColors().map(([, v]) => v.toLowerCase()),
   ...SIGN_TOKENS.map(t => `var(--${t})`),
+  // Reference lines/bands (±σ, zero) may be keyed in the legend too.
+  ...Object.values(referenceLines).map(r => String(r.stroke)),
 ])
 
-/** True when a series colour comes from the identity registry or a sign token. */
+/** True when a legend colour comes from the identity registry, a sign token, or a theme reference line. */
 export function isSeriesColor(color: string): boolean {
   return ALLOWED_SERIES.has(color.toLowerCase())
 }

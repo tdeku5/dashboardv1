@@ -82,6 +82,9 @@
   --acm-accent-active: #498AC5;
   --acm-accent-muted:  color-mix(in srgb, var(--acm-accent) 16%, transparent); /* active-tab fill; bg/panel only */
 
+  /* Inline magnitude bar (e.g. share of a blend) — non-text, ≥ 3:1. */
+  --acm-bar-fill: var(--acm-accent-active);
+
   /* ── Sign families (Decision 2; seeds from the phase-1-resume prompt) ──────
    * Valence + direction colour value TEXT only, except inside the named
    * heatmap components, which use --acm-heat-* fills (see below).

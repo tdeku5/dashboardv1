@@ -7,7 +7,7 @@ import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import { raw, resolved, SIGN_TOKENS } from '../../styles/acmTokenReader'
 import { allIdentityColors } from '../../constants/identityColors'
 import {
-  chartTheme, CHART_TICK_FONT_SIZE, CHART_LABEL_FONT_SIZE, CHART_FONT_MONO, CHART_FONT_SANS, CHART_FONT_WEIGHT,
+  chartTheme, CHART_TICK_FONT_SIZE, CHART_LABEL_FONT_SIZE, CHART_MARGIN, CHART_FONT_MONO, CHART_FONT_SANS, CHART_FONT_WEIGHT,
   gridProps, xAxisProps, yAxisProps, tooltipProps, axisLabelStyle, referenceLabelStyle, legendProps, tickStyle,
 } from './chartTheme'
 
@@ -49,6 +49,13 @@ describe('chartTheme — values come only from --acm-* tokens', () => {
     expect(`${CHART_LABEL_FONT_SIZE}px`).toBe(raw['acm-fs-sm'])
     expect(String(chartTheme.tick.fontWeight)).toBe(raw['acm-fw-regular'])
     expect(String(CHART_FONT_WEIGHT)).toBe(raw['acm-fw-regular'])
+  })
+
+  it('chart margin mirrors the spacing tokens', () => {
+    expect(`${CHART_MARGIN.top}px`).toBe(raw['acm-space-4'])
+    expect(`${CHART_MARGIN.right}px`).toBe(raw['acm-space-2'])
+    expect(`${CHART_MARGIN.left}px`).toBe(raw['acm-space-2'])
+    expect(`${CHART_MARGIN.bottom}px`).toBe(raw['acm-space-1'])
   })
 
   it('measured-text font families are literals equal to the resolved tokens', () => {

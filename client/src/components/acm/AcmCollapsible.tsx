@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import '../../styles/acm-tokens.css'
 import styles from './AcmCollapsible.module.css'
 import { cx } from './acmFormat'
@@ -11,12 +11,23 @@ interface Props {
   className?: string
 }
 
-/** Methodology / reference section. Native <details>, so it works without JS state. */
+/**
+ * Methodology / reference section. A <details>/<summary> for semantics and
+ * keyboard support, but the body is only MOUNTED while open — closed content
+ * stays out of the DOM (and out of find-in-page), as the hand-rolled toggles
+ * it replaces behaved.
+ */
 export function AcmCollapsible({ title, defaultOpen = false, children, className }: Props) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <details className={cx('acm-root', styles.details, className)} open={defaultOpen}>
-      <summary className={styles.summary}>{title}</summary>
-      <div className={styles.body}>{children}</div>
+    <details className={cx('acm-root', styles.details, className)} open={open}>
+      <summary
+        className={styles.summary}
+        onClick={e => { e.preventDefault(); setOpen(o => !o) }}
+      >
+        {title}
+      </summary>
+      {open && <div className={styles.body}>{children}</div>}
     </details>
   )
 }

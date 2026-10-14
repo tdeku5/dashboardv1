@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -15,21 +15,40 @@ import {
   type VolRangeKey,
   type VolSeriesPoint,
 } from '../hooks/useUsRatesVol'
+import {
+  AcmChartFrame,
+  AcmCollapsible,
+  AcmDataTable,
+  AcmPageHeader,
+  AcmPanel,
+  AcmStatStrip,
+  AcmStatTile,
+  type AcmColumn,
+  type AlertLevel,
+  type SignTone,
+} from '../components/acm'
+import {
+  CHART_MARGIN,
+  chartTheme,
+  referenceLines,
+  tooltipItemStyle,
+  tooltipLabelStyle,
+  tooltipSurfaceStyle,
+} from '../components/acm/chartTheme'
+import { TENOR_COLORS, US_RATES_VOL_COLORS } from '../constants/identityColors'
 import styles from './UsRatesVolPage.module.css'
 
-// Implied MOVE keeps the blue it carries on the Cross-Asset Vol page so the
-// same series reads the same colour wherever it appears in the terminal.
-const COLOR_IMPLIED = '#3b82f6'
-const COLOR_REALIZED = '#f59e0b'
-const COLOR_PREMIUM = '#e2e8f0'
-const COLOR_BAND_1 = '#4e6070'
-const COLOR_BAND_2 = '#3a4654'
+// Implied MOVE shares the Cross Asset Vol MOVE colour (VOL_INDEX_COLORS.move)
+// so the same series reads the same colour wherever it appears.
+const COLOR_IMPLIED = US_RATES_VOL_COLORS.implied
+const COLOR_REALIZED = US_RATES_VOL_COLORS.realized
+const COLOR_PREMIUM = US_RATES_VOL_COLORS.premium
 
 const TENOR_SERIES = [
-  { key: 'rv2y' as const, label: '2Y', color: '#ef4444', weight: 0.20 },
-  { key: 'rv5y' as const, label: '5Y', color: '#f59e0b', weight: 0.20 },
-  { key: 'rv10y' as const, label: '10Y', color: '#3b82f6', weight: 0.40 },
-  { key: 'rv30y' as const, label: '30Y', color: '#a855f7', weight: 0.20 },
+  { key: 'rv2y' as const, label: '2Y', color: TENOR_COLORS['2Y'], weight: 0.20 },
+  { key: 'rv5y' as const, label: '5Y', color: TENOR_COLORS['5Y'], weight: 0.20 },
+  { key: 'rv10y' as const, label: '10Y', color: TENOR_COLORS['10Y'], weight: 0.40 },
+  { key: 'rv30y' as const, label: '30Y', color: TENOR_COLORS['30Y'], weight: 0.20 },
 ]
 type TenorSeriesKey = (typeof TENOR_SERIES)[number]['key']
 
@@ -48,17 +67,16 @@ const RANGES: ReadonlyArray<{ key: VolRangeKey; label: string }> = [
 const CHART_HEIGHT = 360
 const DASH = '—'
 
-const AXIS_TICK = { fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }
-
 // Nulls render as an em dash everywhere — a missing value is never shown as 0.
 function fmt(v: number | null | undefined, dp = 2): string {
   if (v == null || !Number.isFinite(v)) return DASH
   return v.toFixed(dp)
 }
 
+// ASCII '-' for negatives (Decision 3): values paste into Excel as numbers.
 function fmtSigned(v: number | null | undefined, dp = 2, suffix = ''): string {
   if (v == null || !Number.isFinite(v)) return DASH
-  const sign = v >= 0 ? '+' : '−'
+  const sign = v >= 0 ? '+' : '-'
   return `${sign}${Math.abs(v).toFixed(dp)}${suffix}`
 }
 
@@ -66,11 +84,17 @@ function fmtDate(v: string | null | undefined): string {
   return v == null || v === '' ? DASH : v
 }
 
-function signClass(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return ''
-  if (v > 0) return styles.statPos
-  if (v < 0) return styles.statNeg
-  return ''
+/** The premium is a direction (neither good nor bad): dir-up / dir-down on its text. */
+function directionTone(v: number | null | undefined): SignTone | undefined {
+  if (v == null || !Number.isFinite(v) || v === 0) return undefined
+  return v > 0 ? 'dir-up' : 'dir-down'
+}
+
+/** |z| > 2 → alert-mild tint, |z| > 3 → alert-strong tint. Never the text. */
+function zAlert(z: number | null | undefined): AlertLevel | undefined {
+  if (z == null || !Number.isFinite(z)) return undefined
+  const a = Math.abs(z)
+  return a > 3 ? 'strong' : a > 2 ? 'mild' : undefined
 }
 
 // ── Refresh control ──────────────────────────────────────────────────────────
@@ -106,17 +130,14 @@ function VolRefreshButton({ onDone }: { onDone: () => void }) {
 
   return (
     <div className={styles.refreshRow}>
-      <button type="button" className={styles.methodToggle} onClick={handle} disabled={busy}>
-        {busy ? 'REFRESHING…' : '↻ REFRESH'}
-      </button>
       {result && (
-        <span
-          className={styles.statMeta}
-          style={{ color: result.startsWith('Error') ? '#ef4444' : '#22c55e' }}
-        >
+        <span className={result.startsWith('Error') ? styles.refreshError : styles.refreshOk}>
           {result}
         </span>
       )}
+      <button type="button" className={styles.actionBtn} onClick={handle} disabled={busy}>
+        {busy ? 'REFRESHING…' : '↻ REFRESH'}
+      </button>
     </div>
   )
 }
@@ -139,10 +160,10 @@ function makeTooltip(
     const rows = payload.filter(p => labels[p.dataKey] !== undefined)
     if (rows.length === 0) return null
     return (
-      <div className={styles.tooltip}>
-        <div className={styles.tooltipDate}>{label}</div>
+      <div className={styles.tooltip} style={tooltipSurfaceStyle}>
+        <div style={tooltipLabelStyle}>{label}</div>
         {rows.map(p => (
-          <div key={p.dataKey} className={styles.tooltipRow}>
+          <div key={p.dataKey} className={styles.tooltipRow} style={tooltipItemStyle}>
             <span className={styles.tooltipDot} style={{ background: p.color }} />
             <span className={styles.tooltipName}>{labels[p.dataKey]}</span>
             <span className={styles.tooltipVal}>
@@ -159,7 +180,7 @@ const ImpliedRealizedTooltip = makeTooltip(
   { move: 'Implied MOVE', rvMove: 'Realized (21d)' }, 2, ' bp',
 )
 const PremiumTooltip = makeTooltip(
-  { premiumBp: 'Premium', band1hi: '+1σ', band1lo: '−1σ', band2hi: '+2σ', band2lo: '−2σ' }, 2, ' bp',
+  { premiumBp: 'Premium', band1hi: '+1σ', band1lo: '-1σ', band2hi: '+2σ', band2lo: '-2σ' }, 2, ' bp',
 )
 const TenorTooltip = makeTooltip(
   { rv2y: '2Y', rv5y: '5Y', rv10y: '10Y', rv30y: '30Y' }, 2, ' bp',
@@ -202,12 +223,33 @@ export function buildPremiumChartData(
   })
 }
 
+// ── Contribution table ───────────────────────────────────────────────────────
+
+interface ContribTableRow {
+  tenor: string
+  weight: number | string | null
+  rv: number | null
+  contribution: number | null
+  share: number | string | null
+  bar: number | null
+  total: boolean
+}
+
+const pct1 = (v: number) => `${v.toFixed(1)}%`
+
+const CONTRIB_COLUMNS: AcmColumn<ContribTableRow>[] = [
+  { key: 'tenor', header: 'Tenor', kind: 'label', value: r => r.tenor },
+  { key: 'weight', header: 'Weight', kind: 'num', value: r => r.weight, format: v => pct1(v * 100) },
+  { key: 'rv', header: 'Realized vol (bp)', kind: 'num', value: r => r.rv, format: v => v.toFixed(2) },
+  { key: 'contribution', header: 'Contribution (bp)', kind: 'num', value: r => r.contribution, format: v => v.toFixed(2) },
+  { key: 'share', header: 'Share of blend', kind: 'num', value: r => r.share, format: pct1, bar: r => r.bar },
+]
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export function UsRatesVolPage() {
   const [range, setRange] = useState<VolRangeKey>('2y')
   const [hiddenTenors, setHiddenTenors] = useState<Set<TenorSeriesKey>>(new Set())
-  const [methodOpen, setMethodOpen] = useState(false)
   const { data, loading, error, reload } = useUsRatesVol(range)
 
   const series: VolSeriesPoint[] = useMemo(() => data?.series ?? [], [data])
@@ -226,7 +268,23 @@ export function UsRatesVolPage() {
   const latest = data?.latest
   const hasSeries = !loading && !error && series.length > 0
 
-  const renderChartState = (node: React.ReactNode) => {
+  const contribRows: ContribTableRow[] = useMemo(() => {
+    const rows: ContribTableRow[] = (data?.contributions ?? []).map((c: ContributionRow) => ({
+      tenor: c.tenor.toUpperCase(),
+      weight: c.weight === 0 && c.rv == null ? null : c.weight,
+      rv: c.rv,
+      contribution: c.contribution,
+      share: c.sharePct,
+      bar: c.sharePct,
+      total: false,
+    }))
+    if (hasSeries) {
+      rows.push({ tenor: 'RMOVE', weight: '100.0%', rv: null, contribution: latest?.rvMove ?? null, share: '100.0%', bar: null, total: true })
+    }
+    return rows
+  }, [data, hasSeries, latest])
+
+  const renderChartState = (node: ReactNode) => {
     if (loading) return <div className={styles.placeholder}>Loading…</div>
     if (error) return <div className={styles.placeholder}>Failed to load: {error}</div>
     if (series.length === 0) return <div className={styles.placeholder}>No data in selected range.</div>
@@ -234,60 +292,40 @@ export function UsRatesVolPage() {
   }
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.headerRow}>
-        <div className={styles.pageHeader}>
-          <div className={styles.pageTitle}>US Rates — Volatility</div>
-          <div className={styles.pageSubtitle}>
-            Implied MOVE vs a realized analogue built the same way · 21-day trailing, annualized bp
-          </div>
-        </div>
-        <VolRefreshButton onDone={reload} />
-      </div>
+    <div className={`acm-root ${styles.shell}`}>
+      <AcmPageHeader
+        title="US Rates — Volatility"
+        subtitle="Implied MOVE vs a realized analogue built the same way · 21-day trailing, annualized bp"
+        actions={<VolRefreshButton onDone={reload} />}
+      />
 
       {/* 1 — Stat strip */}
-      <div className={styles.statStrip}>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Implied MOVE</span>
-          <span className={styles.statValue} style={{ color: COLOR_IMPLIED }}>{fmt(latest?.move)}</span>
-          <span className={styles.statMeta}>as of {fmtDate(data?.asOfImplied)}</span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Realized (21d)</span>
-          <span className={styles.statValue} style={{ color: COLOR_REALIZED }}>{fmt(latest?.rvMove)}</span>
-          <span className={styles.statMeta}>as of {fmtDate(latest?.date)}</span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Implied vol premium</span>
-          <span className={`${styles.statValue} ${signClass(latest?.premiumBp)}`}>
-            {fmtSigned(latest?.premiumBp, 2)}
-          </span>
-          <span className={styles.statMeta}>bp · as of {fmtDate(latest?.date)}</span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Ratio</span>
-          <span className={styles.statValue}>{fmt(latest?.ratio, 3)}×</span>
-          <span className={styles.statMeta}>implied ÷ realized · {fmtDate(latest?.date)}</span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Premium 1y z-score</span>
-          <span className={`${styles.statValue} ${signClass(latest?.premiumZ252)}`}>
-            {fmtSigned(latest?.premiumZ252, 2, 'σ')}
-          </span>
-          <span className={styles.statMeta}>252d · as of {fmtDate(latest?.date)}</span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statLabel}>Ratio 1y percentile</span>
-          <span className={styles.statValue}>
-            {latest?.ratioPct252 == null ? DASH : `${latest.ratioPct252.toFixed(1)}%`}
-          </span>
-          <span className={styles.statMeta}>252d · as of {fmtDate(latest?.date)}</span>
-        </div>
-      </div>
+      <AcmStatStrip>
+        <AcmStatTile label="Implied MOVE" value={latest?.move} format={v => v.toFixed(2)} asOf={`as of ${fmtDate(data?.asOfImplied)}`} />
+        <AcmStatTile label="Realized (21d)" value={latest?.rvMove} format={v => v.toFixed(2)} asOf={`as of ${fmtDate(latest?.date)}`} />
+        <AcmStatTile
+          label="Implied vol premium"
+          value={fmtSigned(latest?.premiumBp, 2)}
+          tone={directionTone(latest?.premiumBp)}
+          asOf={`bp · as of ${fmtDate(latest?.date)}`}
+        />
+        <AcmStatTile label="Ratio" value={`${fmt(latest?.ratio, 3)}×`} asOf={`implied ÷ realized · ${fmtDate(latest?.date)}`} />
+        <AcmStatTile
+          label="Premium 1y z-score"
+          value={fmtSigned(latest?.premiumZ252, 2, 'σ')}
+          alert={zAlert(latest?.premiumZ252)}
+          asOf={`252d · as of ${fmtDate(latest?.date)}`}
+        />
+        <AcmStatTile
+          label="Ratio 1y percentile"
+          value={latest?.ratioPct252 == null ? DASH : `${latest.ratioPct252.toFixed(1)}%`}
+          asOf={`252d · as of ${fmtDate(latest?.date)}`}
+        />
+      </AcmStatStrip>
 
       {/* 7 — Data-quality notes */}
       {data?.impliedTrailsRealized && (
-        <div className={styles.warning}>
+        <div className={styles.note} role="note">
           <span>
             Realized has printed for {fmtDate(data.asOfRealized)} but implied MOVE has not — the
             comparison is shown as of {fmtDate(data.asOfImplied)}.
@@ -301,7 +339,7 @@ export function UsRatesVolPage() {
       )}
 
       {data && data.renormalizedRanges.length > 0 && (
-        <div className={styles.warning}>
+        <div className={styles.note} role="note">
           <span>
             Weights renormalized on {data.renormalizedRanges.reduce((s, r) => s + r.days, 0)} date(s)
             in this range — a tenor was missing and the remaining weights were rescaled to sum to 1,
@@ -319,7 +357,8 @@ export function UsRatesVolPage() {
           <button
             key={r.key}
             type="button"
-            className={`${styles.btn} ${range === r.key ? styles.btnActive : ''}`}
+            aria-pressed={range === r.key}
+            className={`${styles.rangeBtn} ${range === r.key ? styles.rangeBtnActive : ''}`}
             onClick={() => setRange(r.key)}
           >
             {r.label}
@@ -328,197 +367,111 @@ export function UsRatesVolPage() {
       </div>
 
       {/* 2 — Implied vs realized */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>Implied vs realized</div>
-          <div className={styles.panelSubtitle}>
-            Both in annualized bp · realized is 21-day trailing against same-date implied
-          </div>
-        </div>
-        <div className={styles.chartWrap}>
-          {renderChartState(
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-              <LineChart data={series} margin={{ top: 16, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="#728197" tick={AXIS_TICK} interval="preserveStartEnd" minTickGap={40} />
-                <YAxis stroke="#728197" tick={AXIS_TICK} width={52} label={undefined} />
-                <Tooltip content={<ImpliedRealizedTooltip />} />
-                {/* connectNulls={false}: a gap is drawn as a break, never bridged. */}
-                <Line type="monotone" dataKey="move" stroke={COLOR_IMPLIED} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="rvMove" stroke={COLOR_REALIZED} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>,
-          )}
-        </div>
-        <div className={styles.legendRow}>
-          <span className={styles.legendChip}>
-            <span className={styles.legendDot} style={{ background: COLOR_IMPLIED }} />
-            Implied MOVE
-          </span>
-          <span className={styles.legendChip}>
-            <span className={styles.legendDot} style={{ background: COLOR_REALIZED }} />
-            Realized MOVE (21d)
-          </span>
-        </div>
-      </div>
+      <AcmChartFrame
+        title="Implied vs realized"
+        subtitle="Both in annualized bp · realized is 21-day trailing against same-date implied"
+        height={CHART_HEIGHT}
+        legend={[
+          { label: 'Implied MOVE', color: COLOR_IMPLIED },
+          { label: 'Realized MOVE (21d)', color: COLOR_REALIZED },
+        ]}
+      >
+        {renderChartState(
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={series} margin={CHART_MARGIN}>
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
+              <YAxis {...chartTheme.yAxis} width={52} label={undefined} />
+              <Tooltip content={<ImpliedRealizedTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+              {/* connectNulls={false}: a gap is drawn as a break, never bridged. */}
+              <Line type="monotone" dataKey="move" stroke={COLOR_IMPLIED} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="rvMove" stroke={COLOR_REALIZED} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>,
+        )}
+      </AcmChartFrame>
 
       {/* 3 — Premium with ±1σ / ±2σ bands */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>Implied vol premium / discount</div>
-          <div className={styles.panelSubtitle}>
-            MOVE − realized, in bp · bands are the trailing {data?.lookbackDays ?? 252}-day mean ±1σ and ±2σ
-          </div>
-        </div>
-        <div className={styles.chartWrap}>
-          {renderChartState(
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-              <LineChart data={premiumData} margin={{ top: 16, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="#728197" tick={AXIS_TICK} interval="preserveStartEnd" minTickGap={40} />
-                <YAxis stroke="#728197" tick={AXIS_TICK} width={52} />
-                <Tooltip content={<PremiumTooltip />} />
-                <ReferenceLine y={0} stroke="#64748B" strokeWidth={1} />
-                <Line type="monotone" dataKey="band2hi" stroke={COLOR_BAND_2} dot={false} strokeWidth={1} strokeDasharray="2 4" connectNulls={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="band2lo" stroke={COLOR_BAND_2} dot={false} strokeWidth={1} strokeDasharray="2 4" connectNulls={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="band1hi" stroke={COLOR_BAND_1} dot={false} strokeWidth={1} strokeDasharray="4 4" connectNulls={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="band1lo" stroke={COLOR_BAND_1} dot={false} strokeWidth={1} strokeDasharray="4 4" connectNulls={false} isAnimationActive={false} />
-                <Line type="monotone" dataKey="premiumBp" stroke={COLOR_PREMIUM} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>,
-          )}
-        </div>
-        <div className={styles.legendRow}>
-          <span className={styles.legendChip}>
-            <span className={styles.legendDot} style={{ background: COLOR_PREMIUM }} />
-            Premium (bp)
-          </span>
-          <span className={styles.legendChip}>
-            <span className={styles.legendDot} style={{ background: COLOR_BAND_1 }} />
-            ±1σ
-          </span>
-          <span className={styles.legendChip}>
-            <span className={styles.legendDot} style={{ background: COLOR_BAND_2 }} />
-            ±2σ
-          </span>
-        </div>
-      </div>
+      <AcmChartFrame
+        title="Implied vol premium / discount"
+        subtitle={`MOVE − realized, in bp · bands are the trailing ${data?.lookbackDays ?? 252}-day mean ±1σ and ±2σ`}
+        height={CHART_HEIGHT}
+        legend={[
+          { label: 'Premium (bp)', color: COLOR_PREMIUM },
+          { label: '±1σ', color: String(referenceLines.level.stroke), dashed: true },
+          { label: '±2σ', color: String(referenceLines.levelFaint.stroke), dashed: true },
+        ]}
+      >
+        {renderChartState(
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={premiumData} margin={CHART_MARGIN}>
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
+              <YAxis {...chartTheme.yAxis} width={52} />
+              <Tooltip content={<PremiumTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+              <ReferenceLine y={0} {...referenceLines.zero} />
+              <Line type="monotone" dataKey="band2hi" {...referenceLines.levelFaint} dot={false} strokeWidth={1} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="band2lo" {...referenceLines.levelFaint} dot={false} strokeWidth={1} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="band1hi" {...referenceLines.level} dot={false} strokeWidth={1} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="band1lo" {...referenceLines.level} dot={false} strokeWidth={1} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="premiumBp" stroke={COLOR_PREMIUM} dot={false} strokeWidth={1.6} connectNulls={false} isAnimationActive={false} />
+            </LineChart>
+          </ResponsiveContainer>,
+        )}
+      </AcmChartFrame>
 
       {/* 4 — Per-tenor realized vol */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>Realized vol by tenor</div>
-          <div className={styles.panelSubtitle}>
-            21-day zero-mean realized vol per tenor, annualized bp · click a chip to toggle
-          </div>
-        </div>
-        <div className={styles.chartWrap}>
-          {renderChartState(
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-              <LineChart data={series} margin={{ top: 16, right: 8, left: 8, bottom: 4 }}>
-                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                <XAxis dataKey="date" stroke="#728197" tick={AXIS_TICK} interval="preserveStartEnd" minTickGap={40} />
-                <YAxis stroke="#728197" tick={AXIS_TICK} width={52} />
-                <Tooltip content={<TenorTooltip />} />
-                {TENOR_SERIES.filter(t => !hiddenTenors.has(t.key)).map(t => (
-                  <Line
-                    key={t.key}
-                    type="monotone"
-                    dataKey={t.key}
-                    stroke={t.color}
-                    dot={false}
-                    strokeWidth={1.4}
-                    connectNulls={false}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>,
-          )}
-        </div>
-        <div className={styles.legendRow}>
-          {TENOR_SERIES.map(t => {
-            const hidden = hiddenTenors.has(t.key)
-            return (
-              <button
-                key={t.key}
-                type="button"
-                className={`${styles.legendChip} ${hidden ? styles.legendChipHidden : ''}`}
-                onClick={() => toggleTenor(t.key)}
-              >
-                <span
-                  className={`${styles.legendDot} ${hidden ? styles.legendDotHidden : ''}`}
-                  style={{ background: t.color }}
+      <AcmChartFrame
+        title="Realized vol by tenor"
+        subtitle="21-day zero-mean realized vol per tenor, annualized bp · click a chip to toggle"
+        height={CHART_HEIGHT}
+        legend={TENOR_SERIES.map(t => ({
+          label: t.label,
+          color: t.color,
+          hidden: hiddenTenors.has(t.key),
+          onClick: () => toggleTenor(t.key),
+        }))}
+      >
+        {renderChartState(
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={series} margin={CHART_MARGIN}>
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
+              <YAxis {...chartTheme.yAxis} width={52} />
+              <Tooltip content={<TenorTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+              {TENOR_SERIES.filter(t => !hiddenTenors.has(t.key)).map(t => (
+                <Line
+                  key={t.key}
+                  type="monotone"
+                  dataKey={t.key}
+                  stroke={t.color}
+                  dot={false}
+                  strokeWidth={1.4}
+                  connectNulls={false}
+                  isAnimationActive={false}
                 />
-                {t.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+              ))}
+            </LineChart>
+          </ResponsiveContainer>,
+        )}
+      </AcmChartFrame>
 
       {/* 5 — Contribution table */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>Contribution to the blend</div>
-          <div className={styles.panelSubtitle}>
+      <AcmPanel
+        title="Contribution to the blend"
+        footer={
+          <>
             As of {fmtDate(latest?.date)} · weights are those actually applied
             {latest?.weightsRenormalized ? ' (renormalized — a tenor was missing)' : ''}
-          </div>
-        </div>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Tenor</th>
-              <th>Weight</th>
-              <th>Realized vol (bp)</th>
-              <th>Contribution (bp)</th>
-              <th>Share of blend</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.contributions ?? []).map((c: ContributionRow) => (
-              <tr key={c.tenor}>
-                <td>{c.tenor.toUpperCase()}</td>
-                <td>{c.weight === 0 && c.rv == null ? DASH : `${(c.weight * 100).toFixed(1)}%`}</td>
-                <td>{fmt(c.rv)}</td>
-                <td>{fmt(c.contribution)}</td>
-                <td>
-                  {c.sharePct == null ? DASH : (
-                    <>
-                      <span
-                        className={styles.tableBar}
-                        style={{ width: `${Math.max(2, c.sharePct)}px` }}
-                      />
-                      {c.sharePct.toFixed(1)}%
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {hasSeries && (
-              <tr>
-                <td><strong>RMOVE</strong></td>
-                <td>100.0%</td>
-                <td>{DASH}</td>
-                <td><strong>{fmt(latest?.rvMove)}</strong></td>
-                <td>100.0%</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+          </>
+        }
+      >
+        <AcmDataTable columns={CONTRIB_COLUMNS} rows={contribRows} rowKey={r => r.tenor} rowEmphasis={r => r.total} />
+      </AcmPanel>
 
       {/* 6 — Methodology */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <div className={styles.panelTitle}>Methodology</div>
-        </div>
-        <button type="button" className={styles.methodToggle} onClick={() => setMethodOpen(o => !o)}>
-          {methodOpen ? '▾ Hide' : '▸ Show'}
-        </button>
-        {methodOpen && (
-          <div className={styles.methodBody}>
+      <AcmCollapsible title="Methodology">
+        <div className={styles.methodBody}>
             <div className={styles.methodHeading}>Construction</div>
             <div>
               The ICE BofA MOVE is a curve-weighted average of normalized (basis-point) implied
@@ -606,9 +559,8 @@ RMOVE   = 0.20·σ_2y + 0.20·σ_5y + 0.40·σ_10y + 0.20·σ_30y`}
               of a difference. Implied and realized are joined on date with an inner join: a date
               appears only when both exist.
             </div>
-          </div>
-        )}
-      </div>
+        </div>
+      </AcmCollapsible>
     </div>
   )
 }

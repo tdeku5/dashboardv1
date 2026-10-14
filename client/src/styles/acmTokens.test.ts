@@ -31,6 +31,7 @@ const TEXT_ON_SURFACE: Array<[string, number, string]> = [
 const NON_TEXT: Array<[string, string]> = [
   ['acm-accent-active', 'pressed fill / border'],
   ['acm-focus-ring-color', 'focus ring'],
+  ['acm-bar-fill', 'inline magnitude bar'],
 ]
 
 /** Tints are used only on these surfaces (data cells, banners, nav rows). */

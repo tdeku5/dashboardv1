@@ -31,7 +31,6 @@ const PENDING_CONVERSION: Record<string, number> = {
   'components/SectorStatTiles.tsx': 1,
   'components/VolSummaryTable.tsx': 2,
   'pages/CrossAssetVolPage.tsx': 1,
-  'pages/UsRatesVolPage.tsx': 3,
 }
 
 /** Transitive relative-import closure from the section's route component. */

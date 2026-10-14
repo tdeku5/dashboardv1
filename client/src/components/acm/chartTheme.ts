@@ -40,6 +40,12 @@ export const CHART_FONT_SANS = "'IBM Plex Sans', system-ui, -apple-system, 'Sego
 /** Mirrors --acm-fw-regular. */
 export const CHART_FONT_WEIGHT = 400
 
+/**
+ * Plot margin. Recharts needs numbers, so these mirror --acm-space-4 / -2 /
+ * -2 / -1 (16 / 8 / 8 / 4 px), pinned by chartTheme.test.tsx.
+ */
+export const CHART_MARGIN = { top: 16, right: 8, left: 8, bottom: 4 } as const
+
 // ── Grid ────────────────────────────────────────────────────────────────────
 
 export const gridProps: Partial<CartesianGridProps> = {

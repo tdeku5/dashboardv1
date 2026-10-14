@@ -1,20 +1,25 @@
 /* Channel rule (Rule 2): sign tones set COLOR only; alert levels set
    BACKGROUND + OUTLINE only. Neither ever touches the other's property.
    Heatmap fills are not offered here — they belong to the named heatmap
-   components only. */
+   components only.
 
-.positive { color: var(--acm-positive); }
-.negative { color: var(--acm-negative); }
-.dirUp    { color: var(--acm-dir-up); }
-.dirDown  { color: var(--acm-dir-down); }
+   Selectors are doubled (.x.x) on purpose: a primitive's own base rule
+   (e.g. AcmStatTile `.value { color }`, `.tile { background }`) has equal
+   specificity and loads later, so a single class would lose the cascade.
+   Verified in real Chromium by primitivesCascade.browser.test.ts. */
 
-.alertMild {
+.positive.positive { color: var(--acm-positive); }
+.negative.negative { color: var(--acm-negative); }
+.dirUp.dirUp       { color: var(--acm-dir-up); }
+.dirDown.dirDown   { color: var(--acm-dir-down); }
+
+.alertMild.alertMild {
   background: var(--acm-alert-mild-tint);
   outline: var(--acm-border-width) solid var(--acm-alert-mild);
   outline-offset: calc(-1 * var(--acm-border-width));
 }
 
-.alertStrong {
+.alertStrong.alertStrong {
   background: var(--acm-alert-strong-tint);
   outline: var(--acm-border-width) solid var(--acm-alert-strong);
   outline-offset: calc(-1 * var(--acm-border-width));
