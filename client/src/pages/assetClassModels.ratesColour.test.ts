@@ -9,7 +9,7 @@
 // except the TWO named exceptions:
 //   (1) the cellColor grid (lib/cellColor.ts): heatmap BACKGROUNDS stay red /
 //       blue on the symmetric rate scale (--acm-heat-rate-up-* / -down-*);
-//       text on them follows red / green. Pinned to exactly those two scales.
+//       text on them stays primary for contrast (user decision; red/green measured 1.86–3.98:1). Pinned to exactly those two scales.
 //   (2) the US Rates VOL implied-vol premium (MOVE − RMOVE), a spread between
 //       volatilities, not yields: orange / blue via UsRatesVolPage's
 //       `premiumTone` (--acm-vol-premium-up / -down), on the premium only.

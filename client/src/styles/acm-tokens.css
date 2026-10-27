@@ -97,7 +97,7 @@
    * down red. No direction meaning uses blue / orange.
    * Exceptions (do not "fix"):
    *   1. Heatmap BACKGROUNDS for yield / rate changes stay red / blue
-   *      (--acm-heat-rate-*); text on them follows red / green.
+   *      (--acm-heat-rate-*); text on them stays primary for contrast (user decision; red/green measured 1.86–3.98:1).
    *   2. The VOL implied-vol premium (MOVE − realized) stays orange / blue
    *      (--acm-vol-premium-up / -down) — a vol spread, not a yield spread.
    */

@@ -68,3 +68,6 @@ The rendered heatmap and vol premium colours must be **pixel-identical** before 
 - Recolouring any vol, volatility-spread, or non-rate series.
 - Pushing `acm-revamp`.
 - Any other revamp design work.
+
+---
+**Superseded (2026-10-27):** Decision 1's "text on heat cells follows red/green" was reversed during Phase 2 by direct instruction. Heat-cell text stays the primary text colour, because red/green text over the heat steps measured only 1.86–3.98:1 contrast. `CLAUDE.md` and the design notes are authoritative.
