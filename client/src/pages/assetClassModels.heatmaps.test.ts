@@ -18,7 +18,7 @@ import path from 'node:path'
 const SRC = [path.resolve(process.cwd(), 'src'), path.resolve(process.cwd(), 'client/src')]
   .find(p => existsSync(path.join(p, 'pages/STIRDashboardPage.tsx')))!
 
-type Scale = 'dir' | 'valence' | 'rate'
+type Scale = 'valence' | 'rate'
 interface Named {
   name: string
   file: string
@@ -64,7 +64,6 @@ const stripComments = (src: string) => src
 const HEAT = /--acm-heat-(positive|negative|dir-up|dir-down|rate-up|rate-down|[a-z]+)-/g
 /** The heat sides each scale may use. */
 const SIDES: Record<Scale, string[]> = {
-  dir: ['dir-up', 'dir-down'],
   valence: ['positive', 'negative'],
   rate: ['rate-up', 'rate-down'],
 }

@@ -559,13 +559,18 @@ function monthsForward(contract: StripContract, now = new Date()): number {
 // rate or spread change is VALENCE in the bond-price view — increase =
 // negative (red), decrease = positive (green); hike = red, cut = green.
 // Futures prices follow price: price up (rate down) = positive.
-function stripMoveTone(priceChange: number | null): SignTone | undefined {
+export function stripMoveTone(priceChange: number | null): SignTone | undefined {
   if (priceChange == null || Math.abs(priceChange) < 1e-9) return undefined
   return priceChange > 0 ? 'positive' : 'negative'
 }
 
-/** Yield / rate / spread level-vs-reference or Δ in bp: up = negative, down = positive, zero untoned. */
-function rateChangeTone(v: number | null): SignTone | undefined {
+/** Yield / rate / spread level-vs-reference or Δ in bp: up = negative (red), down = positive (green), zero untoned. */
+/** A priced policy move: hike = negative (red: a rate increase), cut = positive (green). */
+export function policyMoveTone(move: 'hike' | 'cut'): 'negative' | 'positive' {
+  return move === 'hike' ? 'negative' : 'positive'
+}
+
+export function rateChangeTone(v: number | null): SignTone | undefined {
   if (v == null || v === 0) return undefined
   return v > 0 ? 'negative' : 'positive'
 }
@@ -1301,7 +1306,7 @@ export function STIRDashboardPage() {
   const summaryColumns = useMemo<AcmColumn<SummaryRow>[]>(() => {
     const signTone = (v: number): SignTone | undefined => rateChangeTone(v)
     // rates colour rule: a priced hike is a rate increase → negative; cut → positive
-    const summaryTone = (t: SummaryRow['tone']): SignTone | undefined => (t === 'cut' ? 'positive' : t === 'hike' ? 'negative' : undefined)
+    const summaryTone = (t: SummaryRow['tone']): SignTone | undefined => (t === 'flat' ? undefined : policyMoveTone(t))
     const cols: AcmColumn<SummaryRow>[] = [
       { key: 'meeting', header: 'Meeting', kind: 'label', value: (r) => r.label },
       { key: 'rate', header: <>Implied<br />Rate</>, kind: 'num', value: (r) => fmtRate(r.impliedRate) },
@@ -1469,10 +1474,10 @@ export function STIRDashboardPage() {
         tone = 'neutral'
       } else if (nextMoveBps > 0) {
         value = 'CUT'
-        tone = 'positive'
+        tone = policyMoveTone('cut')
       } else {
         value = 'HIKE'
-        tone = 'negative'
+        tone = policyMoveTone('hike')
       }
       boxes.push({
         label: 'NEXT MOVE',

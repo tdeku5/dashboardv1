@@ -22,7 +22,13 @@ export function displayValue(value: CellValue, format?: (v: number) => string): 
  * Sign tones colour VALUE TEXT only (Rule 2). Valence = up is good;
  * direction = up is neither good nor bad.
  */
-export type SignTone = 'positive' | 'negative' | 'dir-up' | 'dir-down'
+/**
+ * positive / negative: valence (returns, P&L). dir-up / dir-down: the red / green
+ * direction pair (yield / rate / spread up = red, down = green; hike red, cut
+ * green; futures price up green). vol-premium-up / -down: exception 2, the VOL
+ * implied-vol premium's own orange / blue.
+ */
+export type SignTone = 'positive' | 'negative' | 'dir-up' | 'dir-down' | 'vol-premium-up' | 'vol-premium-down'
 
 /** Alert levels colour a cell TINT + outline only — never value text (Rule 2). */
 export type AlertLevel = 'mild' | 'strong'

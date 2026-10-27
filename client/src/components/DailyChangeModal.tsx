@@ -233,7 +233,10 @@ export function DailyChangeModal({ country, countryLabel, tenor, onClose }: Dail
                   )}
                   <Bar dataKey="change_bps" isAnimationActive={false}>
                     {data.series.map((d, i) => (
-                      <Cell key={i} fill={d.change_bps >= 0 ? '#ef4444' : '#3b82f6'} />
+                      // Red / green direction rule: yield up red, yield down green (was blue).
+                      // Portalled outside .acm-root, so the legacy literals this page uses
+                      // (GlobalRatesPage .cellNegative / .cellPositive) rather than tokens.
+                      <Cell key={i} fill={d.change_bps >= 0 ? '#ef4444' : '#22c55e'} />
                     ))}
                   </Bar>
                 </BarChart>

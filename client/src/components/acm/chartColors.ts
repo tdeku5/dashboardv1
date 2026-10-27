@@ -3,9 +3,10 @@
 // (what its value DOES). The chart theme itself carries neither.
 import type { SignTone } from './acmFormat'
 
-/** The seven sign-family tokens (valence, direction, alert, status). */
+/** The sign-family tokens (valence, direction, the VOL-premium exception, alert, status). */
 export const SIGN_TOKENS = [
   'acm-positive', 'acm-negative', 'acm-dir-up', 'acm-dir-down',
+  'acm-vol-premium-up', 'acm-vol-premium-down',
   'acm-alert-mild', 'acm-alert-strong', 'acm-status-warning',
 ] as const
 

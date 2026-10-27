@@ -10,8 +10,10 @@
 
 .positive.positive { color: var(--acm-positive); }
 .negative.negative { color: var(--acm-negative); }
-.dirUp.dirUp       { color: var(--acm-dir-up); }
-.dirDown.dirDown   { color: var(--acm-dir-down); }
+.dirUp.dirUp       { color: var(--acm-dir-up); }    /* red: yield/rate/spread up, hike, futures price down */
+.dirDown.dirDown   { color: var(--acm-dir-down); }  /* green: yield/rate/spread down, cut, futures price up */
+.volPremiumUp.volPremiumUp     { color: var(--acm-vol-premium-up); }    /* exception 2: VOL premium orange */
+.volPremiumDown.volPremiumDown { color: var(--acm-vol-premium-down); }  /* exception 2: VOL premium blue */
 
 .alertMild.alertMild {
   background: var(--acm-alert-mild-tint);

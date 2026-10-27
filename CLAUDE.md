@@ -194,6 +194,20 @@ Key variables defined in `globals.css`:
 - `--font-mono` — monospace font stack
 - Colors: green `#22c55e`, red `#ef4444`, muted `#64748B`, `#4e6070`
 
+### Direction colours (red / green rule)
+
+| Meaning | Colour |
+|---|---|
+| Yield / rate / spread **up**, hike, futures price **down** | red |
+| Yield / rate / spread **down**, cut, futures price **up** | green |
+| Returns / P&L up / down | green / red |
+
+Blue / orange never carries a direction meaning. Two deliberate exceptions — do not "fix" them:
+1. **Heatmap backgrounds** for yield / rate changes use a red / blue diverging scale (`--acm-heat-rate-*`); text on those cells stays primary for contrast.
+2. **The VOL premium** (MOVE − realized MOVE) uses orange / blue (`--acm-vol-premium-*`) — a vol spread, not a yield spread.
+
+Details: `docs/asset-class-models-design-notes.md` colour rule 6; tests in `client/src/pages/assetClassModels.redGreenRule.test.ts`.
+
 ## Phase-gate attestation
 
 For phased jobs with approval gates:

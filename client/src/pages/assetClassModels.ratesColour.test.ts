@@ -1,19 +1,18 @@
-// The rates colour rule (R2b approval; docs/asset-class-models-design-notes.md,
-// colour rule 6): every yield, rate or spread change in the RATES area is
-// VALENCE in the bond-price view (increase = --acm-negative, decrease =
-// --acm-positive). The direction family (--acm-dir-*, the direction heat
-// scale, the 'dir-up' / 'dir-down' tones and their .dirUp / .dirDown classes)
-// is therefore not used anywhere in the rates area —
+// The red / green direction rule (docs/asset-class-models-design-notes.md,
+// colour rule 6; docs/prompts/acm-revamp-rebase-and-red-green-direction.md +
+// addendum): a yield / rate / spread change in the RATES area is red when it
+// rises and green when it falls (hike red, cut green, futures price up green).
+// Blue / orange carries no direction meaning. The --acm-dir-* pair is that
+// red / green rule (aliases of --acm-negative / --acm-positive), so it may be
+// used freely; what must NOT appear in the rates area is the orange / blue —
 //
-// with TWO named exceptions (rule 6, recovery approval):
-//   (a) the US Rates VOL implied-vol premium (MOVE − RMOVE), a spread between
-//       volatilities, not yields. It stays on direction via UsRatesVolPage's
-//       `directionTone`, which may be applied to the premium only.
-//   (b) the cellColor grid (lib/cellColor.ts), red / blue on its own
-//       symmetric scale: increase = --acm-heat-rate-up-*, decrease =
-//       --acm-heat-rate-down-* (the dir-down colour at the direction alphas).
-//       These are grid-only tokens, not direction tokens, so the grid needs no
-//       direction allowance — the test below pins it to exactly these two scales.
+// except the TWO named exceptions:
+//   (1) the cellColor grid (lib/cellColor.ts): heatmap BACKGROUNDS stay red /
+//       blue on the symmetric rate scale (--acm-heat-rate-up-* / -down-*);
+//       text on them follows red / green. Pinned to exactly those two scales.
+//   (2) the US Rates VOL implied-vol premium (MOVE − RMOVE), a spread between
+//       volatilities, not yields: orange / blue via UsRatesVolPage's
+//       `premiumTone` (--acm-vol-premium-up / -down), on the premium only.
 //
 // Static scan, comments stripped, of the rates pages and everything they
 // import (shared acm primitives / tokens / registry excluded — they define the
@@ -50,12 +49,13 @@ const SINGLE_FILES = ['pages/STIRDashboardPage.tsx', 'pages/STIRDashboardPage.mo
 /** Infrastructure that defines the families rather than applying them. */
 const INFRA = /^(components\/acm\/|styles\/|constants\/)/
 
-/** Exception (a): the VOL premium. */
-const VOL_PREMIUM = { file: 'pages/UsRatesVolPage.tsx', fn: 'directionTone', arg: /premium/i }
-/** Exception (b): the cellColor grid — the symmetric rate heat scale only. */
+/** Exception (2): the VOL premium. */
+const VOL_PREMIUM = { file: 'pages/UsRatesVolPage.tsx', fn: 'premiumTone', arg: /premium/i }
+/** Exception (1): the cellColor grid — the symmetric red / blue rate heat scale only. */
 const CELL_COLOR = { file: 'lib/cellColor.ts', scales: ['rate-down', 'rate-up'] }
 
-const DIRECTION = /acm-dir-|heat-dir-|['"`]dir-(?:up|down)['"`]|\bdirUp\b|\bdirDown\b/g
+/** The premium's orange / blue (tokens, tones, classes) and the removed direction heat scale. */
+const ORANGE_BLUE = /acm-vol-premium-|['"`]vol-premium-(?:up|down)['"`]|\bvolPremium(?:Up|Down)\b|heat-dir-/g
 
 function closure(roots: string[]): string[] {
   const seen = new Set<string>()
@@ -104,10 +104,10 @@ describe('Rates colour rule — no direction token in the rates area except the 
     console.log(`rates-area files scanned: ${files.length}`)
   })
 
-  it('no rates-area file references a direction token (VOL premium excepted; the cellColor grid uses its own rate scale)', () => {
+  it('no rates-area file uses the orange / blue premium colours for anything but the VOL premium', () => {
     const offenders = files.flatMap(f => {
       const src = f === VOL_PREMIUM.file ? withoutFunction(code(f), VOL_PREMIUM.fn).rest : code(f)
-      return [...src.matchAll(DIRECTION)].map(m => `${f}: ${m[0]}`)
+      return [...src.matchAll(ORANGE_BLUE)].map(m => `${f}: ${m[0]}`)
     })
     expect(offenders).toEqual([])
   })
@@ -119,10 +119,12 @@ describe('Rates colour rule — no direction token in the rates area except the 
     expect(src, 'no legacy rgba shading left').not.toMatch(/rgba\(/)
   })
 
-  it(`the VOL premium is the only use of ${VOL_PREMIUM.fn}, and it really is the direction exception`, () => {
+  it(`the VOL premium is the only use of ${VOL_PREMIUM.fn}, and it keeps its orange / blue (exception 2)`, () => {
     const src = code(VOL_PREMIUM.file)
     const { body } = withoutFunction(src, VOL_PREMIUM.fn)
-    expect(body, 'directionTone maps to the direction family').toMatch(/'dir-up'/)
+    expect(body, 'premiumTone maps to the VOL-premium tones').toMatch(/'vol-premium-up'/)
+    expect(body).toMatch(/'vol-premium-down'/)
+    expect(body, 'never the red / green direction pair').not.toMatch(/'dir-(up|down)'|'positive'|'negative'/)
     const calls = [...src.matchAll(new RegExp(`\\b${VOL_PREMIUM.fn}\\(([^)]*)\\)`, 'g'))]
       .filter(m => !src.slice(Math.max(0, m.index! - 9), m.index).includes('function'))
     expect(calls.length, 'exactly one call site').toBe(1)

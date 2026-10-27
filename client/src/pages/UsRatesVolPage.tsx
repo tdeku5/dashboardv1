@@ -84,10 +84,13 @@ function fmtDate(v: string | null | undefined): string {
   return v == null || v === '' ? DASH : v
 }
 
-/** The premium is a direction (neither good nor bad): dir-up / dir-down on its text. */
-function directionTone(v: number | null | undefined): SignTone | undefined {
+/**
+ * The implied-vol premium keeps its own orange / blue (exception 2 to the
+ * red / green direction rule): a spread between volatilities, not a yield spread.
+ */
+function premiumTone(v: number | null | undefined): SignTone | undefined {
   if (v == null || !Number.isFinite(v) || v === 0) return undefined
-  return v > 0 ? 'dir-up' : 'dir-down'
+  return v > 0 ? 'vol-premium-up' : 'vol-premium-down'
 }
 
 /** |z| > 2 → alert-mild tint, |z| > 3 → alert-strong tint. Never the text. */
@@ -306,7 +309,7 @@ export function UsRatesVolPage() {
         <AcmStatTile
           label="Implied vol premium"
           value={fmtSigned(latest?.premiumBp, 2)}
-          tone={directionTone(latest?.premiumBp)}
+          tone={premiumTone(latest?.premiumBp)}
           asOf={`bp · as of ${fmtDate(latest?.date)}`}
         />
         <AcmStatTile label="Ratio" value={`${fmt(latest?.ratio, 3)}×`} asOf={`implied ÷ realized · ${fmtDate(latest?.date)}`} />
