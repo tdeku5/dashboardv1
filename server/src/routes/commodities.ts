@@ -8,6 +8,10 @@ import {
   type CurveMetal,
   type BasisLookback,
 } from '../metalsData'
+import { groupsForFuturesRoots, withTvView } from '../lib/tvRead'
+
+/** /crude/curves shows WTI (CME) and Brent (ICE Europe) together: one aligned view. */
+const CRUDE_CURVES_GROUPS = groupsForFuturesRoots(['CL', 'BRN'])
 
 const VALID_LOOKBACKS: SpreadLookback[] = ['1m', '3m', '6m', '1y', '2y', '5y', 'max']
 const VALID_BASIS_LOOKBACKS: BasisLookback[] = ['1m', '3m', '6m', '1y', '2y', '5y', 'max']
@@ -50,10 +54,10 @@ commoditiesRouter.get('/crude/curves', (req: Request, res: Response) => {
   try {
     const offset1 = parseOffset(req.query.offset1, 5)
     const offset2 = parseOffset(req.query.offset2, 30)
-    res.json({
+    res.json(withTvView(CRUDE_CURVES_GROUPS, () => ({
       wti:   getCrudeCurve('wti',   offset1, offset2),
       brent: getCrudeCurve('brent', offset1, offset2),
-    })
+    })))
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unexpected curves error'
     console.error('[commodities] crude/curves error:', msg)

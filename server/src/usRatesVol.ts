@@ -13,6 +13,7 @@
 // so the join is exact. See docs/tradingview-date-convention.md.
 
 import { db } from './db'
+import { tvVisible, withTvView } from './lib/tvRead'
 import { MOVE_WEIGHTS, TENORS, type TenorKey } from './lib/realizedMove'
 import {
   PREMIUM_LOOKBACK_DAYS,
@@ -114,14 +115,23 @@ interface JoinedRow {
   n_obs: number
 }
 
+/**
+ * US Rates VOL is one aligned view over ICE_MOVE (implied) and US_YIELDS (the
+ * realized side is computed from US yields): MOVE rows are filtered to the
+ * view's as-of, and the inner join on date carries that cap to the realized rows.
+ */
 export function getUsRatesVol(range: VolRangeKey = '2y'): UsRatesVolResponse {
+  return withTvView(['ICE_MOVE', 'US_YIELDS'], () => getUsRatesVolInView(range))
+}
+
+function getUsRatesVolInView(range: VolRangeKey): UsRatesVolResponse {
   // Inner join, expressed as such: the MOVE CTE relabels tv_series epochs with
   // the same raw-UTC truncation the realized table was written with.
   const rows = db.prepare(`
     WITH implied AS (
       SELECT date(CAST(time AS INTEGER), 'unixepoch') AS d, close AS move
       FROM tv_series
-      WHERE symbol = ? AND close IS NOT NULL
+      WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([MOVE_SYMBOL])}
     )
     SELECT r.date, i.move, r.rv_2y, r.rv_5y, r.rv_10y, r.rv_30y, r.rv_move,
            r.weights_renormalized, r.n_obs
@@ -133,7 +143,7 @@ export function getUsRatesVol(range: VolRangeKey = '2y'): UsRatesVolResponse {
   const stats = db.prepare(`
     WITH implied AS (
       SELECT DISTINCT date(CAST(time AS INTEGER), 'unixepoch') AS d
-      FROM tv_series WHERE symbol = ? AND close IS NOT NULL
+      FROM tv_series WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([MOVE_SYMBOL])}
     )
     SELECT
       (SELECT COUNT(*) FROM us_rates_realized_vol)                                   AS realizedRows,
@@ -148,7 +158,7 @@ export function getUsRatesVol(range: VolRangeKey = '2y'): UsRatesVolResponse {
   const recentRealizedOnlyDates = (db.prepare(`
     WITH implied AS (
       SELECT DISTINCT date(CAST(time AS INTEGER), 'unixepoch') AS d
-      FROM tv_series WHERE symbol = ? AND close IS NOT NULL
+      FROM tv_series WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([MOVE_SYMBOL])}
     )
     SELECT r.date FROM us_rates_realized_vol r
     LEFT JOIN implied i ON i.d = r.date

@@ -17,6 +17,7 @@
 // uses CAST(time AS INTEGER) to avoid lexicographic ordering bugs.
 
 import { db } from './db'
+import { tvVisible, tvVisibleGlob } from './lib/tvRead'
 
 const MONTH_CODES = 'FGHJKMNQUVXZ'
 const MONTH_CODE_MAP: Record<string, number> = {
@@ -113,6 +114,7 @@ function loadContinuousSeries(contracts: ContractCfg[]): Map<string, SeriesPoint
     SELECT symbol, time, close FROM tv_series
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisible(symbols)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...symbols) as Array<{ symbol: string; time: string; close: number }>
 
@@ -314,6 +316,7 @@ function getDistinctTimestampsDesc(globPattern: string, limit: number): string[]
     SELECT DISTINCT time FROM tv_series
     WHERE symbol GLOB ?
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisibleGlob(globPattern)}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(globPattern, limit) as { time: string }[]
@@ -330,6 +333,7 @@ function getLatestRowsAtOrBefore(globPattern: string, asOfTs: string): RawRow[] 
       WHERE symbol GLOB ?
         AND CAST(time AS INTEGER) <= ?
         AND close IS NOT NULL AND close > 0
+        AND ${tvVisibleGlob(globPattern)}
       GROUP BY symbol
     ) latest ON latest.symbol = t.symbol AND CAST(t.time AS INTEGER) = latest.max_time
   `).all(globPattern, parseInt(asOfTs, 10)) as RawRow[]
@@ -353,6 +357,7 @@ function getLatestTwoBySymbol(globPattern: string, asOfTs: string): Map<string, 
              ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY CAST(time AS INTEGER) DESC) AS rn
       FROM tv_series
       WHERE symbol GLOB ? AND CAST(time AS INTEGER) <= ? AND close IS NOT NULL AND close > 0
+        AND ${tvVisibleGlob(globPattern)}
     ) WHERE rn <= 2
   `).all(globPattern, parseInt(asOfTs, 10)) as Array<{ symbol: string; close: number; rn: number }>
   const m = new Map<string, { last: number; prev: number | null }>()
@@ -473,7 +478,7 @@ export interface MetalBasisResponse {
 }
 
 function symbolHasRows(symbol: string): boolean {
-  return db.prepare(`SELECT 1 FROM tv_series WHERE symbol = ? LIMIT 1`).get(symbol) !== undefined
+  return db.prepare(/* tv-raw-ok: existence check only */ `SELECT 1 FROM tv_series WHERE symbol = ? LIMIT 1`).get(symbol) !== undefined
 }
 
 export function getMetalBasis(metal: CurveMetal, lookback: BasisLookback): MetalBasisResponse {
@@ -487,6 +492,7 @@ export function getMetalBasis(metal: CurveMetal, lookback: BasisLookback): Metal
 
   const latest = db.prepare(`
     SELECT MAX(CAST(time AS INTEGER)) AS t FROM tv_series WHERE symbol IN (?, ?)
+      AND ${tvVisible([front, spot])}
   `).get(front, spot) as { t: number | null }
   if (latest.t == null) return empty
 
@@ -503,6 +509,8 @@ export function getMetalBasis(metal: CurveMetal, lookback: BasisLookback): Metal
       AND f.close > 0 AND s.close > 0
       AND CAST(f.time AS INTEGER) >= ?
       AND CAST(f.time AS INTEGER) <= ?
+      AND ${tvVisible([front, spot], 'f')}
+      AND ${tvVisible([front, spot], 's')}
     ORDER BY CAST(f.time AS INTEGER) ASC
   `).all(front, spot, startTs, endTs) as Array<{ time: string; front: number; spot: number }>
 

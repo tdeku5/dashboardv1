@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 // Display order is intentional and user-curated. Keep as-is.
 //
@@ -92,6 +93,7 @@ function loadSeries(tickers: string[]): Map<string, SeriesPoint[]> {
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
       AND close > 0
+      AND ${tvVisible(tickers)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...tickers) as Array<{ symbol: string; time: string; close: number }>
 

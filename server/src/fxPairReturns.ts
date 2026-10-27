@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 // User-curated display order. Pairs are kept in market-standard quoting
 // convention — no inversion. A positive return on USDJPY means USD strengthened
@@ -110,6 +111,7 @@ function loadSeries(tickers: string[]): Map<string, SeriesPoint[]> {
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
       AND close > 0
+      AND ${tvVisible(tickers)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...tickers) as Array<{ symbol: string; time: string; close: number }>
 

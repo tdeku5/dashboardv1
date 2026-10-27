@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible, tvVisibleGlob } from './lib/tvRead'
 import { getMarket, STIR_MARKETS, type MarketKey } from './stirRegistry'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function getLatestRowsAtOrBefore(globPattern: string, asOfTs: string): RawSeries
         AND CAST(time AS INTEGER) <= ?
         AND close IS NOT NULL
         AND close > 0
+        AND ${tvVisibleGlob(globPattern)}
       GROUP BY symbol
     ) latest ON latest.symbol = t.symbol AND CAST(t.time AS INTEGER) = latest.max_time
   `).all(globPattern, parseInt(asOfTs, 10)) as RawSeriesRow[]
@@ -167,6 +169,7 @@ function getTimestampForDate(globPattern: string, targetDate: string): string | 
     WHERE symbol GLOB ?
       AND CAST(time AS INTEGER) >= ?
       AND CAST(time AS INTEGER) <= ?
+      AND ${tvVisibleGlob(globPattern)}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT 1
   `).get(globPattern, startOfDay, endOfDay) as { time: string } | undefined
@@ -177,6 +180,7 @@ function getDistinctTimestampsDesc(globPattern: string, limit: number = 500): st
   const rows = db.prepare(`
     SELECT DISTINCT time FROM tv_series
     WHERE symbol GLOB ?
+      AND ${tvVisibleGlob(globPattern)}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(globPattern, limit) as { time: string }[]
@@ -354,6 +358,7 @@ export function getTvContractHistory(
     SELECT time, close FROM tv_series
     WHERE symbol = ?
     AND close IS NOT NULL AND close > 0
+    AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(symbol, days) as { time: string; close: number }[]

@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 export interface Sector {
   ticker: string
@@ -94,6 +95,7 @@ function loadSeriesByTicker(): Map<string, SeriesPoint[]> {
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
       AND close > 0
+      AND ${tvVisible(tickers)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...tickers) as Array<{ symbol: string; time: string; close: number }>
 

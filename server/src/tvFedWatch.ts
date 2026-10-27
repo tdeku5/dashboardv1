@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible, tvVisibleGlob } from './lib/tvRead'
 import { getMarket, type StirMarket } from './stirRegistry'
 import { CB_MEETINGS } from './cbMeetings'
 import {
@@ -137,12 +138,14 @@ function getContractPrice(symbol: string, asOfTs?: string): number | null {
       SELECT close FROM tv_series
       WHERE symbol = ? AND time = ?
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisible([symbol])}
     `).get(symbol, asOfTs) as { close: number } | undefined
   } else {
     row = db.prepare(`
       SELECT close FROM tv_series
       WHERE symbol = ?
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisible([symbol])}
       ORDER BY CAST(time AS INTEGER) DESC
       LIMIT 1
     `).get(symbol) as { close: number } | undefined
@@ -153,6 +156,7 @@ function getContractPrice(symbol: string, asOfTs?: string): number | null {
 function getLatestTimestamp(prefix: string): string | null {
   const row = db.prepare(`
     SELECT MAX(CAST(time AS INTEGER)) AS latest FROM tv_series WHERE symbol LIKE ?
+      AND ${tvVisibleGlob(`${prefix}*`)}
   `).get(`${prefix}%`) as { latest: number | null } | undefined
   return row?.latest != null ? String(row.latest) : null
 }
@@ -163,6 +167,7 @@ function getTimestampForDate(prefix: string, targetDate: string): string | null 
   const row = db.prepare(`
     SELECT time FROM tv_series
     WHERE symbol LIKE ? AND CAST(time AS INTEGER) >= ? AND CAST(time AS INTEGER) <= ?
+      AND ${tvVisibleGlob(`${prefix}*`)}
     LIMIT 1
   `).get(`${prefix}%`, startOfDay, endOfDay) as { time: string } | undefined
   return row?.time ?? null

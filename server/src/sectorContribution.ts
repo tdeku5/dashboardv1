@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 import { SECTORS, BENCHMARK_TICKER } from './sectorAttribution'
 
 export type ContribLookbackKey = '1d' | '1w' | '2w' | '1m' | '3m' | '6m' | '1y'
@@ -116,6 +117,7 @@ function loadByTicker(tickers: string[]): Map<string, DayPoint[]> {
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
       AND close > 0
+      AND ${tvVisible(tickers)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...tickers) as Array<{ symbol: string; time: string; close: number }>
 

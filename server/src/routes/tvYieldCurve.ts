@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express'
 import { db } from '../db'
 import { getYieldCurveCountry } from '../yieldCurveRegistry'
+import { groupsForSymbols } from '../lib/tvViewAsOf'
+import { tvVisible, withTvView } from '../lib/tvRead'
 
 export const tvYieldCurveRouter = Router()
 
@@ -22,11 +24,14 @@ tvYieldCurveRouter.get('/:pageKey', (req: Request, res: Response) => {
       return
     }
 
-    const tenors = config.tenors.map(tenor => {
+    // One page = one view over its tenors' market group(s).
+    const view = groupsForSymbols(config.tenors.map(t => t.key))
+    const tenors = withTvView(view, () => config.tenors.map(tenor => {
       const rows = db.prepare(`
         SELECT time, close FROM tv_series
         WHERE symbol = ?
         AND close IS NOT NULL
+        AND ${tvVisible([tenor.key])}
         ORDER BY CAST(time AS INTEGER) ASC
       `).all(tenor.key) as RawRow[]
 
@@ -41,7 +46,7 @@ tvYieldCurveRouter.get('/:pageKey', (req: Request, res: Response) => {
         years: tenor.years,
         data,
       }
-    })
+    }))
 
     res.json({
       country: config.country,

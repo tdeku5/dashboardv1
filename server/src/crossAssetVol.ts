@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 // Stable internal keys → actual tv_series symbols. The user's data ingests
 // gold/oil vol under GVOL/OVOL (CBOE GVZ/OVX). Display names live on the
@@ -61,6 +62,7 @@ function loadSeries(symbols: string[]): Map<string, DayPoint[]> {
     SELECT symbol, time, close FROM tv_series
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
+      AND ${tvVisible(symbols)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...symbols) as Array<{ symbol: string; time: string; close: number }>
 

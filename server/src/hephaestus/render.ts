@@ -23,6 +23,8 @@ import { db } from '../db'
 import { ensureFresh as fredEnsureFresh } from '../routes/fred'
 import type { CatalogRow, ChartSpecV1, SeriesInput, Transform } from './chartSpec'
 import { lookupCatalog, listParams } from './catalogSearch'
+import { tvVisible, withTvView } from '../lib/tvRead'
+import { groupsForSymbols } from '../lib/tvViewAsOf'
 import { applyTransform, computeDerived, frequencyBucket } from './transforms'
 
 export const MAX_POINTS_PER_SERIES = 15000
@@ -98,12 +100,12 @@ function epochToIso(ts: number): string {
 // ordering is wrong; always CAST (same pattern as routes/tvYieldCurve.ts).
 function fetchTv(table: 'tv_series' | 'tv_ohlcv', symbol: string, opts: FetchOpts): Point[] {
   const params: unknown[] = [symbol]
-  let where = `symbol = ? AND close IS NOT NULL`
+  let where = `symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}`
   if (table === 'tv_ohlcv') { where += ` AND timeframe = '1D'` }
   if (opts.from) { where += ` AND CAST(time AS INTEGER) >= ?`; params.push(isoToEpoch(opts.from, false)) }
   if (opts.to) { where += ` AND CAST(time AS INTEGER) <= ?`; params.push(isoToEpoch(opts.to, true)) }
   params.push(opts.limit ?? MAX_POINTS_PER_SERIES)
-  const rows = db.prepare(
+  const rows = db.prepare(/* tv-visible: `where` includes tvVisible() */
     `SELECT time, close FROM ${table} WHERE ${where} ORDER BY CAST(time AS INTEGER) DESC LIMIT ?`
   ).all(...params) as Array<{ time: string; close: number }>
   rows.reverse()
@@ -268,7 +270,25 @@ export function defaultRenderDeps(): RenderDeps {
   return { lookup: lookupCatalog, fetchPoints: fetchSeriesPoints, ensureFresh: fredEnsureFresh }
 }
 
+/**
+ * One chart = one view: every TradingView series it plots shares one as-of
+ * (TV completed bars, Phase 2). Non-TV series are unaffected.
+ */
 export async function renderSpec(spec: ChartSpecV1, deps: RenderDeps = defaultRenderDeps()): Promise<RenderResult> {
+  const tvSymbols: string[] = []
+  const note = (input: SeriesInput): void => {
+    const row = deps.lookup(input.id)
+    if (!row || (row.source_table !== 'tv_series' && row.source_table !== 'tv_ohlcv')) return
+    const symbol = row.series_kind === 'contract_family' ? input.param : row.series_id
+    if (symbol) tvSymbols.push(symbol)
+  }
+  for (const s of spec.series) {
+    if (s.kind === 'derived') { note(s.a); note(s.b) } else note(s)
+  }
+  return withTvView(groupsForSymbols(tvSymbols), () => renderSpecInView(spec, deps))
+}
+
+async function renderSpecInView(spec: ChartSpecV1, deps: RenderDeps): Promise<RenderResult> {
   const warnings: string[] = []
   const series: RenderedSeries[] = []
   const perSeriesPoints: Point[][] = []

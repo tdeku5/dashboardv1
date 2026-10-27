@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 // Resolved against tv_series during initial investigation: BRDTH20/50/200 are
 // the actual symbols ingested. Isolated here so the rest of the stack does
@@ -74,6 +75,7 @@ function loadSeries(symbols: string[]): Map<string, DayPoint[]> {
     SELECT symbol, time, close FROM tv_series
     WHERE symbol IN (${placeholders})
       AND close IS NOT NULL
+      AND ${tvVisible(symbols)}
     ORDER BY symbol, CAST(time AS INTEGER) ASC
   `).all(...symbols) as Array<{ symbol: string; time: string; close: number }>
 

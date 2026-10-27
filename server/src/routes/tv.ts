@@ -4,6 +4,7 @@ import path from 'path'
 import os from 'os'
 import { db } from '../db'
 import { getIngestLog } from '../tvCsvIngest'
+import { tvVisible } from '../lib/tvRead'
 
 export const tvRouter = Router()
 
@@ -20,7 +21,8 @@ tvRouter.get('/ohlcv/:symbol', (req: Request, res: Response) => {
   const limit = Math.min(parseInt(String(req.query.limit || '500')), 5000)
 
   const params: (string | number)[] = [symbol, timeframe]
-  let sql = 'SELECT time, open, high, low, close, volume FROM tv_ohlcv WHERE symbol = ? AND timeframe = ?'
+  // One symbol = one single-group view: completed bars up to its group's as-of.
+  let sql = `SELECT time, open, high, low, close, volume FROM tv_ohlcv WHERE symbol = ? AND timeframe = ? AND ${tvVisible([symbol])}`
 
   if (from) { sql += ' AND time >= ?'; params.push(from) }
   if (to) { sql += ' AND time <= ?'; params.push(to) }
@@ -47,7 +49,8 @@ tvRouter.get('/series/:symbol', (req: Request, res: Response) => {
   const limit = Math.min(parseInt(String(req.query.limit || '500')), 50000)
 
   const params: (string | number)[] = [symbol]
-  let sql = 'SELECT time, close FROM tv_series WHERE symbol = ?'
+  // One symbol = one single-group view: completed bars up to its group's as-of.
+  let sql = `SELECT time, close FROM tv_series WHERE symbol = ? AND ${tvVisible([symbol])}`
 
   if (from) { sql += ' AND time >= ?'; params.push(from) }
   if (to) { sql += ' AND time <= ?'; params.push(to) }
@@ -71,7 +74,9 @@ interface SymbolInfo {
 }
 
 tvRouter.get('/symbols', (_req: Request, res: Response) => {
-  const ohlcvRows = db.prepare(`
+  // tv-raw-ok: coverage inventory (MIN/MAX/COUNT per symbol), not bar values; no client page reads it.
+  // By design its MAX includes unfinished bars — never use it as a latest-close source (use tvVisible readers).
+  const ohlcvRows = db.prepare(/* tv-raw-ok: coverage inventory */ `
     SELECT symbol,
            MIN(time) AS "from",
            MAX(time) AS "to",
@@ -81,7 +86,7 @@ tvRouter.get('/symbols', (_req: Request, res: Response) => {
     ORDER BY symbol ASC
   `).all() as Array<{ symbol: string; from: string; to: string; rowCount: number }>
 
-  const seriesRows = db.prepare(`
+  const seriesRows = db.prepare(/* tv-raw-ok: coverage inventory */ `
     SELECT symbol,
            MIN(time) AS "from",
            MAX(time) AS "to",

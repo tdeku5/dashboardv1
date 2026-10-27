@@ -18,6 +18,7 @@
 // observations as they come.
 
 import { db } from './db'
+import { tvVisible, withTvView } from './lib/tvRead'
 import {
   TENORS,
   computeRealizedMoveSeries,
@@ -59,12 +60,12 @@ function loadTenor(symbol: string, limitObs?: number): YieldPoint[] {
   const rows = limitObs === undefined
     ? db.prepare(`
         SELECT time, close FROM tv_series
-        WHERE symbol = ? AND close IS NOT NULL
+        WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
         ORDER BY CAST(time AS INTEGER) ASC
       `).all(symbol) as TvRow[]
     : (db.prepare(`
         SELECT time, close FROM tv_series
-        WHERE symbol = ? AND close IS NOT NULL
+        WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
         ORDER BY CAST(time AS INTEGER) DESC
         LIMIT ?
       `).all(symbol, limitObs) as TvRow[]).reverse()
@@ -72,7 +73,12 @@ function loadTenor(symbol: string, limitObs?: number): YieldPoint[] {
   return rows.map(r => ({ date: tsToDate(parseInt(r.time, 10)), value: r.close }))
 }
 
+/** The four tenors are one US_YIELDS view: completed bars up to its as-of only. */
 function loadAllTenors(limitObs?: number): { series: TenorSeries; rowsScanned: number } {
+  return withTvView(['US_YIELDS'], () => loadAllTenorsInView(limitObs))
+}
+
+function loadAllTenorsInView(limitObs?: number): { series: TenorSeries; rowsScanned: number } {
   const series = {} as TenorSeries
   let rowsScanned = 0
   for (const t of TENORS) {

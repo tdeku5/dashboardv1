@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express'
 import { db, getObservations } from '../db'
 import { getTvCurve } from '../tvFutures'
+import { groupsForSymbols } from '../lib/tvViewAsOf'
+import { groupsForFuturesRoots, tvVisible, withTvView } from '../lib/tvRead'
+import type { MarketGroup } from '../tvMarketRegistry'
 import { getMarket } from '../stirRegistry'
 import { computeSpreadDelta } from '../lib/curveSpreadDelta'
 import { SUMMARY_COUNTRIES, type SummaryCountry } from '../lib/globalSummaryCountries'
@@ -23,7 +26,7 @@ function tsToDate(ts: number): string {
 function getLatestTvYield(symbol: string): number | null {
   const row = db.prepare(`
     SELECT close FROM tv_series
-    WHERE symbol = ? AND close IS NOT NULL
+    WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT 1
   `).get(symbol) as { close: number } | undefined
@@ -35,7 +38,7 @@ function getLatestTvYield(symbol: string): number | null {
 function getTvYieldAtLookback(symbol: string, lookbackDays: number): { value: number; date: string } | null {
   const rows = db.prepare(`
     SELECT time, close FROM tv_series
-    WHERE symbol = ? AND close IS NOT NULL
+    WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(symbol, lookbackDays + 1) as { time: string; close: number }[]
@@ -80,9 +83,16 @@ const RESPONSE_KEYS: Record<CountryKey, string> = {
   US: 'US', GB: 'UK', DE: 'DE', FR: 'FR', IT: 'IT', CA: 'CA', JP: 'JP', AU: 'AU',
 }
 
+// ── View groups (TV completed bars: one aligned as-of per request) ──────────
+// Each route below is one view; its TradingView reads share one viewAsOf.
+
+const YIELD_CURVE_GROUPS: MarketGroup[] = groupsForSymbols(
+  TENOR_SPECS.flatMap(spec => COUNTRY_KEYS.map(ck => spec[ck as keyof TenorSpec]).filter((v): v is string => typeof v === 'string')),
+)
+
 // ── GET /api/global/yield-curves ─────────────────────────────────────────────
 
-globalRouter.get('/yield-curves', (req: Request, res: Response) => {
+globalRouter.get('/yield-curves', (req: Request, res: Response) => withTvView(YIELD_CURVE_GROUPS, () => {
   try {
     const lookbackDays = Math.max(0, parseInt(String(req.query.lookbackDays ?? '0'), 10) || 0)
 
@@ -113,7 +123,7 @@ globalRouter.get('/yield-curves', (req: Request, res: Response) => {
     console.error('[global] Yield curves error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))
 
 // ── GET /api/global/forward-curves ───────────────────────────────────────────
 
@@ -131,6 +141,8 @@ const FORWARD_MARKETS: ForwardMarket[] = [
   { responseKey: 'AU', marketKey: 'AUS' },
 ]
 
+const FORWARD_GROUPS: MarketGroup[] = groupsForFuturesRoots(FORWARD_MARKETS.map(fm => fm.marketKey))
+
 const QUARTERLY_CODES = ['H', 'M', 'U', 'Z']
 
 function buildContractAxis(startMonthCode: string, startYear: number, endYear: number): string[] {
@@ -146,7 +158,7 @@ function buildContractAxis(startMonthCode: string, startYear: number, endYear: n
   return labels
 }
 
-globalRouter.get('/forward-curves', (req: Request, res: Response) => {
+globalRouter.get('/forward-curves', (req: Request, res: Response) => withTvView(FORWARD_GROUPS, () => {
   try {
     const lookbackDays = Math.max(0, parseInt(String(req.query.lookbackDays ?? '0'), 10) || 0)
 
@@ -191,7 +203,7 @@ globalRouter.get('/forward-curves', (req: Request, res: Response) => {
     console.error('[global] Forward curves error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))
 
 // ── GET /api/global/calendar-spreads ─────────────────────────────────────────
 // Returns 3m / 6m / 9m / 12m calendar spreads for SR3 / SO3 / EUR / CRA / TOA3 / AUS,
@@ -199,7 +211,7 @@ globalRouter.get('/forward-curves', (req: Request, res: Response) => {
 
 const SPREAD_STRIDES = [1, 2, 3, 4] as const // 3m, 6m, 9m, 12m at quarterly cadence
 
-globalRouter.get('/calendar-spreads', (req: Request, res: Response) => {
+globalRouter.get('/calendar-spreads', (req: Request, res: Response) => withTvView(FORWARD_GROUPS, () => {
   try {
     const lookbackDays = Math.max(0, parseInt(String(req.query.lookbackDays ?? '0'), 10) || 0)
 
@@ -259,7 +271,7 @@ globalRouter.get('/calendar-spreads', (req: Request, res: Response) => {
     console.error('[global] Calendar spreads error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))
 
 // ── GET /api/global/yield-changes ────────────────────────────────────────────
 // 1d nominal change (bps) and 200d vol-adjusted z-score for 2Y/5Y/10Y/30Y plus
@@ -285,7 +297,7 @@ function getFredYieldHistory(seriesId: string): YieldSeries[] {
 function getTvYieldHistory(symbol: string): YieldSeries[] {
   const rows = db.prepare(`
     SELECT time, close FROM tv_series
-    WHERE symbol = ? AND close IS NOT NULL
+    WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(symbol, HISTORY_LIMIT) as { time: string; close: number }[]
@@ -381,9 +393,19 @@ const YIELD_SOURCES: Record<string, Partial<Record<'2Y' | '5Y' | '10Y' | '30Y', 
 }
 
 const COUNTRY_ORDER = ['US', 'Canada', 'AU', 'Japan', 'GB', 'Germany', 'France', 'Italy'] as const
+
+/** TradingView ids among a country set's yield sources. */
+function tvYieldIds(countries: readonly string[]): string[] {
+  return countries.flatMap(c => Object.values(YIELD_SOURCES[c] ?? {}).filter(src => src.kind === 'tv').map(src => src.id))
+}
+const YIELD_CHANGE_GROUPS: MarketGroup[] = groupsForSymbols(tvYieldIds(COUNTRY_ORDER))
+/** daily-change-history: the requested country's yield group(s). */
+function dailyChangeGroups(country: string): MarketGroup[] {
+  return groupsForSymbols(tvYieldIds([country]))
+}
 const TENORS = ['2Y', '5Y', '10Y', '30Y'] as const
 
-globalRouter.get('/yield-changes', (_req: Request, res: Response) => {
+globalRouter.get('/yield-changes', (_req: Request, res: Response) => withTvView(YIELD_CHANGE_GROUPS, () => {
   try {
     const out: Record<string, Record<string, TenorMetric | SpreadMetric | null>> = {}
     let asOfDate = ''
@@ -422,7 +444,7 @@ globalRouter.get('/yield-changes', (_req: Request, res: Response) => {
     console.error('[global] Yield changes error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))
 
 // ── GET /api/global/daily-change-history ─────────────────────────────────────
 // Per-cell drilldown for the yield-changes matrix. Returns daily basis-point
@@ -451,7 +473,7 @@ function getFredYieldHistoryFull(seriesId: string, limit: number): YieldSeries[]
 function getTvYieldHistoryFull(symbol: string, limit: number): YieldSeries[] {
   const rows = db.prepare(`
     SELECT time, close FROM tv_series
-    WHERE symbol = ? AND close IS NOT NULL
+    WHERE symbol = ? AND close IS NOT NULL AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(symbol, limit) as { time: string; close: number }[]
@@ -486,7 +508,7 @@ function loadHistory(src: SourceDescriptor, limit: number): YieldSeries[] {
   return src.kind === 'fred' ? getFredYieldHistoryFull(src.id, limit) : getTvYieldHistoryFull(src.id, limit)
 }
 
-globalRouter.get('/daily-change-history', (req: Request, res: Response) => {
+globalRouter.get('/daily-change-history', (req: Request, res: Response) => withTvView(dailyChangeGroups(String(req.query.country ?? '')), () => {
   try {
     const country = String(req.query.country ?? '')
     const tenor = String(req.query.tenor ?? '')
@@ -578,7 +600,7 @@ globalRouter.get('/daily-change-history', (req: Request, res: Response) => {
     console.error('[global] Daily change history error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))
 
 // ── GET /api/global/rates-summary ────────────────────────────────────────────
 // Per-country at-a-glance: yield Δ at 2Y/5Y/10Y/30Y, 2s10s + 10s30s curve
@@ -625,7 +647,7 @@ function getTvYieldOnOrBefore(symbol: string, isoDate: string): { value: number;
   const cutoffTs = Math.floor(new Date(`${isoDate}T23:59:59Z`).getTime() / 1000)
   const row = db.prepare(`
     SELECT time, close FROM tv_series
-    WHERE symbol = ? AND close IS NOT NULL AND CAST(time AS INTEGER) <= ?
+    WHERE symbol = ? AND close IS NOT NULL AND CAST(time AS INTEGER) <= ? AND ${tvVisible([symbol])}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT 1
   `).get(symbol, cutoffTs) as { time: string; close: number } | undefined
@@ -805,7 +827,13 @@ interface SummaryRow {
   fwd12mMinusTerminal: number | null
 }
 
-globalRouter.get('/rates-summary', (req: Request, res: Response) => {
+/** Global Rates Summary: every summary country's sovereign curve + STIR strip. */
+const RATES_SUMMARY_GROUPS: MarketGroup[] = [...new Set([
+  ...groupsForSymbols(SUMMARY_COUNTRIES.map(c => `${c.yieldPrefix}10Y`)),
+  ...groupsForFuturesRoots(SUMMARY_COUNTRIES.map(c => c.stirMarketKey)),
+])]
+
+globalRouter.get('/rates-summary', (req: Request, res: Response) => withTvView(RATES_SUMMARY_GROUPS, () => {
   try {
     const yieldLookback = String(req.query.yieldLookback ?? '1d').toLowerCase()
     const regimeLookback = String(req.query.regimeLookback ?? '20d').toLowerCase()
@@ -912,4 +940,4 @@ globalRouter.get('/rates-summary', (req: Request, res: Response) => {
     console.error('[global] Rates summary error:', msg)
     res.status(500).json({ error: msg })
   }
-})
+}))

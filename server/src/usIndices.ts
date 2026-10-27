@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible } from './lib/tvRead'
 
 // Stable internal keys matched to tv_series symbols. Display names live on the
 // frontend.
@@ -73,6 +74,7 @@ function loadSeriesBySymbol(): Map<UsIndexKey, SeriesPoint[]> {
        WHERE symbol IN (${placeholders})
          AND close IS NOT NULL
          AND close > 0
+         AND ${tvVisible(symbols)}
        ORDER BY symbol, CAST(time AS INTEGER) ASC`,
     )
     .all(...symbols) as Array<{ symbol: string; time: string; close: number }>

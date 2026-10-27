@@ -1,4 +1,5 @@
 import { db } from './db'
+import { tvVisible, tvVisibleGlob } from './lib/tvRead'
 
 export type CrudeProduct = 'wti' | 'brent'
 
@@ -77,6 +78,7 @@ function getDistinctTimestampsDesc(globPattern: string, limit: number): string[]
     SELECT DISTINCT time FROM tv_series
     WHERE symbol GLOB ?
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisibleGlob(globPattern)}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(globPattern, limit) as { time: string }[]
@@ -94,6 +96,7 @@ function getLatestRowsAtOrBefore(globPattern: string, asOfTs: string): RawRow[] 
         AND CAST(time AS INTEGER) <= ?
         AND close IS NOT NULL
         AND close > 0
+        AND ${tvVisibleGlob(globPattern)}
       GROUP BY symbol
     ) latest ON latest.symbol = t.symbol AND CAST(t.time AS INTEGER) = latest.max_time
   `).all(globPattern, parseInt(asOfTs, 10)) as RawRow[]
@@ -153,7 +156,7 @@ const BRENT_FRONT = 'BRN'
 const WTI_FRONT   = 'CL'
 
 function symbolHasRows(symbol: string): boolean {
-  const row = db.prepare(`SELECT 1 FROM tv_series WHERE symbol = ? LIMIT 1`).get(symbol)
+  const row = db.prepare(/* tv-raw-ok: existence check only */ `SELECT 1 FROM tv_series WHERE symbol = ? LIMIT 1`).get(symbol)
   return row !== undefined
 }
 
@@ -202,6 +205,7 @@ export function getCrudeSpread(lookback: SpreadLookback): CrudeSpreadResponse {
     SELECT MAX(CAST(time AS INTEGER)) AS t
     FROM tv_series
     WHERE symbol IN (?, ?)
+      AND ${tvVisible([BRENT_FRONT, WTI_FRONT])}
   `).get(BRENT_FRONT, WTI_FRONT) as { t: number | null }
   if (latest.t == null) return empty
 
@@ -220,6 +224,8 @@ export function getCrudeSpread(lookback: SpreadLookback): CrudeSpreadResponse {
       AND b.close > 0 AND c.close > 0
       AND CAST(b.time AS INTEGER) >= ?
       AND CAST(b.time AS INTEGER) <= ?
+      AND ${tvVisible([BRENT_FRONT, WTI_FRONT], 'b')}
+      AND ${tvVisible([BRENT_FRONT, WTI_FRONT], 'c')}
     ORDER BY CAST(b.time AS INTEGER) ASC
   `).all(BRENT_FRONT, WTI_FRONT, startTs, endTs) as { time: string; brent: number; wti: number }[]
 

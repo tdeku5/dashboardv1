@@ -7,6 +7,7 @@
 // can render it unchanged — only the visual formatters differ on the panel.
 
 import { db } from './db'
+import { tvSymbolsMatching, tvVisible } from './lib/tvRead'
 
 const MONTH_CODES = 'FGHJKMNQUVXZ'
 const MONTH_CODE_MAP: Record<string, number> = {
@@ -76,11 +77,17 @@ function tsToDate(ts: string): string {
 
 // Distinct timestamps DESC across the union of (spot VIX + all VX dated
 // contracts). Used to pick the asOf and t−offset reference points.
+/** The VIX-curve view: spot VIX (CBOE_VOL_INDEX) + dated VX futures (CFE_VX). */
+function vixCurveSymbols(): string[] {
+  return ['VIX', ...tvSymbolsMatching('VX[FGHJKMNQUVXZ]??')]
+}
+
 function getDistinctTimestampsDesc(limit: number): string[] {
   const rows = db.prepare(`
     SELECT DISTINCT time FROM tv_series
     WHERE (symbol = 'VIX' OR symbol GLOB 'VX[FGHJKMNQUVXZ]??')
       AND close IS NOT NULL AND close > 0
+      AND ${tvVisible(vixCurveSymbols())}
     ORDER BY CAST(time AS INTEGER) DESC
     LIMIT ?
   `).all(limit) as { time: string }[]
@@ -98,6 +105,7 @@ function getLatestRowsAtOrBefore(asOfTs: string): Map<string, number> {
       WHERE (symbol = 'VIX' OR symbol GLOB 'VX[FGHJKMNQUVXZ]??')
         AND close IS NOT NULL AND close > 0
         AND CAST(time AS INTEGER) <= CAST(? AS INTEGER)
+        AND ${tvVisible(vixCurveSymbols())}
       GROUP BY symbol
     ) m ON m.symbol = s.symbol AND CAST(s.time AS INTEGER) = m.maxt
   `).all(asOfTs) as Array<{ symbol: string; close: number }>
