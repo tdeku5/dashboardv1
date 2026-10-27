@@ -9,11 +9,11 @@
 //   (a) the US Rates VOL implied-vol premium (MOVE − RMOVE), a spread between
 //       volatilities, not yields. It stays on direction via UsRatesVolPage's
 //       `directionTone`, which may be applied to the premium only.
-//   (b) the cellColor grid (lib/cellColor.ts), red / blue: increase =
-//       --acm-heat-negative-*, decrease = --acm-heat-dir-down-*. PENDING R2d —
-//       the grid is still legacy rgba; the allowance (dir-DOWN heat steps only,
-//       in that one file) is live now and the skipped test below is unskipped
-//       when R2d converts it.
+//   (b) the cellColor grid (lib/cellColor.ts), red / blue on its own
+//       symmetric scale: increase = --acm-heat-rate-up-*, decrease =
+//       --acm-heat-rate-down-* (the dir-down colour at the direction alphas).
+//       These are grid-only tokens, not direction tokens, so the grid needs no
+//       direction allowance — the test below pins it to exactly these two scales.
 //
 // Static scan, comments stripped, of the rates pages and everything they
 // import (shared acm primitives / tokens / registry excluded — they define the
@@ -52,8 +52,8 @@ const INFRA = /^(components\/acm\/|styles\/|constants\/)/
 
 /** Exception (a): the VOL premium. */
 const VOL_PREMIUM = { file: 'pages/UsRatesVolPage.tsx', fn: 'directionTone', arg: /premium/i }
-/** Exception (b): the cellColor grid's decrease side — dir-DOWN heat steps only. */
-const CELL_COLOR = { file: 'lib/cellColor.ts', allowed: /^--acm-heat-dir-down-[1-4]$/ }
+/** Exception (b): the cellColor grid — the symmetric rate heat scale only. */
+const CELL_COLOR = { file: 'lib/cellColor.ts', scales: ['rate-down', 'rate-up'] }
 
 const DIRECTION = /acm-dir-|heat-dir-|['"`]dir-(?:up|down)['"`]|\bdirUp\b|\bdirDown\b/g
 
@@ -104,20 +104,18 @@ describe('Rates colour rule — no direction token in the rates area except the 
     console.log(`rates-area files scanned: ${files.length}`)
   })
 
-  it('no rates-area file references a direction token (VOL premium and cellColor grid excepted)', () => {
+  it('no rates-area file references a direction token (VOL premium excepted; the cellColor grid uses its own rate scale)', () => {
     const offenders = files.flatMap(f => {
-      let src = f === VOL_PREMIUM.file ? withoutFunction(code(f), VOL_PREMIUM.fn).rest : code(f)
-      if (f === CELL_COLOR.file) src = src.replace(/--acm-heat-dir-[a-z]+-\d+/g, t => (CELL_COLOR.allowed.test(t) ? '' : t))
+      const src = f === VOL_PREMIUM.file ? withoutFunction(code(f), VOL_PREMIUM.fn).rest : code(f)
       return [...src.matchAll(DIRECTION)].map(m => `${f}: ${m[0]}`)
     })
     expect(offenders).toEqual([])
   })
 
-  // PENDING R2d — unskip when STIR UST CURVE converts the cellColor grid.
-  it.skip('PENDING R2d — cellColor grid is red / blue: heat-negative for increase, heat-dir-down for decrease, nothing else', () => {
+  it('cellColor grid is red / blue on the symmetric rate scale: heat-rate-up for increase, heat-rate-down for decrease, nothing else', () => {
     const src = code(CELL_COLOR.file)
-    const heat = [...new Set([...src.matchAll(/--acm-heat-([a-z-]+?)-[1-4]\b/g)].map(m => m[1]))].sort()
-    expect(heat).toEqual(['dir-down', 'negative'])
+    const heat = [...new Set([...src.matchAll(/--acm-heat-([a-z-]+?)-(?:\$\{[^}]+\}|[1-4])/g)].map(m => m[1]))].sort()
+    expect(heat).toEqual(CELL_COLOR.scales)
     expect(src, 'no legacy rgba shading left').not.toMatch(/rgba\(/)
   })
 

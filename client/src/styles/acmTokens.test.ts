@@ -185,14 +185,14 @@ describe('acm-tokens.css — distinctness (ΔE2000)', () => {
 })
 
 describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => {
-  // Valence scale → ReturnsHeatmap and the STIR strip move cells. Red / blue
-  // (negative for increase, dir-down for decrease) → the cellColor grid from
-  // R2d / R5 (rule 6 exception b). See assetClassModels.heatmaps.test.ts.
+  // Valence scale → ReturnsHeatmap and the STIR strip move cells. Rate scale
+  // (red / blue, symmetric) → the cellColor grid (rule 6 exception b). The
+  // direction scale stays defined. See assetClassModels.heatmaps.test.ts.
   const SCALES: Array<[string, string, string]> = [
-    // [scale, token for the "down" side, token for the "up" side]
-    ['dir', 'acm-dir-down', 'acm-dir-up'],
-    ['valence', 'acm-negative', 'acm-positive'],
-    ['red-blue: cellColor', 'acm-dir-down', 'acm-negative'],
+    // [scale, heat prefix for the "down" side, heat prefix for the "up" side]
+    ['dir', 'acm-heat-dir-down-', 'acm-heat-dir-up-'],
+    ['valence', 'acm-heat-negative-', 'acm-heat-positive-'],
+    ['rate: cellColor', 'acm-heat-rate-down-', 'acm-heat-rate-up-'],
   ]
   const sideSteps = (prefix: string) =>
     Object.keys(raw).filter(k => k.startsWith(prefix)).sort()
@@ -203,6 +203,7 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
     const sides: Array<[string, string]> = [
       ['acm-heat-dir-up-', 'acm-dir-up'], ['acm-heat-dir-down-', 'acm-dir-down'],
       ['acm-heat-positive-', 'acm-positive'], ['acm-heat-negative-', 'acm-negative'],
+      ['acm-heat-rate-up-', 'acm-negative'], ['acm-heat-rate-down-', 'acm-dir-down'],
     ]
     for (const [prefix, base] of sides) {
       const steps = sideSteps(prefix)
@@ -217,6 +218,14 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
     const alphas = (prefix: string) => sideSteps(prefix).map(s => tint(s)[1])
     expect(alphas('acm-heat-dir-up-')).toEqual(alphas('acm-heat-dir-down-'))
     expect(alphas('acm-heat-positive-')).toEqual(alphas('acm-heat-negative-'))
+    // cellColor grid: an equal rise and fall shade identically, at the direction alphas
+    expect(alphas('acm-heat-rate-up-')).toEqual(alphas('acm-heat-rate-down-'))
+    expect(alphas('acm-heat-rate-up-')).toEqual(alphas('acm-heat-dir-up-'))
+  })
+
+  it('rate-down is identical to dir-down step for step; rate-up is no more opaque than heat-negative', () => {
+    expect(sideSteps('acm-heat-rate-down-').map(k => raw[k])).toEqual(sideSteps('acm-heat-dir-down-').map(k => raw[k]))
+    sideSteps('acm-heat-rate-up-').forEach((s, i) => expect(tint(s)[1]).toBeLessThanOrEqual(tint(sideSteps('acm-heat-negative-')[i])[1]))
   })
 
   it('primary text clears 4.5:1 over every step, on bg and panel', () => {
@@ -224,8 +233,8 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
     const failures: string[] = []
     rows.push(`${'step'.padEnd(24)}${'alpha'.padStart(6)}${'bg'.padStart(8)}${'panel'.padStart(8)}   min`)
     for (const [scale, down, up] of SCALES) {
-      for (const side of [down, up]) {
-        const prefix = `acm-heat-${side.replace('acm-', '')}-`
+      for (const prefix of [down, up]) {
+        expect(sideSteps(prefix).length, prefix).toBeGreaterThan(0)
         for (const step of sideSteps(prefix)) {
           const [c, a] = tint(step)
           const r = TINT_SURFACES.map(s => contrast(hex('acm-text-primary'), composite(c, a, hex(s))))

@@ -9,8 +9,9 @@
 //   • the strip implied-rate Δ columns AND the FF price-change cells are
 //     named heatmap #3: valence heat fill by price sign, primary text, no
 //     tone, no alert;
-//   • NEXT MOVE, Terminal−OCR, ±OCR, calendar spreads, the FORWARD PRICING
+//   • NEXT MOVE, Terminal−OCR, ±OCR, calendar-spread Δ columns, the FORWARD PRICING
 //     summary table and its "Change vs benchmark" bars all follow the rule;
+//   • levels get no colour: calendar-spread values are plain primary text;
 //   • no direction tone appears anywhere in these views.
 //
 // Data hooks are mocked with a fixed strip and curve; every other fetch is
@@ -193,11 +194,13 @@ describe('STIR STRIPS — NEXT MOVE, OCR and calendar spreads follow the rates r
       })
       expect(ocr.some(td => has(td, 'negative')) && ocr.some(td => has(td, 'positive')), 'both signs exercised').toBe(true)
 
-      // calendar spreads: back − front is negative here → every value cell positive (green)
+      // calendar spreads: the VALUE is a level → no sign tone (rule 6: levels get no colour),
+      // even though back − front is non-zero here; the Δ columns below are changes.
       const calTables = [...main.querySelectorAll('table')].filter(t => has(t, 'calTable'))
       const valueCells = calTables.flatMap(t => [...t.querySelectorAll<HTMLTableRowElement>('tbody tr')].map(r => r.cells[1]))
       expect(valueCells.length).toBeGreaterThan(0)
-      for (const td of valueCells) expect(tone(td), td.textContent ?? '').toEqual(['positive'])
+      expect(valueCells.some(td => /[1-9]/.test(td.textContent ?? '')), 'non-zero spread levels exercised').toBe(true)
+      for (const td of valueCells) expect(tone(td), td.textContent ?? '').toEqual([])
       // Δ cells: tone follows the printed sign (increase = negative)
       const deltaCells = calTables.flatMap(t => [...t.querySelectorAll<HTMLTableRowElement>('tbody tr')].flatMap(r => [...r.cells].slice(2)))
       const toned = deltaCells.filter(td => tone(td).length > 0)

@@ -101,7 +101,7 @@
   --acm-negative:  #E16D6D;         /* valence: down is bad. Seed #E06C6C (--hp-negative)
                                        is 4.499:1 on overlay; one +1/channel step → 4.553 */
   --acm-dir-up:    #F0954A;         /* direction: neither good nor bad. Rates use valence */
-  --acm-dir-down:  #7CC4F2;         /* (R2b rule); users: VOL premium; dir-down heat → cellColor (R2d) */
+  --acm-dir-down:  #7CC4F2;         /* (R2b rule); users: VOL premium (cellColor uses heat-rate-*) */
   --acm-alert-mild:   #E8C547;      /* |z| > 2, IV rank/pctile intensity */
   --acm-alert-strong: #F05BA0;      /* |z| > 3, scarcity breach */
   --acm-status-warning: #E8C547;    /* stale / data-quality notes */
@@ -119,8 +119,10 @@
    * VALENCE scale, and the cellColor grid on red / blue. Rates colour rule
    * (R2b approval): a yield / rate / spread increase is --acm-heat-negative-*,
    * a decrease --acm-heat-positive-* (bond-price view; returns keep up =
-   * positive) — EXCEPT the cellColor grid, whose decrease side is
-   * --acm-heat-dir-down-* (red / blue; converts at R2d / R5).
+   * positive) — EXCEPT the cellColor grid, which is red / blue on its own
+   * symmetric scale: --acm-heat-rate-up-* (negative colour) for an increase,
+   * --acm-heat-rate-down-* (dir-down colour) for a decrease, both at the
+   * direction scale's alphas so an equal rise and fall shade identically.
    * No other component fills backgrounds with sign colours, and heatmap
    * cells never also carry an alert treatment.
    * Neutral (zero) = no fill: the surface shows through.
@@ -147,6 +149,17 @@
   --acm-heat-negative-2: color-mix(in srgb, var(--acm-negative) 26%, transparent);
   --acm-heat-negative-3: color-mix(in srgb, var(--acm-negative) 38%, transparent);
   --acm-heat-negative-4: color-mix(in srgb, var(--acm-negative) 51%, transparent);
+
+  /* cellColor grid (rule 6 exception b): red / blue, symmetric. rate-up = the
+   * negative colour at the direction alphas; rate-down = --acm-heat-dir-down-*. */
+  --acm-heat-rate-up-1:   color-mix(in srgb, var(--acm-negative) 12%, transparent);
+  --acm-heat-rate-up-2:   color-mix(in srgb, var(--acm-negative) 23%, transparent);
+  --acm-heat-rate-up-3:   color-mix(in srgb, var(--acm-negative) 35%, transparent);
+  --acm-heat-rate-up-4:   color-mix(in srgb, var(--acm-negative) 46%, transparent);
+  --acm-heat-rate-down-1: color-mix(in srgb, var(--acm-dir-down) 12%, transparent);
+  --acm-heat-rate-down-2: color-mix(in srgb, var(--acm-dir-down) 23%, transparent);
+  --acm-heat-rate-down-3: color-mix(in srgb, var(--acm-dir-down) 35%, transparent);
+  --acm-heat-rate-down-4: color-mix(in srgb, var(--acm-dir-down) 46%, transparent);
 
   /* ── Typography ───────────────────────────────────────────────────────────
    * Sans for chrome, mono (tabular) for numerics. The mono token is

@@ -8,10 +8,10 @@ The prompts win on any conflict; this file is the quick reference while building
 1. **Colour is never the only signal of sign.** Every signed number keeps its leading ASCII `-` (Decision 3).
 2. **Channels (Rule 2, amended at Turn 1 approval):** valence and direction tokens colour **text only**, except inside the named heatmap components, which use `--acm-heat-*` fills. Alert tokens colour a background tint, badge or outline, never value text. Status-warning is for notes and banners, never data cells.
 3. **Named heatmap components** (the only background-fill sign colours):
-   - the `cellColor` grid (direction scale `--acm-heat-dir-*`): `GlobalRatesPage`, `CountryCurvePage`, `STIRDashboardPage` ×2
+   - the `cellColor` grid (the `--acm-heat-rate-*` scales, per rule 6(b)): `GlobalRatesPage`, `CountryCurvePage`, `STIRDashboardPage` ×2
    - `ReturnsHeatmap` (valence scale `--acm-heat-positive-*` / `--acm-heat-negative-*`)
    - the STIR strip move cells (valence scale; `STIRDashboardPage` `stripHeatClass`, CSS `.stripHeat*`): the implied-rate Δ columns (added at the R2a approval) and the FF table's price-change cells (added at the R2b approval). Price down / rate up → `--acm-heat-negative-*`, price up / rate down → `--acm-heat-positive-*`. Steps by |Δ| ÷ the column's max |Δ|: (0, 25%] → 1, (25, 50%] → 2, (50, 75%] → 3, (75, 100%] → 4; zero / null → no fill, muted text. Each fill sits on an opaque `--acm-surface-panel` base so pack tints and FF year bands never stack under it.
-   - Under the rates colour rule (6), the `cellColor` grid moves from the direction to the **valence** heat scale (increase → negative). The lib converts when its first page (STIR UST CURVE, R2d) converts.
+   - The `cellColor` grid's scale and timing: see rule 6(b).
    - Heatmap cells never carry an alert treatment; cell text is always `--acm-text-primary`.
    - Enforced by `client/src/pages/assetClassModels.heatmaps.test.ts` (only these components may reference `--acm-heat-*`, each on its own scale).
 4. **Identity colours** come from `client/src/constants/identityColors.ts` only. Sign/state colours come from `acm-tokens.css` only. The two never share a value (tested).
@@ -21,14 +21,15 @@ The prompts win on any conflict; this file is the quick reference while building
    - futures **price up** (rate down) → `--acm-positive`; **price down** (rate up) → `--acm-negative`;
    - **hike → red, cut → green** everywhere (a priced hike is a rate increase): NEXT MOVE, FORWARD PRICING summary, badges;
    - heatmaps showing these use the valence heat scale with the same orientation (`--acm-heat-negative-*` for increases).
-   - **Covers:** STIR strip moves, calendar spreads and their Δ, Terminal−OCR and ±OCR, FORWARD PRICING Δ bars and summary bps / implied-move cells, every yield and rate Δ on UST CURVE, YIELD ATTRIBUTION, MONEY MARKETS, POLICY RATE, country curve and term-structure pages, GLOBAL rates, GlobalForwardCurves and DailyChangeModal, credit spreads (widening → red), curve spreads such as 2s10s (spread up → red), and the `cellColor` grid.
+   - **Levels vs changes (R2d approval, Decision 1):** levels → no colour; changes → per rule 6. A spread, butterfly, credit-spread, breakeven or other level (e.g. 2s10s +31bp, 2s5s10s -5bp, 5s10s real, 5s10s BE, a calendar-spread value) renders as plain primary text, wherever the old code coloured it by sign. Identity colours may stay on tile labels, legend chips and chart lines; only the value goes to primary.
+   - **Covers:** STIR strip moves, calendar-spread Δ columns, Terminal−OCR and ±OCR, FORWARD PRICING Δ bars and summary bps / implied-move cells, every yield and rate Δ on UST CURVE, YIELD ATTRIBUTION, MONEY MARKETS, POLICY RATE, country curve and term-structure pages, GLOBAL rates, GlobalForwardCurves and DailyChangeModal, credit-spread changes (widening → red), breakeven changes (a rise is red: a breakeven is a nominal − real yield spread; R2d approval, Decision 2), curve spreads such as 2s10s (spread up → red), and the `cellColor` grid.
    - **Orientation note — intended, do not "fix":** in rates displays red means *up*; in returns displays (equities, FX, commodities) red means *down*. Rates follow the bond-price view. Neither should be "corrected" to match the other.
    - **Not covered:** returns (equities, FX, commodities) stay valence with up = green; unsigned extremeness flags (e.g. the VOL stat tile's z-score) stay on alert tints. Anything where it is unclear whether a value is a yield or spread change is reported to the user, not decided.
    - **Exceptions (recovery approval; the user's decisions):**
      - (a) the **US Rates VOL implied-vol premium (MOVE − RMOVE)** stays on **direction** (`--acm-dir-up` orange / `--acm-dir-down` blue) — a spread between volatilities, not yields.
-     - (b) the **`cellColor` grid** keeps a **red / blue** gradient: increase → `--acm-heat-negative-*`, decrease → `--acm-heat-dir-down-*`. Same 4 steps per side, no-fill neutral, primary text and opaque panel base as the other heatmaps. This applies to the GLOBAL z-score grid too: signed z-scores of rate changes are a heatmap of change, not an alert flag. **Timing:** the grid keeps its current rgba shading until its pages convert — R2d (STIR UST CURVE) and R5 (country curve pages, GLOBAL) — and moves to these tokens then. This supersedes rule 3's note that the grid moves to the valence scale.
-   - **Direction family:** the `--acm-dir-*` tokens and the direction heat scale stay defined and in use: `--acm-dir-*` by the VOL premium, `--acm-heat-dir-down-*` by the `cellColor` grid from R2d. Removal is not on the table at Z.
-   - Pinned by `client/src/pages/STIRDashboardPage.stripTones.test.tsx` (STIR STRIPS + FORWARD PRICING) and `client/src/pages/assetClassModels.ratesColour.test.ts` (no direction token anywhere in the rates area except the two named exceptions; the `cellColor` allowance is a pending case until R2d).
+     - (b) the **`cellColor` grid** is **red / blue** on its own **symmetric** scale (R2c approval): increase → `--acm-heat-rate-up-*` (the `--acm-negative` colour), decrease → `--acm-heat-rate-down-*` (identical to `--acm-heat-dir-down-*`). Both sides use the direction scale's alphas (12 / 23 / 35 / 46%), so an equal rise and fall shade identically. Same 4 steps per side, no-fill neutral, primary text and opaque panel base as the other heatmaps. `--acm-heat-negative-*` is unchanged and stays with the strip and FF heatmaps. This applies to the GLOBAL z-score grid too: signed z-scores of rate changes are a heatmap of change, not an alert flag. **Timing:** `lib/cellColor.ts` converts at R2d; because the lib is shared, the new shading shows at once on UST CURVE, the country curve pages and GLOBAL, whose surrounding page chrome converts at R5.
+   - **Direction family:** the `--acm-dir-*` tokens and the direction heat scale stay defined. `--acm-dir-*` is used by the VOL premium; the `--acm-heat-dir-*` steps have no direct user (the grid's decrease side copies them as `--acm-heat-rate-down-*`). Removal is not on the table at Z.
+   - Pinned by `client/src/pages/STIRDashboardPage.stripTones.test.tsx` (STIR STRIPS + FORWARD PRICING), `client/src/pages/assetClassModels.ratesColour.test.ts` (no direction token anywhere in the rates area except the VOL premium; the `cellColor` grid uses exactly the two rate scales) and `client/src/styles/acmTokens.test.ts` (rate-scale symmetry and contrast).
 
 ## Component-level root rule (Turn 2 approval)
 
@@ -66,3 +67,17 @@ Built (Turn 4) in `client/src/components/acm/`: `AcmPageHeader`, `AcmNavTier`, `
 Recharts sizes text in a hidden `<body>`-level span, outside `.acm-root`. Font values on measured text (ticks, `<Label>`s, legend) are therefore literals pinned to their tokens by `chartTheme.test.tsx`; colours stay `var()`.
 
 **Recharts 3.7.0 limitation:** tick-interval measurement (`cartesian/getTicks.js`) passes only `fontSize` + `letterSpacing` to the span, never the family, so ticks are measured in the page `<body>` face (`system-ui`) whatever the theme says. Measured in headless Chromium: drawn Plex Mono tick labels are 0.94–1.10× the measured width (`chartFontLoading.browser.test.ts`). `<Label>`/wrapped `Text` measurement does pass the family.
+
+## Literal counting instrument (R2c approval)
+
+From R2d on, every literal figure — per section, per file and the Z deltas — comes from `scripts/acm-literals.py` only. The Phase 0-D baselines (91/523 and 124/1,531 colour, 34/15 font sizes, 27/24 spacing) and the R1 per-file counts were taken with an earlier counter that was not kept, so they are not comparable. Z deltas run from the **re-measured `7512e85` baseline** taken with this script (figures below), not from Phase 0's original numbers.
+
+Section = every file reachable from `pages/STIRDashboardPage.tsx` by relative import, minus the definition layer (`components/acm/`, `styles/acm-tokens.css`, `constants/identityColors.ts`), counted on its own. `python3 scripts/acm-literals.py --section --rev <REV>` reproduces these:
+
+| Revision | Scope | colour | font-size | spacing | total | radius |
+|---|---|---|---|---|---|---|
+| `7512e85` (Phase 0 baseline) | section TSX/TS (93 files) | 1,559 | 279 | 146 | 1,984 | 86 |
+| `7512e85` | section CSS (18 modules) | 523 | 214 | 387 | 1,124 | 99 |
+| `1cfa75e` | section TSX/TS (93 files) | 1,537 | 278 | 146 | 1,961 | 86 |
+| `1cfa75e` | section CSS (18 modules) | 472 | 193 | 355 | 1,020 | 88 |
+| `1cfa75e` | definition layer (22 files) | 213 | 0 | 0 | 213 | 0 |

@@ -1,10 +1,9 @@
 // Named heatmap components (Rule 2 exception; docs/asset-class-models-design-notes.md).
 // Valence and direction colour text only, EXCEPT inside these named heatmaps,
 // which may fill cells from the --acm-heat-* scales (rates colour rule 6):
-//   • the cellColor grid            — RED / BLUE (rule 6 exception b): increase
-//                                     = --acm-heat-negative-*, decrease =
-//                                     --acm-heat-dir-down-*. Still legacy rgba;
-//                                     moves onto these tokens at R2d / R5.
+//   • the cellColor grid            — RED / BLUE, symmetric (rule 6 exception
+//                                     b): increase = --acm-heat-rate-up-*,
+//                                     decrease = --acm-heat-rate-down-*.
 //   • ReturnsHeatmap                — returns: up = --acm-heat-positive-*
 //   • STIR strip move cells         — implied-rate Δ columns + FF price-change
 //     (.stripHeat*)                   cells: price down / rate up = negative
@@ -19,7 +18,7 @@ import path from 'node:path'
 const SRC = [path.resolve(process.cwd(), 'src'), path.resolve(process.cwd(), 'client/src')]
   .find(p => existsSync(path.join(p, 'pages/STIRDashboardPage.tsx')))!
 
-type Scale = 'dir' | 'valence' | 'red-blue'
+type Scale = 'dir' | 'valence' | 'rate'
 interface Named {
   name: string
   file: string
@@ -29,7 +28,7 @@ interface Named {
 }
 
 const NAMED: Named[] = [
-  { name: 'cellColor grid', file: 'lib/cellColor.ts', scale: 'red-blue' },
+  { name: 'cellColor grid', file: 'lib/cellColor.ts', scale: 'rate' },
   { name: 'ReturnsHeatmap', file: 'components/ReturnsHeatmap.tsx', scale: 'valence' },
   { name: 'ReturnsHeatmap', file: 'components/ReturnsHeatmap.module.css', scale: 'valence' },
   // one set of 8 classes serves both the SR3 implied-rate Δ columns and the FF price-change cells
@@ -62,12 +61,12 @@ const stripComments = (src: string) => src
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/(^|[^:'"`])\/\/.*$/gm, '$1')
 
-const HEAT = /--acm-heat-(positive|negative|dir-up|dir-down|[a-z]+)-/g
+const HEAT = /--acm-heat-(positive|negative|dir-up|dir-down|rate-up|rate-down|[a-z]+)-/g
 /** The heat sides each scale may use. */
 const SIDES: Record<Scale, string[]> = {
   dir: ['dir-up', 'dir-down'],
   valence: ['positive', 'negative'],
-  'red-blue': ['negative', 'dir-down'],
+  rate: ['rate-up', 'rate-down'],
 }
 
 describe('Asset Class Models — heat fills only in the named heatmap components', () => {
