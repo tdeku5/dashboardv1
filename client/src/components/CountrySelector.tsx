@@ -1,4 +1,4 @@
-import { AssetSubRibbon } from './AssetSubRibbon'
+import { AcmNavTier } from './acm'
 
 export type CountryCode = 'US' | 'UK' | 'EU' | 'CAD' | 'JPY' | 'AUS' | 'Global'
 
@@ -25,5 +25,5 @@ export function CountrySelector({ value, onChange, exclude }: Props) {
   const items = exclude && exclude.length > 0
     ? COUNTRIES.filter(c => !exclude.includes(c.key))
     : COUNTRIES
-  return <AssetSubRibbon items={items} value={value} onChange={onChange} />
+  return <AcmNavTier tier="country" label="Country" items={items} value={value} onChange={onChange} />
 }

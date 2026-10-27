@@ -185,11 +185,14 @@ describe('acm-tokens.css — distinctness (ΔE2000)', () => {
 })
 
 describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => {
-  // Direction scale → cellColor grid; valence scale → ReturnsHeatmap.
+  // Valence scale → ReturnsHeatmap and the STIR strip move cells. Red / blue
+  // (negative for increase, dir-down for decrease) → the cellColor grid from
+  // R2d / R5 (rule 6 exception b). See assetClassModels.heatmaps.test.ts.
   const SCALES: Array<[string, string, string]> = [
     // [scale, token for the "down" side, token for the "up" side]
     ['dir', 'acm-dir-down', 'acm-dir-up'],
     ['valence', 'acm-negative', 'acm-positive'],
+    ['red-blue: cellColor', 'acm-dir-down', 'acm-negative'],
   ]
   const sideSteps = (prefix: string) =>
     Object.keys(raw).filter(k => k.startsWith(prefix)).sort()

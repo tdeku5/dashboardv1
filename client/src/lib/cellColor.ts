@@ -5,8 +5,10 @@
 //
 // One theme: 'red-blue' — red for positive (selloff), blue for negative
 // (rally). Every caller passes it explicitly. The unused 'brown-teal' theme
-// was removed (Asset Class Models revamp, Decision 2); this grid moves onto
-// the --acm-heat-dir-* scale when its pages are converted.
+// was removed (Asset Class Models revamp, Decision 2). Under the rates colour
+// rule (R2b approval) this grid moves onto the VALENCE heat scale —
+// --acm-heat-negative-* for yield increases, --acm-heat-positive-* for
+// decreases — when its first page (STIR UST CURVE, R2d) is converted.
 //
 // The 0.7 power curve keeps mid-magnitude moves visible instead of crushing
 // them to near-neutral. 0.65 max opacity preserves text readability.

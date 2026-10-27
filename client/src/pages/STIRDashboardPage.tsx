@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -17,7 +17,19 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { CountrySelector, type CountryCode } from '../components/CountrySelector'
-import { AssetSubRibbon } from '../components/AssetSubRibbon'
+import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, signColor, type AcmColumn, type SignTone } from '../components/acm'
+import { chartTheme, CHART_FONT_MONO, CHART_LABEL_FONT_SIZE, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { toneClass } from '../components/acm/tones'
+import {
+  CALENDAR_SPREAD_COLORS,
+  CB_SCENARIO_COLORS,
+  CURVE_COMPARE_COLORS,
+  STIR_PACK_BACKGROUNDS,
+  STIR_PACK_COLORS,
+  SUMMARY_POPUP_LINE,
+  ffYearBandColor,
+  type PackName,
+} from '../constants/identityColors'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { UKFundamentalModelPanel } from '../components/UKFundamentalModelPanel'
 import { EUFundamentalModelPanel } from '../components/EUFundamentalModelPanel'
@@ -212,7 +224,8 @@ interface StripSummaryBox {
   label: string
   value: string
   sub: string
-  tone: 'teal' | 'gold' | 'green' | 'red' | 'neutral'
+  /** Rates colour rule for hike/cut and rate spreads (increase = negative); 'plain' = primary text, 'neutral' = secondary. */
+  tone: SignTone | 'plain' | 'neutral'
   hoverKey?: 'mtg' | 'term6m' | 'term12m'
 }
 
@@ -350,40 +363,8 @@ const MONTH_CODE_TO_INDEX: Record<string, number> = {
   Z: 11,
 }
 
-const YEAR_BAND_COLORS: Record<number, string> = {
-  2026: 'rgba(200, 210, 220, 0.08)',
-  2027: 'rgba(239, 83, 80, 0.12)',
-  2028: 'rgba(78, 201, 176, 0.12)',
-  2029: 'rgba(59, 130, 246, 0.18)',
-  2030: 'rgba(255, 215, 0, 0.12)',
-}
-
-const YEAR_CYCLE = [
-  'rgba(200, 210, 220, 0.08)',
-  'rgba(239, 83, 80, 0.12)',
-  'rgba(78, 201, 176, 0.12)',
-  'rgba(59, 130, 246, 0.18)',
-  'rgba(255, 215, 0, 0.12)',
-]
-
-type PackName = 'Whites' | 'Reds' | 'Greens' | 'Blues' | 'Golds'
 const PACK_NAMES: PackName[] = ['Whites', 'Reds', 'Greens', 'Blues', 'Golds']
-const PACK_COLORS: Record<PackName, string> = {
-  Whites: '#e5e7eb',
-  Reds: '#ef4444',
-  Greens: '#22c55e',
-  Blues: '#3b82f6',
-  Golds: '#facc15',
-}
 const SCENARIO_BPS: number[] = [-150, -125, -100, -75, -50, -25, 0, 25, 50, 75, 100, 125, 150]
-
-const PACK_BACKGROUNDS: Record<PackName, string> = {
-  Whites: 'rgba(229, 231, 235, 0.04)',
-  Reds: 'rgba(239, 68, 68, 0.07)',
-  Greens: 'rgba(34, 197, 94, 0.07)',
-  Blues: 'rgba(59, 130, 246, 0.07)',
-  Golds: 'rgba(250, 204, 21, 0.07)',
-}
 
 const INTEGER_FORMAT = new Intl.NumberFormat('en-US')
 const FVM_TICK = { fontSize: 10, fontFamily: 'var(--font-mono)', fill: '#94A3B8' }
@@ -571,15 +552,36 @@ function monthsForward(contract: StripContract, now = new Date()): number {
   return ((contract.year - now.getFullYear()) * 12) + (contractMonthIndex - currentMonthIndex)
 }
 
-function heatStyle(value: number | null, maxAbs: number): CSSProperties {
-  if (value == null) return { color: '#728197' }
-  if (Math.abs(value) < 1e-9 || maxAbs <= 0) return { color: '#728197' }
+// Rates colour rule (R2b approval; design notes colour rule 6): every yield,
+// rate or spread change is VALENCE in the bond-price view — increase =
+// negative (red), decrease = positive (green); hike = red, cut = green.
+// Futures prices follow price: price up (rate down) = positive.
+function stripMoveTone(priceChange: number | null): SignTone | undefined {
+  if (priceChange == null || Math.abs(priceChange) < 1e-9) return undefined
+  return priceChange > 0 ? 'positive' : 'negative'
+}
 
-  const opacity = Math.max(0.6, Math.min(1, Math.abs(value) / maxAbs))
-  const intensity = Math.abs(value) / maxAbs
-  const bgAlpha = 0.05 + intensity * 0.2
-  if (value > 0) return { color: `rgba(78, 201, 176, ${opacity})`, background: `rgba(78, 201, 176, ${bgAlpha.toFixed(3)})` }
-  return { color: `rgba(239, 83, 80, ${opacity})`, background: `rgba(239, 83, 80, ${bgAlpha.toFixed(3)})` }
+/** Yield / rate / spread level-vs-reference or Δ in bp: up = negative, down = positive, zero untoned. */
+function rateChangeTone(v: number | null): SignTone | undefined {
+  if (v == null || v === 0) return undefined
+  return v > 0 ? 'negative' : 'positive'
+}
+
+// Named heatmap #3 — strip implied-rate Δ columns and FF price-change cells, valence heat scale. Same
+// normalisation as the old magnitude-scaled fill (|Δ| / the column's max |Δ|),
+// bucketed into quarters: (0, 25%] → step 1, (25, 50%] → 2, (50, 75%] → 3,
+// (75, 100%] → 4. Text stays primary; null / zero → no fill, muted text.
+const STRIP_HEAT_THRESHOLDS = [0.25, 0.5, 0.75] as const
+function stripHeatClass(priceChange: number | null, colMaxAbs: number): string | undefined {
+  const tone = stripMoveTone(priceChange)
+  if (!tone || colMaxAbs <= 0) return styles.muted
+  const intensity = Math.abs(priceChange as number) / colMaxAbs
+  const step = 1 + STRIP_HEAT_THRESHOLDS.filter(t => intensity > t).length
+  return styles[`stripHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
+}
+
+function rateChangeClass(v: number | null): string | undefined {
+  return toneClass(rateChangeTone(v))
 }
 
 // First inflection point on the curve — the contract where the cycle direction
@@ -614,26 +616,10 @@ function findTerminalContract(contracts: StripContract[]): StripContract | null 
   return contracts[contracts.length - 1]
 }
 
-function summaryToneStyle(tone: StripSummaryBox['tone']): CSSProperties {
-  switch (tone) {
-    case 'gold':
-      return { color: '#FFD700' }
-    case 'green':
-      return { color: '#4EC9B0' }
-    case 'red':
-      return { color: '#EF5350' }
-    case 'neutral':
-      return { color: '#94A3B8' }
-    case 'teal':
-    default:
-      return { color: '#4EC9B0' }
-  }
-}
-
-function getYearBandColor(year: number, years: number[]): string {
-  if (YEAR_BAND_COLORS[year]) return YEAR_BAND_COLORS[year]
-  const idx = years.indexOf(year)
-  return YEAR_CYCLE[(idx >= 0 ? idx : 0) % YEAR_CYCLE.length]
+function summaryToneClass(tone: StripSummaryBox['tone']): string | undefined {
+  if (tone === 'neutral') return styles.summaryBoxValueNeutral
+  if (tone === 'plain') return undefined
+  return toneClass(tone)
 }
 
 function fmtShortMonthYear(d: string): string {
@@ -832,15 +818,18 @@ function renderDeltaLabel(props: any) {
   const { x, y, width, height, value } = props
   if (value == null) return null
   const numeric = Number(value)
+  // Label beyond the bar's end: above a positive bar, below a negative one.
+  // (Recharts may hand a negative bar a negative height, so take the extent.)
+  const top = Math.min(y, y + height)
+  const bottom = Math.max(y, y + height)
   return (
     <text
       x={x + width / 2}
-      y={numeric >= 0 ? y - 8 : y + height + 14}
+      y={numeric >= 0 ? top - 8 : bottom + 14}
       textAnchor="middle"
-      fill="#94A3B8"
-      fontSize={12}
-      fontFamily="var(--font-mono)"
-      fontWeight={700}
+      fill="var(--acm-text-secondary)"
+      fontSize={CHART_LABEL_FONT_SIZE}
+      fontFamily={CHART_FONT_MONO}
     >
       {fmtBps(numeric)}
     </text>
@@ -852,23 +841,23 @@ function CurveTooltip({ active, payload, label }: any) {
   const row = payload[0]?.payload as CurveRow | undefined
   if (!row) return null
   return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipTitle}>{label}</div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Latest</span>
-        <span className={styles.tooltipValue}>
+    <div className={styles.curveTip} style={tooltipSurfaceStyle}>
+      <div className={styles.curveTipTitle}>{label}</div>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Latest</span>
+        <span>
           {row.latestPrice != null ? row.latestPrice.toFixed(3) : '—'} | {row.latestRate != null ? `${fmtRate(row.latestRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Benchmark</span>
-        <span className={styles.tooltipValue}>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Benchmark</span>
+        <span>
           {row.benchmarkPrice != null ? row.benchmarkPrice.toFixed(3) : '—'} | {row.benchmarkRate != null ? `${fmtRate(row.benchmarkRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Delta</span>
-        <span className={styles.tooltipValue}>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Delta</span>
+        <span>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
       </div>
     </div>
   )
@@ -944,7 +933,7 @@ export function STIRDashboardPage() {
 
   // SR3 contract-history modal state
   const [modalContract, setModalContract] = useState<StripContract | null>(null)
-  const [modalContractColor, setModalContractColor] = useState<string>('#e5e7eb')
+  const [modalContractColor, setModalContractColor] = useState<string>(STIR_PACK_COLORS.Whites)
   const [modalMetric, setModalMetric] = useState<'rate' | 'price'>('rate')
   const [modalRange, setModalRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y')
   const [modalShowScenarios, setModalShowScenarios] = useState(true)
@@ -1036,7 +1025,6 @@ export function STIRDashboardPage() {
   const [clfGrowthRate, setClfGrowthRate] = useState(0.05)
   const [hoveredBox, setHoveredBox] = useState<'mtg' | 'term6m' | 'term12m' | null>(null)
   const [lookbackDaysInput, setLookbackDaysInput] = useState('1')
-  const [showMatrix, setShowMatrix] = useState(true)
 
   const productConfig = PRODUCT_CONFIG[product]
   const lookbackDays = Math.max(0, Number.parseInt(lookbackDaysInput, 10) || 0)
@@ -1216,6 +1204,28 @@ export function STIRDashboardPage() {
     })
   }, [fedwatch.meetings, fedwatch.currentEFFR, curve.currentCurve])
 
+  const summaryColumns = useMemo<AcmColumn<SummaryRow>[]>(() => {
+    const signTone = (v: number): SignTone | undefined => rateChangeTone(v)
+    // rates colour rule: a priced hike is a rate increase → negative; cut → positive
+    const summaryTone = (t: SummaryRow['tone']): SignTone | undefined => (t === 'cut' ? 'positive' : t === 'hike' ? 'negative' : undefined)
+    const cols: AcmColumn<SummaryRow>[] = [
+      { key: 'meeting', header: 'Meeting', kind: 'label', value: (r) => r.label },
+      { key: 'rate', header: <>Implied<br />Rate</>, kind: 'num', value: (r) => fmtRate(r.impliedRate) },
+      { key: 'step', header: <>Bps<br />(Step)</>, kind: 'num', value: (r) => fmtBps(r.stepBps), tone: (r) => signTone(r.stepBps) },
+      { key: 'total', header: <>Bps<br />(Total)</>, kind: 'num', value: (r) => fmtBps(r.totalBps), tone: (r) => signTone(r.totalBps) },
+      { key: 'movesStep', header: <>Implied # Cuts/Hikes<br />(Step)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.stepBps / 25), tone: (r) => signTone(r.stepBps) },
+    ]
+    // Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec
+    if (!(country === 'US' && product === 'fedfunds')) {
+      cols.push({ key: 'movesTotal', header: <>Implied # Cuts/Hikes<br />(Total)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.totalBps / 25), tone: (r) => signTone(r.totalBps) })
+    }
+    cols.push(
+      { key: 'sumStep', header: <>Summary<br />(Step)</>, kind: 'label', value: (r) => r.stepSummary, tone: (r) => summaryTone(r.tone) },
+      { key: 'sumTotal', header: <>Summary<br />(Total)</>, kind: 'label', value: (r) => r.totalSummary, tone: (r) => signTone(r.totalBps) },
+    )
+    return cols
+  }, [country, product])
+
   const overnightRow = useMemo<SummaryRow>(() => ({
     key: 'cash',
     label: 'Overnight Cash',
@@ -1260,16 +1270,25 @@ export function STIRDashboardPage() {
     return Array.from(groups.entries())
   }, [stripContracts])
 
-  const stripYears = useMemo(() => stripYearGroups.map(([year]) => year), [stripYearGroups])
-
   const stripPacks = useMemo(() => {
     return PACK_NAMES
       .map((name, idx) => ({
         name,
-        color: PACK_COLORS[name],
+        color: STIR_PACK_COLORS[name],
         contracts: stripContracts.slice(idx * 4, idx * 4 + 4),
       }))
       .filter((p) => p.contracts.length > 0)
+  }, [stripContracts])
+
+  // Per-column max |price change| — the heatmap normaliser (stripHeatClass).
+  const stripMaxAbs = useMemo(() => {
+    const maxAbs = { pxChg1d: 0, pxChg5d: 0, pxChg1m: 0 }
+    for (const contract of stripContracts) {
+      maxAbs.pxChg1d = Math.max(maxAbs.pxChg1d, Math.abs(contract.pxChg1d ?? 0))
+      maxAbs.pxChg5d = Math.max(maxAbs.pxChg5d, Math.abs(contract.pxChg5d ?? 0))
+      maxAbs.pxChg1m = Math.max(maxAbs.pxChg1m, Math.abs(contract.pxChg1m ?? 0))
+    }
+    return maxAbs
   }, [stripContracts])
 
   const spreadColumns = useMemo(() => {
@@ -1325,22 +1344,6 @@ export function STIRDashboardPage() {
     })
   }, [stripContracts, spreadCurve.lookbackCurve])
 
-  const stripMaxAbs = useMemo(() => {
-    const maxAbs = {
-      pxChg1d: 0,
-      pxChg5d: 0,
-      pxChg1m: 0,
-    }
-
-    for (const contract of stripContracts) {
-      maxAbs.pxChg1d = Math.max(maxAbs.pxChg1d, Math.abs(contract.pxChg1d ?? 0))
-      maxAbs.pxChg5d = Math.max(maxAbs.pxChg5d, Math.abs(contract.pxChg5d ?? 0))
-      maxAbs.pxChg1m = Math.max(maxAbs.pxChg1m, Math.abs(contract.pxChg1m ?? 0))
-    }
-
-    return maxAbs
-  }, [stripContracts])
-
   const stripSummary = useMemo(() => {
     const isStirPack = useStirStyling
 
@@ -1372,10 +1375,10 @@ export function STIRDashboardPage() {
         tone = 'neutral'
       } else if (nextMoveBps > 0) {
         value = 'CUT'
-        tone = 'green'
+        tone = 'positive'
       } else {
         value = 'HIKE'
-        tone = 'red'
+        tone = 'negative'
       }
       boxes.push({
         label: 'NEXT MOVE',
@@ -1390,27 +1393,28 @@ export function STIRDashboardPage() {
         label: 'TERMINAL',
         value: terminal ? `${fmtRate(terminal.impliedRate)}%` : '—',
         sub: terminal ? `${contractTicker(terminal.symbol)}  M+${monthsForward(terminal)}` : '—',
-        tone: 'teal',
+        tone: 'plain',
       },
       {
         label: isStirPack ? 'Terminal - OCR' : 'MTG>TERM',
         value: terminal ? fmtBpsValue((terminal.impliedRate - fedwatch.currentEFFR) * 100) : '—',
         sub: isStirPack ? '' : 'terminal vs overnight cash',
-        tone: !terminal ? 'neutral' : (terminal.impliedRate - fedwatch.currentEFFR) * 100 >= 0 ? 'green' : 'red',
+        tone: !terminal ? 'neutral'
+          : rateChangeTone((terminal.impliedRate - fedwatch.currentEFFR) * 100) ?? 'plain',
         hoverKey: 'mtg',
       },
       {
         label: isStirPack ? '+6m - Terminal' : 'TERM>+6M',
         value: terminal && contract6m ? fmtBpsValue((contract6m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract6m ? contractTicker(contract6m.symbol) : '—',
-        tone: 'gold',
+        tone: 'plain',
         hoverKey: 'term6m',
       },
       {
         label: isStirPack ? '+12m - Terminal' : 'TERM>+12M',
         value: terminal && contract12m ? fmtBpsValue((contract12m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract12m ? contractTicker(contract12m.symbol) : '—',
-        tone: 'gold',
+        tone: 'plain',
         hoverKey: 'term12m',
       },
     )
@@ -2695,7 +2699,7 @@ export function STIRDashboardPage() {
   }, [beSelection, breakevensData, beChartRange, beRegimeLookback])
 
   return (
-    <div className={styles.shell}>
+    <div className={`acm-root ${styles.shell}`}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
           <NavDropdown />
@@ -2711,21 +2715,7 @@ export function STIRDashboardPage() {
 
       <main className={styles.body}>
         {/* ═══ Asset Class Selector ═══ */}
-        <div className={styles.assetClassBar}>
-          {ASSET_CLASSES.map((ac, idx) => (
-            <button
-              key={ac.key}
-              className={`${styles.assetClassBtn} ${assetClass === ac.key ? styles.assetClassBtnActive : ''}`}
-              onClick={() => setAssetClass(ac.key)}
-              style={{
-                border: `1px solid ${assetClass === ac.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {ac.label}
-            </button>
-          ))}
-        </div>
+        <AcmNavTier tier="asset-class" label="Asset class" items={ASSET_CLASSES} value={assetClass} onChange={setAssetClass} />
 
         {/* ═══ Country Selector — visible for rates, equities, fx ═══ */}
         {(assetClass === 'rates' || assetClass === 'equities' || assetClass === 'fx') && (
@@ -2741,7 +2731,9 @@ export function STIRDashboardPage() {
         {/* ═══ Macro View ═══ */}
         {assetClass === 'macro' && (
           <>
-            <AssetSubRibbon
+            <AcmNavTier
+              tier="country"
+              label="Macro section"
               items={MACRO_SECTIONS}
               value={macroSection}
               onChange={setMacroSection}
@@ -2757,7 +2749,9 @@ export function STIRDashboardPage() {
         {assetClass === 'equities' && (
           country === 'US' ? (
             <>
-              <AssetSubRibbon
+              <AcmNavTier
+                tier="section"
+                label="Equity section"
                 items={EQUITY_SECTIONS}
                 value={equitySection}
                 onChange={setEquitySection}
@@ -2769,7 +2763,9 @@ export function STIRDashboardPage() {
             </>
           ) : country === 'Global' ? (
             <>
-              <AssetSubRibbon
+              <AcmNavTier
+                tier="section"
+                label="Global equity section"
                 items={GLOBAL_EQUITY_SECTIONS}
                 value={globalEquitySection}
                 onChange={setGlobalEquitySection}
@@ -2799,7 +2795,9 @@ export function STIRDashboardPage() {
         {/* ═══ Commodities View ═══ */}
         {assetClass === 'commodities' && (
           <>
-            <AssetSubRibbon
+            <AcmNavTier
+              tier="country"
+              label="Commodity category"
               items={COMMODITY_CATEGORIES}
               value={commodityCategory}
               onChange={setCommodityCategory}
@@ -2807,7 +2805,9 @@ export function STIRDashboardPage() {
             {commodityCategory === 'energy' ? (
               <>
                 <EnergyReturnsSection />
-                <AssetSubRibbon
+                <AcmNavTier
+                  tier="section"
+                  label="Energy product"
                   items={ENERGY_PRODUCTS}
                   value={energyProduct}
                   onChange={setEnergyProduct}
@@ -2830,33 +2830,15 @@ export function STIRDashboardPage() {
         {country === 'Global' && <GlobalRatesPage />}
 
         {country !== 'Global' && <>
-        <div className={styles.viewTabs}>
-          {viewTabs.map((tab, idx) => (
-            <button
-              key={tab.key}
-              className={`${styles.viewTab} ${activeView === tab.key ? styles.viewTabActive : ''}`}
-              onClick={() => setActiveView(tab.key)}
-              style={{
-                border: `1px solid ${activeView === tab.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <AcmNavTier tier="section" label="Section" items={viewTabs} value={activeView} onChange={setActiveView} />
 
         {(activeView === 'strips' || activeView === 'pricing') && country === 'US' && (
           <div className={styles.toggleGroup}>
-            {(Object.entries(PRODUCT_CONFIG) as [ProductKey, typeof PRODUCT_CONFIG[ProductKey]][]).map(([key, config], idx) => (
+            {(Object.entries(PRODUCT_CONFIG) as [ProductKey, typeof PRODUCT_CONFIG[ProductKey]][]).map(([key, config]) => (
               <button
                 key={key}
                 className={`${styles.toggleButton} ${product === key ? styles.toggleButtonActive : ''}`}
                 onClick={() => setProduct(key)}
-                style={{
-                  border: `1px solid ${product === key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
               >
                 {config.label}
               </button>
@@ -2876,7 +2858,7 @@ export function STIRDashboardPage() {
                   <>
                     {overnightLatest.value.toFixed(2)}%
                     {stale && (
-                      <span className={styles.curveNote} style={{ marginLeft: 8, display: 'inline-block' }}>
+                      <span className={`${styles.curveNote} ${styles.ffrBandNote}`}>
                         Last updated: {overnightLatest.date}
                       </span>
                     )}
@@ -2889,81 +2871,77 @@ export function STIRDashboardPage() {
         )}
         {activeView === 'pricing' && (
           <>
-            <div className={styles.ustYcHeader}>
+            <div className={styles.viewHead}>
               <div>
-                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>
+                <div className={styles.viewHeadTitle}>
                   {country}: {activeMarket.title}
                 </div>
-                <div className={styles.ustYcDates}>
+                <div className={styles.viewHeadDates}>
                   {'\u25CF'} LATEST: {curve.currentDate || '—'} &nbsp;&nbsp; {'\u25CF'} BENCHMARK: {curve.lookbackDate || '—'} ({headerTiming.days} DAYS, {headerTiming.weeks} WEEKS)
                 </div>
               </div>
-              <div className={styles.ustYcControls}>
-                <label className={styles.ustLookbackWrap}>
-                  <span className={styles.ustLookbackLabel}>t −</span>
+              <div className={styles.viewHeadControls}>
+                <label className={styles.tLookback}>
+                  <span>t −</span>
                   <input
-                    className={styles.laborInput}
+                    className={styles.tLookbackInput}
                     type="number"
                     min="0"
                     step="1"
                     value={lookbackDaysInput}
                     onChange={(e) => setLookbackDaysInput(e.target.value)}
-                    style={{ width: '40px' }}
                   />
                 </label>
               </div>
             </div>
 
             {error && (
-              <section className={styles.section}>
-                <div className={styles.error}>{error}</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateError}>{error}</div>
+              </AcmPanel>
             )}
 
             {!error && loading && (
-              <section className={styles.section}>
-                <div className={styles.loading}>Loading futures dashboard…</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>Loading futures dashboard…</div>
+              </AcmPanel>
             )}
 
             {!error && !loading && (
               <>
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
-                    <div className={styles.panelTitle}>
-                      {country}: {activeMarket.title}
-                    </div>
-                    {curve.trimmedStaleSymbols.length > 0 && (
-                      <div className={styles.curveNote}>
-                        Curve trimmed: dropped {curve.trimmedStaleSymbols.length}
-                        {' '}stale contract{curve.trimmedStaleSymbols.length === 1 ? '' : 's'}
-                        {' '}({curve.trimmedStaleSymbols.join(', ')})
-                        {curve.lastGoodContract && ` · last good contract = ${curve.lastGoodContract}`}
-                      </div>
-                    )}
-                    <ResponsiveContainer width="100%" height={320}>
+                {curve.trimmedStaleSymbols.length > 0 && (
+                  <div className={styles.curveNote}>
+                    Curve trimmed: dropped {curve.trimmedStaleSymbols.length}
+                    {' '}stale contract{curve.trimmedStaleSymbols.length === 1 ? '' : 's'}
+                    {' '}({curve.trimmedStaleSymbols.join(', ')})
+                    {curve.lastGoodContract && ` · last good contract = ${curve.lastGoodContract}`}
+                  </div>
+                )}
+                <AcmChartFrame
+                  title={`${country}: ${activeMarket.title}`}
+                  legend={[
+                    { label: 'Latest', color: CURVE_COMPARE_COLORS.forwardLatest },
+                    { label: 'Benchmark', color: CURVE_COMPARE_COLORS.benchmark, dashed: true },
+                  ]}
+                  height={320}
+                >
+                    <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="ticker" stroke="#728197" tick={false} tickLine={false} />
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="ticker" {...chartTheme.xAxis} tick={false} tickLine={false} />
                         <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickFormatter={(v: number) => `${v.toFixed(2)}%`}
                           domain={curveDomain}
                           allowDataOverflow
-                          label={{
-                            value: '%',
-                            position: 'top',
-                            offset: 10,
-                            style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
-                          }}
+                          label={{ ...chartTheme.axisLabel, value: '%', position: 'top', offset: 10 }}
                         />
-                        <Tooltip content={<CurveTooltip />} />
+                        <Tooltip content={<CurveTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
                         <Line
                           type="monotone"
                           dataKey="latestRate"
                           name="Latest"
-                          stroke="#2196F3"
+                          stroke={CURVE_COMPARE_COLORS.forwardLatest}
                           strokeWidth={2.5}
                           dot={{ r: 3 }}
                           connectNulls
@@ -2972,7 +2950,7 @@ export function STIRDashboardPage() {
                           type="monotone"
                           dataKey="benchmarkRate"
                           name="Benchmark"
-                          stroke="#888888"
+                          stroke={CURVE_COMPARE_COLORS.benchmark}
                           strokeWidth={2}
                           strokeDasharray="4 4"
                           dot={{ r: 2.5 }}
@@ -2980,98 +2958,61 @@ export function STIRDashboardPage() {
                         />
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
+                </AcmChartFrame>
 
-                  <div className={styles.chartPanel}>
-                    <ResponsiveContainer width="100%" height={220}>
+                <AcmChartFrame
+                  title="Change vs benchmark (bps)"
+                  legend={[
+                    { label: 'Rate up', color: signColor('acm-negative') },
+                    { label: 'Rate down', color: signColor('acm-positive') },
+                  ]}
+                  height={220}
+                >
+                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
+                        <CartesianGrid {...chartTheme.grid} vertical={false} />
                         <XAxis
                           dataKey="ticker"
-                          stroke="#728197"
-                          tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.xAxis}
                           angle={-45}
                           textAnchor="end"
                           height={70}
                           dy={10}
                         />
                         <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                          label={{
-                            value: 'bps',
-                            position: 'top',
-                            offset: 10,
-                            style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
-                          }}
+                          label={{ ...chartTheme.axisLabel, value: 'bps', position: 'top', offset: 10 }}
                         />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                        <Bar dataKey="deltaBps" radius={[2, 2, 0, 0]}>
+                        <ReferenceLine y={0} {...referenceLines.zero} />
+                        <Bar dataKey="deltaBps" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                           {curveData.map((row) => (
-                            <Cell key={row.ticker} fill={(row.deltaBps ?? 0) >= 0 ? '#4EC9B0' : '#EF5350'} />
+                            <Cell
+                              key={row.ticker}
+                              fill={(row.deltaBps ?? 0) > 0 ? signColor('acm-negative') : (row.deltaBps ?? 0) < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'}
+                            />
                           ))}
                           <LabelList content={renderDeltaLabel} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
-                </section>
+                </AcmChartFrame>
 
-                <section className={styles.section}>
-                  <div className={styles.sectionHeader}>
-                    <div className={styles.sectionTitle}>Summary Table</div>
-                  </div>
-                  <div className={styles.tableWrap}>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          <th>Meeting</th>
-                          <th>Implied<br/>Rate</th>
-                          <th>Bps<br/>(Step)</th>
-                          <th>Bps<br/>(Total)</th>
-                          <th>Implied # Cuts/Hikes<br/>(Step)</th>
-                          {/* Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec */}
-                          {!(country === 'US' && product === 'fedfunds') && (
-                            <th>Implied # Cuts/Hikes<br/>(Total)</th>
-                          )}
-                          <th>Summary<br/>(Step)</th>
-                          <th>Summary<br/>(Total)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[overnightRow, ...summaryRows].map((row) => (
-                          <tr key={row.key}>
-                            <td>{row.label}</td>
-                            <td className={styles.mono}>{fmtRate(row.impliedRate)}</td>
-                            <td className={`${styles.mono} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.stepBps)}</td>
-                            <td className={`${styles.mono} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.totalBps)}</td>
-                            <td className={`${styles.mono} ${styles.cellCenter} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.stepBps / 25)}</td>
-                            {!(country === 'US' && product === 'fedfunds') && (
-                              <td className={`${styles.mono} ${styles.cellCenter} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.totalBps / 25)}</td>
-                            )}
-                            <td><span className={`${styles.badge} ${styles[row.tone]}`}>{row.stepSummary}</span></td>
-                            <td><span className={`${styles.badge} ${styles[row.totalBps < 0 ? 'cut' : row.totalBps > 0 ? 'hike' : 'flat']}`}>{row.totalSummary}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <AcmPanel title="Summary Table">
+                  <AcmDataTable<SummaryRow>
+                    rowKey={(row) => row.key}
+                    rows={[overnightRow, ...summaryRows]}
+                    columns={summaryColumns}
+                  />
+                </AcmPanel>
 
                 {country === 'US' && product === 'fedfunds' && fedwatch.rangeColumns.length > 0 && (
-                  <section className={styles.section}>
-                    <button className={styles.matrixToggle} onClick={() => setShowMatrix((v) => !v)}>
-                      {showMatrix ? '▼' : '▶'} Detailed Probability Matrix
-                    </button>
-                    {showMatrix && (
+                  <AcmCollapsible title="Detailed Probability Matrix" defaultOpen>
                       <div className={styles.matrixSubtitle}>
                         {Math.abs(fedwatch.proxyToPolicySpread) > 1e-9 && fedwatch.proxyToPolicySpreadSource
                           ? fedwatch.proxyToPolicySpreadSource
                           : `as of ${fedwatch.asOfDate || '—'}`}
                       </div>
-                    )}
-                    {showMatrix && (
                       <div className={styles.matrixWrap}>
                         <table className={styles.matrixTable}>
                           <thead>
@@ -3102,8 +3043,7 @@ export function STIRDashboardPage() {
                           </tbody>
                         </table>
                       </div>
-                    )}
-                  </section>
+                  </AcmCollapsible>
                 )}
               </>
             )}
@@ -3113,45 +3053,48 @@ export function STIRDashboardPage() {
         {activeView === 'strips' && (
           <>
             {stripError && (
-              <section className={styles.section}>
-                <div className={styles.error}>{stripError}</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateError}>{stripError}</div>
+              </AcmPanel>
             )}
 
             {!stripError && stripLoading && (
-              <section className={styles.section}>
-                <div className={styles.loading}>Loading strip monitor…</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>Loading strip monitor…</div>
+              </AcmPanel>
             )}
 
             {!stripError && !stripLoading && stripContracts.length === 0 && (
-              <section className={styles.section}>
-                <div className={styles.loading}>No strip data available</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>No strip data available</div>
+              </AcmPanel>
             )}
 
             {!stripError && !stripLoading && stripContracts.length > 0 && (
               <>
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
+                <AcmPanel>
                     <div className={styles.summaryRow}>
                       {stripSummary.boxes.map((box) => (
                         <div
                           key={box.label}
-                          className={styles.summaryBox}
+                          className={`${styles.summaryBox} ${box.hoverKey ? styles.summaryBoxHover : ''}`}
                           onMouseEnter={box.hoverKey ? () => setHoveredBox(box.hoverKey ?? null) : undefined}
                           onMouseLeave={box.hoverKey ? () => setHoveredBox(null) : undefined}
-                          style={box.hoverKey ? { position: 'relative', cursor: 'pointer' } : undefined}
                         >
                           <div className={styles.summaryBoxLabel}>{box.label}</div>
-                          <div className={box.label === 'NEXT MOVE' ? styles.nextMoveValue : styles.summaryBoxValue} style={summaryToneStyle(box.tone)}>{box.value}</div>
+                          <div className={`${box.label === 'NEXT MOVE' ? styles.nextMoveValue : styles.summaryBoxValue} ${summaryToneClass(box.tone) ?? ''}`}>{box.value}</div>
                           {box.sub ? <div className={styles.summaryBoxSub}>{box.sub}</div> : null}
                           {box.hoverKey === hoveredBox && (
-                            <div className={styles.spreadPopup}>
-                              <div className={styles.spreadPopupTitle}>
-                                {box.label} Spread History (60d)
-                              </div>
-                              <ResponsiveContainer width="100%" height={150}>
+                            <AcmChartFrame
+                              className={styles.spreadPopup}
+                              title={`${box.label} Spread History (60d)`}
+                              subtitle={(box.hoverKey === 'mtg' && terminalHistory.loading)
+                                || (box.hoverKey === 'term6m' && (terminalHistory.loading || plus6mHistory.loading))
+                                || (box.hoverKey === 'term12m' && (terminalHistory.loading || plus12mHistory.loading))
+                                ? 'Loading history…' : undefined}
+                              height={150}
+                            >
+                              <ResponsiveContainer width="100%" height="100%">
                                 <LineChart
                                   data={
                                     box.hoverKey === 'mtg'
@@ -3162,46 +3105,34 @@ export function STIRDashboardPage() {
                                   }
                                   margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
                                 >
-                                  <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                                  <CartesianGrid {...chartTheme.grid} />
                                   <XAxis
                                     dataKey="date"
-                                    tick={{ fontSize: 9, fill: '#728197', fontFamily: 'var(--font-mono)' }}
+                                    {...chartTheme.xAxis}
                                     tickFormatter={(value: string) => fmtShortMonthYear(value)}
                                     minTickGap={18}
                                   />
                                   <YAxis
-                                    tick={{ fontSize: 9, fill: '#728197', fontFamily: 'var(--font-mono)' }}
+                                    {...chartTheme.yAxis}
                                     tickFormatter={(value: number) => `${value.toFixed(1)}bp`}
-                                    width={42}
                                   />
                                   <Tooltip
-                                    contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                                    labelStyle={{ color: '#94A3B8' }}
+                                    {...chartTheme.tooltip}
                                     formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
                                     labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
                                   />
-                                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                                  <Line type="monotone" dataKey="spread" stroke="#FFD700" strokeWidth={1.5} dot={false} />
+                                  <ReferenceLine y={0} {...referenceLines.zero} />
+                                  <Line type="monotone" dataKey="spread" stroke={SUMMARY_POPUP_LINE} strokeWidth={1.5} dot={false} />
                                 </LineChart>
                               </ResponsiveContainer>
-                              {(box.hoverKey === 'mtg' && terminalHistory.loading)
-                                || (box.hoverKey === 'term6m' && (terminalHistory.loading || plus6mHistory.loading))
-                                || (box.hoverKey === 'term12m' && (terminalHistory.loading || plus12mHistory.loading)) ? (
-                                <div className={styles.summaryBoxSub}>Loading history…</div>
-                              ) : null}
-                            </div>
+                            </AcmChartFrame>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                </section>
+                </AcmPanel>
 
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
-                    <div className={styles.stripHeader}>
-                      {activeMarket.root} STRIP {stripContracts.length} contracts
-                    </div>
+                <AcmPanel title={`${activeMarket.root} STRIP ${stripContracts.length} contracts`}>
                     <div className={styles.tableWrap}>
                       <table className={styles.stripTable}>
                         <thead>
@@ -3229,13 +3160,13 @@ export function STIRDashboardPage() {
                           {useStirStyling ? (
                             stripPacks.map((pack) => (
                               <Fragment key={pack.name}>
-                                <tr className={styles.packHeaderRow} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                <tr className={styles.packHeaderRow} style={{ background: STIR_PACK_BACKGROUNDS[pack.name] }}>
                                   <td colSpan={7} className={styles.packHeaderCell} style={{ color: pack.color }}>
                                     {pack.name}
                                   </td>
                                 </tr>
                                 {pack.contracts.map((contract) => (
-                                  <tr key={contract.symbol} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                  <tr key={contract.symbol} style={{ background: STIR_PACK_BACKGROUNDS[pack.name] }}>
                                     <td
                                       style={{ color: pack.color }}
                                       className={styles.contractClickable}
@@ -3246,16 +3177,15 @@ export function STIRDashboardPage() {
                                         setModalRange('1Y')
                                       }}
                                     >{contractTicker(contract.symbol)}</td>
-                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td className={styles.stripPrimary}>{contract.lastPrice.toFixed(3)}</td>
                                     <td style={{ color: pack.color }}>{contract.impliedRate.toFixed(3)}</td>
                                     {(() => {
                                       const ocrBps = (contract.impliedRate - fedwatch.currentEFFR) * 100
-                                      const cls = ocrBps > 0 ? styles.ocrPositive : ocrBps < 0 ? styles.ocrNegative : ''
-                                      return <td className={cls}>{fmtBpsNumber(ocrBps)}</td>
+                                      return <td className={`${styles.stripStrong} ${rateChangeClass(ocrBps) ?? ''}`}>{fmtBpsNumber(ocrBps)}</td>
                                     })()}
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtBpsFromPrice(contract.pxChg1d)}</td>
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtBpsFromPrice(contract.pxChg5d)}</td>
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtBpsFromPrice(contract.pxChg1m)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg1d, stripMaxAbs.pxChg1d) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg1d)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg5d, stripMaxAbs.pxChg5d) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg5d)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg1m, stripMaxAbs.pxChg1m) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg1m)}</td>
                                   </tr>
                                 ))}
                               </Fragment>
@@ -3263,20 +3193,20 @@ export function STIRDashboardPage() {
                           ) : (
                             stripYearGroups.map(([year, contracts]) => (
                               <Fragment key={year}>
-                                <tr className={styles.yearRow} style={{ background: getYearBandColor(year, stripYears) }}>
+                                <tr className={styles.yearRow} style={{ background: ffYearBandColor(year) }}>
                                   <td colSpan={6} className={styles.yearRowLabel}>{year}</td>
                                 </tr>
                                 {contracts.map((contract) => (
                                   <tr
                                     key={contract.symbol}
-                                    style={{ background: getYearBandColor(contract.year, stripYears) }}
+                                    style={{ background: ffYearBandColor(contract.year) }}
                                   >
                                     <td>{contractTicker(contract.symbol)}</td>
-                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td className={styles.stripPrimary}>{contract.lastPrice.toFixed(3)}</td>
                                     <td>{contract.impliedRate.toFixed(3)}</td>
-                                    <td style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
-                                    <td style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
-                                    <td style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
                                   </tr>
                                 ))}
                               </Fragment>
@@ -3285,8 +3215,7 @@ export function STIRDashboardPage() {
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                </section>
+                </AcmPanel>
 
               </>
             )}
@@ -5229,10 +5158,10 @@ export function STIRDashboardPage() {
           )}
         </div>
         {activeView === 'strips' && useStirStyling && stripContracts.length > 0 && (
-          <section className={styles.spreadsDashboardFullWidth}>
-            <div className={styles.spreadsDashboardHeader}>
-              <div className={styles.spreadsHeader}>{activeMarket.root} CALENDAR SPREADS</div>
-              <div className={styles.spreadLookbackControl}>
+          <section className={styles.calSpreads}>
+            <div className={styles.calSpreadsHeader}>
+              <div className={styles.calSpreadsTitle}>{activeMarket.root} CALENDAR SPREADS</div>
+              <div className={styles.calLookback}>
                 <label htmlFor="spreadLookback">t −</label>
                 <input
                   id="spreadLookback"
@@ -5241,61 +5170,58 @@ export function STIRDashboardPage() {
                   max="252"
                   value={spreadLookbackDays}
                   onChange={(e) => setSpreadLookbackDays(Math.max(0, parseInt(e.target.value) || 0))}
-                  className={styles.spreadLookbackInput}
+                  className={styles.calLookbackInput}
                 />
               </div>
             </div>
-            <div className={styles.spreadsDateLabels}>
+            <div className={styles.calDateLabels}>
               <span>{'●'} LATEST: {spreadCurve.currentDate || '—'}</span>
               {spreadLookbackDays > 0 && spreadCurve.lookbackDate && (
-                <span style={{ marginLeft: 16 }}>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
+                <span>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
               )}
             </div>
             <div
-              className={styles.spreadsGrid}
+              className={styles.calGrid}
               style={{ gridTemplateColumns: `repeat(${Math.max(1, spreadColumns.filter((c) => c.data.length > 0).length)}, 1fr)` }}
             >
               {spreadColumns.filter((c) => c.data.length > 0).map((col) => (
-                <div key={col.stride} className={styles.spreadColumn}>
-                  <div className={styles.spreadColumnTitle}>{col.stride}m Spreads</div>
-                  <div className={styles.spreadChartContainer}>
+                <div key={col.stride} className={styles.calColumn}>
+                  <AcmChartFrame title={`${col.stride}m Spreads`} height={500} className={styles.calFrame}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={col.data} margin={{ top: 12, right: 12, left: 8, bottom: 50 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <CartesianGrid {...chartTheme.grid} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 10, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.xAxis}
                           tickMargin={8}
                           angle={-30}
                           textAnchor="end"
                           height={50}
                           interval={0}
-                          stroke="#728197"
                         />
                         <YAxis
-                          tick={{ fontSize: 11, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickMargin={6}
                           tickFormatter={(v: number) => v.toFixed(1)}
-                          label={{ value: 'bps', angle: -90, position: 'insideLeft', fill: '#cbd5e1', fontSize: 10 }}
+                          label={{ ...chartTheme.axisLabel, value: 'bps', angle: -90, position: 'insideLeft' }}
                           domain={['auto', 'auto']}
-                          stroke="#728197"
                         />
-                        <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                        <ReferenceLine y={0} {...referenceLines.zero} />
                         <Tooltip
-                          contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                          {...chartTheme.tooltip}
                           formatter={(v: number | undefined, name: string | undefined) => [
                             v == null ? '—' : `${v.toFixed(2)}bp`,
                             name === 'lookbackBps' ? `t − ${spreadLookbackDays}` : 'Current',
                           ]}
                         />
-                        <Line type="linear" dataKey="spreadBps" stroke="#22d3ee" strokeWidth={1.5} dot={{ r: 3, fill: '#22d3ee' }} isAnimationActive={false} name="Current" />
+                        <Line type="linear" dataKey="spreadBps" stroke={CALENDAR_SPREAD_COLORS.current} strokeWidth={1.5} dot={{ r: 3, fill: CALENDAR_SPREAD_COLORS.current }} isAnimationActive={false} name="Current" />
                         {spreadLookbackDays > 0 && (
-                          <Line type="linear" dataKey="lookbackBps" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2, fill: '#94a3b8' }} isAnimationActive={false} connectNulls={false} name={`t − ${spreadLookbackDays}`} />
+                          <Line type="linear" dataKey="lookbackBps" stroke={CALENDAR_SPREAD_COLORS.lookback} strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2, fill: CALENDAR_SPREAD_COLORS.lookback }} isAnimationActive={false} connectNulls={false} name={`t − ${spreadLookbackDays}`} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
-                  <table className={styles.spreadTable}>
+                  </AcmChartFrame>
+                  <table className={styles.calTable}>
                     <thead>
                       <tr>
                         <th>Spread</th>
@@ -5307,9 +5233,9 @@ export function STIRDashboardPage() {
                     </thead>
                     <tbody>
                       {col.data.map((s) => {
-                        const valClass = s.spreadBps > 0 ? styles.ocrPositive : s.spreadBps < 0 ? styles.ocrNegative : ''
-                        const chClass = (v: number | null) =>
-                          v == null ? '' : v > 0 ? styles.changeNegative : v < 0 ? styles.changePositive : ''
+                        // Rates colour rule: spread or spread Δ up = negative (red), down = positive.
+                        const valClass = rateChangeClass(s.spreadBps) ?? ''
+                        const chClass = (v: number | null) => rateChangeClass(v) ?? ''
                         const fmt = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
                         return (
                           <tr key={s.label}>
@@ -5317,10 +5243,10 @@ export function STIRDashboardPage() {
                               className={styles.spreadLabelClickable}
                               onClick={() => setOpenSpread({ label: s.label, frontSymbol: s.frontSymbol, backSymbol: s.backSymbol })}
                             >{s.label}</td>
-                            <td className={valClass}>{fmt(s.spreadBps)}</td>
-                            <td className={chClass(s.change1d)}>{fmt(s.change1d)}</td>
-                            <td className={chClass(s.change5d)}>{fmt(s.change5d)}</td>
-                            <td className={chClass(s.change1m)}>{fmt(s.change1m)}</td>
+                            <td className={`${styles.stripStrong} ${valClass}`}>{fmt(s.spreadBps)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change1d)}`}>{fmt(s.change1d)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change5d)}`}>{fmt(s.change5d)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change1m)}`}>{fmt(s.change1m)}</td>
                           </tr>
                         )
                       })}
@@ -5338,20 +5264,20 @@ export function STIRDashboardPage() {
         <div className={styles.modalBackdrop} onClick={() => setOpenSpread(null)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <button className={styles.modalClose} onClick={() => setOpenSpread(null)} aria-label="Close">×</button>
-            <h2 className={styles.modalTitle} style={{ color: '#22d3ee' }}>{openSpread.label}</h2>
+            <h2 className={styles.modalTitle} style={{ color: CALENDAR_SPREAD_COLORS.current }}>{openSpread.label}</h2>
             <p className={styles.modalSubtitle}>{activeMarket.title} · {openSpread.frontSymbol} − {openSpread.backSymbol}</p>
             <div className={styles.modalChartContainer}>
               {(spreadFrontHistory.loading || spreadBackHistory.loading) ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+                <div className={styles.modalState}>Loading…</div>
               ) : spreadModalChartData.length === 0 ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+                <div className={styles.modalState}>No history available</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={spreadModalChartData} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <CartesianGrid {...chartTheme.grid} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.xAxis}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
                         return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
@@ -5359,26 +5285,23 @@ export function STIRDashboardPage() {
                       interval="preserveStartEnd"
                       minTickGap={60}
                       tickMargin={8}
-                      stroke="#728197"
                     />
                     <YAxis
-                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.yAxis}
                       tickFormatter={(v: number) => `${v.toFixed(1)}bp`}
                       tickMargin={6}
                       domain={['auto', 'auto']}
-                      stroke="#728197"
                     />
-                    <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceLine y={0} {...referenceLines.zero} />
                     <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      {...chartTheme.tooltip}
                       formatter={(v: number | undefined) => v == null ? '' : `${v.toFixed(2)}bp`}
                     />
-                    <Line type="monotone" dataKey="spread" stroke="#22d3ee" strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="spread" stroke={CALENDAR_SPREAD_COLORS.current} strokeWidth={1.8} dot={false} isAnimationActive={false} />
                     <Brush
                       dataKey="date"
+                      {...chartTheme.brush}
                       height={28}
-                      stroke="#60a5fa"
-                      fill="#0d1520"
                       travellerWidth={10}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
@@ -5409,39 +5332,37 @@ export function STIRDashboardPage() {
                 <button className={modalMetric === 'price' ? styles.activeToggle : ''} onClick={() => setModalMetric('price')}>PRICE</button>
               </div>
               <div className={styles.modalToggleGroup}>
-                <button className={modalShowScenarios ? styles.activeToggleGreen : ''} onClick={() => setModalShowScenarios((v) => !v)}>
+                <button className={modalShowScenarios ? styles.activeToggle : ''} onClick={() => setModalShowScenarios((v) => !v)}>
                   CB LEVELS: {modalShowScenarios ? 'ON' : 'OFF'}
                 </button>
               </div>
             </div>
             <div className={styles.modalChartContainer}>
               {modalHistory.loading ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+                <div className={styles.modalState}>Loading…</div>
               ) : modalChartData.length === 0 ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+                <div className={styles.modalState}>No history available</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={modalChartData} margin={{ top: 12, right: 110, left: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <CartesianGrid {...chartTheme.grid} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.xAxis}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
                         return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
                       }}
                       interval="preserveStartEnd"
                       minTickGap={60}
-                      stroke="#728197"
                     />
                     <YAxis
-                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.yAxis}
                       tickFormatter={(v: number) => modalMetric === 'rate' ? `${v.toFixed(2)}%` : v.toFixed(2)}
                       domain={modalYDomain}
-                      stroke="#728197"
                     />
                     <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      {...chartTheme.tooltip}
                       formatter={(v: number | undefined) => v == null ? '' : modalMetric === 'rate' ? `${v.toFixed(3)}%` : v.toFixed(3)}
                     />
                     {modalShowScenarios && fedwatch.currentEFFR > 0 && SCENARIO_BPS.map((changeBps) => {
@@ -5453,15 +5374,14 @@ export function STIRDashboardPage() {
                         <ReferenceLine
                           key={changeBps}
                           y={yValue}
-                          stroke={isCurrent ? '#94a3b8' : '#a855f7'}
+                          stroke={isCurrent ? CB_SCENARIO_COLORS.current : CB_SCENARIO_COLORS.levels}
                           strokeDasharray={isCurrent ? '4 4' : undefined}
                           strokeWidth={1}
                           label={{
                             value: labelText,
                             position: 'right',
-                            fill: isCurrent ? '#94a3b8' : '#a855f7',
-                            fontSize: 11,
-                            fontFamily: 'var(--font-mono)',
+                            ...referenceLabelStyle,
+                            fill: isCurrent ? CB_SCENARIO_COLORS.current : CB_SCENARIO_COLORS.levels,
                           }}
                         />
                       )
@@ -5469,9 +5389,8 @@ export function STIRDashboardPage() {
                     <Line type="monotone" dataKey="value" stroke={modalContractColor} strokeWidth={1.8} dot={false} isAnimationActive={false} />
                     <Brush
                       dataKey="date"
+                      {...chartTheme.brush}
                       height={28}
-                      stroke="#60a5fa"
-                      fill="#0d1520"
                       travellerWidth={10}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)

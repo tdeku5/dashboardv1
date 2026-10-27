@@ -10,9 +10,25 @@ The prompts win on any conflict; this file is the quick reference while building
 3. **Named heatmap components** (the only background-fill sign colours):
    - the `cellColor` grid (direction scale `--acm-heat-dir-*`): `GlobalRatesPage`, `CountryCurvePage`, `STIRDashboardPage` ×2
    - `ReturnsHeatmap` (valence scale `--acm-heat-positive-*` / `--acm-heat-negative-*`)
+   - the STIR strip move cells (valence scale; `STIRDashboardPage` `stripHeatClass`, CSS `.stripHeat*`): the implied-rate Δ columns (added at the R2a approval) and the FF table's price-change cells (added at the R2b approval). Price down / rate up → `--acm-heat-negative-*`, price up / rate down → `--acm-heat-positive-*`. Steps by |Δ| ÷ the column's max |Δ|: (0, 25%] → 1, (25, 50%] → 2, (50, 75%] → 3, (75, 100%] → 4; zero / null → no fill, muted text. Each fill sits on an opaque `--acm-surface-panel` base so pack tints and FF year bands never stack under it.
+   - Under the rates colour rule (6), the `cellColor` grid moves from the direction to the **valence** heat scale (increase → negative). The lib converts when its first page (STIR UST CURVE, R2d) converts.
    - Heatmap cells never carry an alert treatment; cell text is always `--acm-text-primary`.
+   - Enforced by `client/src/pages/assetClassModels.heatmaps.test.ts` (only these components may reference `--acm-heat-*`, each on its own scale).
 4. **Identity colours** come from `client/src/constants/identityColors.ts` only. Sign/state colours come from `acm-tokens.css` only. The two never share a value (tested).
 5. **Token names** carry the `--acm-` prefix; wherever a prompt says `--negative`, `--dir-up`, … read `--acm-negative`, `--acm-dir-up`, ….
+6. **The rates colour rule (R2b approval; replaces the R2a strip exception and supersedes Decision 2 for rates).** Any change in a **yield, rate or spread** uses the **valence** family in the bond-price view:
+   - yield / rate / spread **up** → `--acm-negative` (red); **down** → `--acm-positive` (green);
+   - futures **price up** (rate down) → `--acm-positive`; **price down** (rate up) → `--acm-negative`;
+   - **hike → red, cut → green** everywhere (a priced hike is a rate increase): NEXT MOVE, FORWARD PRICING summary, badges;
+   - heatmaps showing these use the valence heat scale with the same orientation (`--acm-heat-negative-*` for increases).
+   - **Covers:** STIR strip moves, calendar spreads and their Δ, Terminal−OCR and ±OCR, FORWARD PRICING Δ bars and summary bps / implied-move cells, every yield and rate Δ on UST CURVE, YIELD ATTRIBUTION, MONEY MARKETS, POLICY RATE, country curve and term-structure pages, GLOBAL rates, GlobalForwardCurves and DailyChangeModal, credit spreads (widening → red), curve spreads such as 2s10s (spread up → red), and the `cellColor` grid.
+   - **Orientation note — intended, do not "fix":** in rates displays red means *up*; in returns displays (equities, FX, commodities) red means *down*. Rates follow the bond-price view. Neither should be "corrected" to match the other.
+   - **Not covered:** returns (equities, FX, commodities) stay valence with up = green; unsigned extremeness flags (e.g. the VOL stat tile's z-score) stay on alert tints. Anything where it is unclear whether a value is a yield or spread change is reported to the user, not decided.
+   - **Exceptions (recovery approval; the user's decisions):**
+     - (a) the **US Rates VOL implied-vol premium (MOVE − RMOVE)** stays on **direction** (`--acm-dir-up` orange / `--acm-dir-down` blue) — a spread between volatilities, not yields.
+     - (b) the **`cellColor` grid** keeps a **red / blue** gradient: increase → `--acm-heat-negative-*`, decrease → `--acm-heat-dir-down-*`. Same 4 steps per side, no-fill neutral, primary text and opaque panel base as the other heatmaps. This applies to the GLOBAL z-score grid too: signed z-scores of rate changes are a heatmap of change, not an alert flag. **Timing:** the grid keeps its current rgba shading until its pages convert — R2d (STIR UST CURVE) and R5 (country curve pages, GLOBAL) — and moves to these tokens then. This supersedes rule 3's note that the grid moves to the valence scale.
+   - **Direction family:** the `--acm-dir-*` tokens and the direction heat scale stay defined and in use: `--acm-dir-*` by the VOL premium, `--acm-heat-dir-down-*` by the `cellColor` grid from R2d. Removal is not on the table at Z.
+   - Pinned by `client/src/pages/STIRDashboardPage.stripTones.test.tsx` (STIR STRIPS + FORWARD PRICING) and `client/src/pages/assetClassModels.ratesColour.test.ts` (no direction token anywhere in the rates area except the two named exceptions; the `cellColor` allowance is a pending case until R2d).
 
 ## Component-level root rule (Turn 2 approval)
 

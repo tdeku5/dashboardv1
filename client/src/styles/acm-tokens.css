@@ -90,12 +90,18 @@
    * heatmap components, which use --acm-heat-* fills (see below).
    * Alert colours a background tint / badge / outline — never value text.
    * Status colours notes and banners — never data cells.
+   * Rates colour rule (R2b approval): a yield / rate / spread change is
+   * VALENCE in the bond-price view — up = --acm-negative, down = --acm-positive
+   * (hike red, cut green). Returns keep up = --acm-positive.
+   * Two exceptions: the VOL implied-vol premium stays on direction
+   * (--acm-dir-up / --acm-dir-down), and the cellColor grid is red / blue
+   * (increase --acm-heat-negative-*, decrease --acm-heat-dir-down-*) from R2d.
    */
   --acm-positive:  #4CC38A;         /* valence: up is good (returns, P&L) */
   --acm-negative:  #E16D6D;         /* valence: down is bad. Seed #E06C6C (--hp-negative)
                                        is 4.499:1 on overlay; one +1/channel step → 4.553 */
-  --acm-dir-up:    #F0954A;         /* direction: yield/rate/spread up, hike */
-  --acm-dir-down:  #7CC4F2;         /* direction: yield/rate/spread down, cut */
+  --acm-dir-up:    #F0954A;         /* direction: neither good nor bad. Rates use valence */
+  --acm-dir-down:  #7CC4F2;         /* (R2b rule); users: VOL premium; dir-down heat → cellColor (R2d) */
   --acm-alert-mild:   #E8C547;      /* |z| > 2, IV rank/pctile intensity */
   --acm-alert-strong: #F05BA0;      /* |z| > 3, scarcity breach */
   --acm-status-warning: #E8C547;    /* stale / data-quality notes */
@@ -108,9 +114,15 @@
   --acm-status-warning-tint: color-mix(in srgb, var(--acm-status-warning) 8%, transparent);
 
   /* ── Heatmap fills — the one exception to "sign colours text only" ────────
-   * Used ONLY by the named heatmap grids: the cellColor grid (direction) and
-   * ReturnsHeatmap (valence). No other component fills backgrounds with sign
-   * colours, and heatmap cells never also carry an alert treatment.
+   * Used ONLY by the named heatmap grids: ReturnsHeatmap and the STIR strip
+   * move cells (implied-rate Δ columns + FF price-change cells) on the
+   * VALENCE scale, and the cellColor grid on red / blue. Rates colour rule
+   * (R2b approval): a yield / rate / spread increase is --acm-heat-negative-*,
+   * a decrease --acm-heat-positive-* (bond-price view; returns keep up =
+   * positive) — EXCEPT the cellColor grid, whose decrease side is
+   * --acm-heat-dir-down-* (red / blue; converts at R2d / R5).
+   * No other component fills backgrounds with sign colours, and heatmap
+   * cells never also carry an alert treatment.
    * Neutral (zero) = no fill: the surface shows through.
    * Step 4 = the largest whole % at which primary text clears 4.5:1 over BOTH
    * sides on bg + panel (same cap both sides so equal magnitudes read equal);
