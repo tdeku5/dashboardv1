@@ -68,14 +68,30 @@ function isKnownTvExport(filename: string): boolean {
 
 // ── Prepared statements ──────────────────────────────────────────────────────
 
+// True upserts (never delete-and-reinsert): same conflict keys and stored
+// values as the former INSERT OR REPLACE, plus captured_at, which a later
+// download refreshes along with the values.
 const upsertStmt = db.prepare(`
-  INSERT OR REPLACE INTO tv_ohlcv (symbol, timeframe, time, open, high, low, close, volume, ingested_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+  INSERT INTO tv_ohlcv (symbol, timeframe, time, open, high, low, close, volume, ingested_at, captured_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+  ON CONFLICT(symbol, timeframe, time) DO UPDATE SET
+    open        = excluded.open,
+    high        = excluded.high,
+    low         = excluded.low,
+    close       = excluded.close,
+    volume      = excluded.volume,
+    ingested_at = excluded.ingested_at,
+    captured_at = excluded.captured_at
 `)
 
 const upsertSeriesStmt = db.prepare(`
-  INSERT OR REPLACE INTO tv_series (symbol, time, close, source_file, ingested_at)
-  VALUES (?, ?, ?, ?, datetime('now'))
+  INSERT INTO tv_series (symbol, time, close, source_file, ingested_at, captured_at)
+  VALUES (?, ?, ?, ?, datetime('now'), ?)
+  ON CONFLICT(symbol, time) DO UPDATE SET
+    close       = excluded.close,
+    source_file = excluded.source_file,
+    ingested_at = excluded.ingested_at,
+    captured_at = excluded.captured_at
 `)
 
 const logStmt = db.prepare(`
@@ -179,18 +195,18 @@ function parseCsv(content: string, symbol: string, timeframe: string): ParseResu
 
 // ── Upsert ───────────────────────────────────────────────────────────────────
 
-function upsertRows(rows: OhlcvRow[]): void {
+function upsertRows(rows: OhlcvRow[], capturedAt: number): void {
   db.transaction(() => {
     for (const r of rows) {
-      upsertStmt.run(r.symbol, r.timeframe, r.time, r.open, r.high, r.low, r.close, r.volume)
+      upsertStmt.run(r.symbol, r.timeframe, r.time, r.open, r.high, r.low, r.close, r.volume, capturedAt)
     }
   })()
 }
 
-function upsertSeriesRows(rows: SeriesRow[], sourceFile: string): void {
+function upsertSeriesRows(rows: SeriesRow[], sourceFile: string, capturedAt: number): void {
   db.transaction(() => {
     for (const r of rows) {
-      upsertSeriesStmt.run(r.symbol, r.time, r.close, sourceFile)
+      upsertSeriesStmt.run(r.symbol, r.time, r.close, sourceFile, capturedAt)
     }
   })()
 }
@@ -295,7 +311,8 @@ function detectStaleTips(rows: SeriesRow[]): { kept: SeriesRow[]; skips: StaleTi
 
 const processing = new Set<string>()
 
-async function processFile(filePath: string): Promise<void> {
+/** Ingest one TradingView CSV. Exported for the temp-DB integration test. */
+export async function processFile(filePath: string): Promise<void> {
   const filename = path.basename(filePath)
 
   if (processing.has(filePath)) return
@@ -306,6 +323,24 @@ async function processFile(filePath: string): Promise<void> {
 
     // Wait for TradingView to finish writing
     await delay(2000)
+
+    // Capture time = the file's mtime: when TradingView's export finished
+    // writing, i.e. the moment its last (possibly unfinished) bar was observed.
+    // It stays correct if the file is reprocessed later. Caveat: copying a file
+    // into the drop folder with `cp` (without -p) resets mtime to the copy time,
+    // so a stale export would be judged against the copy time. Move the file,
+    // or use `cp -p`. (Windows Explorer copies keep mtime.)
+    // No capture time, no ingest: any substitute (e.g. ingest time) is later
+    // than the download and could pass an intraday bar off as a close. Write
+    // nothing, leave the file in place, and let the next scan retry it.
+    let capturedAt: number
+    try {
+      capturedAt = Math.floor(fs.statSync(filePath).mtimeMs / 1000)
+    } catch (err) {
+      console.error(`[tv-ingest] Cannot stat ${filePath} (${err instanceof Error ? err.message : String(err)}) — not ingested; left in place for retry`)
+      seenFiles.delete(filePath)
+      return
+    }
 
     let content: string
     try {
@@ -351,7 +386,7 @@ async function processFile(filePath: string): Promise<void> {
     ).get(symbol, timeframe) as { n: number }).n
 
     if (ohlcvRows.length > 0) {
-      upsertRows(ohlcvRows)
+      upsertRows(ohlcvRows, capturedAt)
     }
 
     let seriesToWrite = seriesRows
@@ -375,7 +410,7 @@ async function processFile(filePath: string): Promise<void> {
     }
 
     if (seriesToWrite.length > 0) {
-      upsertSeriesRows(seriesToWrite, filename)
+      upsertSeriesRows(seriesToWrite, filename, capturedAt)
     }
 
     const countAfter = (db.prepare(

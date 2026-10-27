@@ -1,11 +1,17 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import type { EconomicRelease, CategorizedRelease, StoredEconomicRelease, SurpriseLabel, SurpriseRule } from './economicCalendar/types'
+import { TV_BAR_COMPLETE_FN, tvBarCompleteSql } from './lib/tvBarComplete'
 
 // DB lives at the project root (two levels up from server/src/)
 const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, '..', '..', 'fred_data.db')
 
 export const db = new Database(DB_PATH)
+
+// tv_bar_complete(symbol, time, captured_at) → 1 | 0. The SQL face of
+// lib/tvBarComplete.ts#isBarComplete (one implementation for TS and SQL).
+// Readers use it through tvCompleteSql(). Deterministic for given inputs.
+db.function(TV_BAR_COMPLETE_FN, { deterministic: true }, tvBarCompleteSql)
 
 // WAL mode for safe concurrent reads while background writes happen
 db.pragma('journal_mode = WAL')
@@ -1571,6 +1577,17 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_overnight_rates_series_date
     ON overnight_rates(series_code, date DESC);
 `)
+
+// Migration: TradingView capture timestamp (docs/prompts/tv-completed-bars-*.md).
+// captured_at = unix epoch seconds UTC of the source CSV's file mtime, written by
+// tvCsvIngest on every bar it upserts. Nullable; existing rows stay NULL (no
+// backfill) and NULL means "complete" (lib/tvBarComplete.ts). Idempotent.
+for (const table of ['tv_series', 'tv_ohlcv'] as const) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!cols.some(c => c.name === 'captured_at')) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN captured_at INTEGER`)
+  }
+}
 
 // Migration: drop old columns if they exist (previous schema had delta_tga, delta_debt)
 try {
