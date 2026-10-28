@@ -84,6 +84,15 @@ Commit only after I approve the batch:
 
 Explicit path staging, `git diff --cached --stat` pasted before each commit, no `git add -A`.
 
+**Amendment (2026-10-28, `asset-class-revamp-r4-squash-merge.md`): RATES lands by squash-merge, never force-push.** `acm-revamp` is on GitHub, so it is never force-pushed, now or later; this supersedes every earlier `git reset --soft` squash instruction. Checkpoints on `acm-revamp` are normal commits pushed normally. After R5, once RATES is approved:
+
+1. Commit any remaining R5 work on `acm-revamp` normally and push it normally (no force).
+2. `git switch main`, then `git merge --squash acm-revamp`.
+3. Paste `git diff --cached --stat` and confirm **no `server/` or data-ingestion file** appears; only design work may differ from `main`. Anything else → stop and report.
+4. Commit on `main` as one RATES commit (message summarises R1–R5 and the colour rules), then push `main` normally.
+5. Leave `acm-revamp` on GitHub untouched as an archive; never delete it unless asked.
+6. Continue MACRO and later batches on a new branch `acm-revamp-2` cut from the updated `main`.
+
 ---
 
 ## Z — Cleanup and final gate

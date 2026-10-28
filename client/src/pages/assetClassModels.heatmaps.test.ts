@@ -7,6 +7,9 @@
 //   • ReturnsHeatmap                — returns: up = --acm-heat-positive-*
 //   • STIR strip move cells         — implied-rate Δ columns + FF price-change
 //     (.stripHeat*)                   cells: price down / rate up = negative
+//   • CREDIT SPREADS Δ cells        — valence: widening = --acm-heat-negative-*,
+//     (.creditHeat*)                  tightening = --acm-heat-positive-*
+//                                     (US + EU CREDIT); text primary
 //
 // Static scan of every file reachable from STIRDashboardPage (TS, TSX and the
 // CSS they import), comments stripped. Any --acm-heat-* reference outside the
@@ -33,6 +36,7 @@ const NAMED: Named[] = [
   { name: 'ReturnsHeatmap', file: 'components/ReturnsHeatmap.module.css', scale: 'valence' },
   // one set of 8 classes serves both the SR3 implied-rate Δ columns and the FF price-change cells
   { name: 'STIR strip move cells', file: 'pages/STIRDashboardPage.module.css', scale: 'valence', selector: /^\.stripHeat(Positive|Negative)[1-4]$/ },
+  { name: 'CREDIT SPREADS Δ cells', file: 'pages/STIRDashboardPage.module.css', scale: 'valence', selector: /^\.creditHeat(Positive|Negative)[1-4]$/ },
 ]
 /** The token definitions themselves. */
 const TOKEN_FILE = 'styles/acm-tokens.css'
@@ -93,12 +97,30 @@ describe('Asset Class Models — heat fills only in the named heatmap components
   })
 
   it('in a shared CSS module, only the named selectors carry heat fills', () => {
-    for (const n of NAMED.filter(x => x.selector)) {
-      const css = stripComments(readFileSync(path.join(SRC, n.file), 'utf8'))
+    const withSel = NAMED.filter(x => x.selector)
+    for (const file of new Set(withSel.map(n => n.file))) {
+      const named = withSel.filter(n => n.file === file)
+      const css = stripComments(readFileSync(path.join(SRC, file), 'utf8'))
       const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(m => /--acm-heat-/.test(m[2]))
-      const bad = rules.map(m => m[1].trim()).filter(sel => sel.split(',').some(s => !n.selector!.test(s.trim())))
-      expect(bad, n.name).toEqual([])
-      expect(rules.length, `${n.name}: 4 steps per side`).toBe(8)
+      const sels = rules.map(m => m[1].trim())
+      const bad = sels.filter(sel => sel.split(',').some(s => !named.some(n => n.selector!.test(s.trim()))))
+      expect(bad, file).toEqual([])
+      for (const n of named) expect(sels.filter(sel => n.selector!.test(sel)).length, `${n.name}: 4 steps per side`).toBe(8)
     }
+  })
+
+  it('CREDIT SPREADS Δ cells: primary text over an opaque panel base, no alert', () => {
+    const css = stripComments(readFileSync(path.join(SRC, 'pages/STIRDashboardPage.module.css'), 'utf8'))
+    const rules = [...css.matchAll(/(\.creditHeat(?:Positive|Negative)[1-4])\s*\{([^{}]*)\}/g)]
+    expect(rules.length).toBe(8)
+    for (const [, sel, body] of rules) {
+      expect(body, sel).toMatch(/color:\s*var\(--acm-text-primary\)/)
+      expect(body, sel).toMatch(/var\(--acm-surface-panel\)\s*;/)
+      expect(body, sel).not.toMatch(/alert|outline/)
+    }
+    const tsx = readFileSync(path.join(SRC, 'pages/STIRDashboardPage.tsx'), 'utf8')
+    const cols = tsx.slice(tsx.indexOf('const creditDashboardColumns'), tsx.indexOf('const creditOverviewChartData'))
+    expect(cols).toContain('cellClassName')
+    expect(cols, 'Δ cells set no text tone').not.toMatch(/\btone:/)
   })
 })

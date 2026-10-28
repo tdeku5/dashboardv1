@@ -201,7 +201,7 @@ export const UST_FAMILY_COLORS = {
 
 export const YIELD_ATTRIBUTION_COLORS = {
   nominalDelta: '#ffffff',
-  breakevenDelta: '#ef5350',
+  breakevenDelta: '#c084fc', // purple: never red / green, clear of amber alerts (R3b)
   realDelta: '#60a5fa',
 } as const
 
@@ -220,6 +220,8 @@ export const MONEY_MARKET_COLORS = {
   sofrIorb: '#4EC9B0',
   effrIorb: '#fbbf24',
   sofrEffr: '#a78bfa',
+  /** SOFR/EFFR − IORB zero line + "SCARCITY WARNING" label (source red kept; ambiguity reported at R3b). */
+  scarcityLine: '#EF5350',
 } as const
 
 export const RESERVE_DEMAND_COLORS = {
@@ -389,6 +391,7 @@ export const IDENTITY_ADJUSTMENTS: readonly IdentityAdjustment[] = [
   { map: 'INVESTOR_CLASS_COLORS', key: 'individuals', from: '#6b7280', to: '#868D9B', reason: 'contrast 2.99 → ≥3:1, then ΔE ≥ 10 from Other (option B)' },
   { map: 'INVESTOR_CLASS_COLORS', key: 'other', from: '#374151', to: '#687385', reason: 'contrast 1.40 → ≥3:1' },
   { map: 'VOL_INDEX_COLORS', key: 'vix', from: '#f59e0b', to: '#ef4444', reason: 'VIX unified across CrossAssetVol + Equities VOL (Equities VOL changes)' },
+  { map: 'YIELD_ATTRIBUTION_COLORS', key: 'breakevenDelta', from: '#ef5350', to: '#c084fc', reason: 'R3b: red made a falling breakeven read as a rise; purple clears every sign token by ΔE00 ≥ 15 (amber fails vs --acm-alert-mild 6.4)' },
   { map: 'TENOR_COLORS', key: '2Y/5Y/10Y/30Y', from: '#ef4444/#f59e0b/#3b82f6/#a855f7', to: '#60a5fa/#a78bfa/#34d399/#f87171', reason: 'UsRatesVol realized-vol tenors merged into the one tenor map' },
 ]
 

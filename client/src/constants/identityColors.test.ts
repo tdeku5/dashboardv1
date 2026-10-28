@@ -7,6 +7,7 @@ import {
   SECTOR_COLORS, US_INDEX_COLORS, BREADTH_MA_COLORS, VOL_INDEX_COLORS, CURVE_REGIME_COLORS,
   STIR_PACK_COLORS, INVESTOR_CLASS_COLORS, GDPNOW_COMPONENT_COLORS, LABOR_SCENARIO_COLORS,
   CREDIT_SPREAD_COLORS, IDENTITY_ADJUSTMENTS, allIdentityColors, gdpnowQuarterColor, ffYearBandColor,
+  YIELD_ATTRIBUTION_COLORS,
 } from './identityColors'
 
 const lc = (s: string) => s.toLowerCase()
@@ -90,6 +91,16 @@ describe('identity registry — contrast and sign collisions', () => {
     const sign = new Map(SIGN_TOKENS.map(t => [lc(hex(t)), t]))
     const hits = all.filter(([, v]) => sign.has(lc(v))).map(([p, v]) => `${p} ${v} = --${sign.get(lc(v))}`)
     expect(hits).toEqual([])
+  })
+
+  it('breakeven Δ stays clear of every sign token (R3b): ΔE00 ≥ 15, ≥ 3:1, ΔE ≥ 10 from its chart peers', () => {
+    const be = YIELD_ATTRIBUTION_COLORS.breakevenDelta
+    for (const t of ['acm-negative', 'acm-positive', 'acm-dir-up', 'acm-dir-down', ...SIGN_TOKENS]) {
+      expect(deltaE(be, hex(t)), `breakevenDelta vs --${t}`).toBeGreaterThanOrEqual(15)
+    }
+    for (const s of SURFACES) expect(contrast(be, hex(s)), s).toBeGreaterThanOrEqual(3)
+    expect(deltaE(be, YIELD_ATTRIBUTION_COLORS.nominalDelta), 'vs Nominal Δ').toBeGreaterThanOrEqual(10)
+    expect(deltaE(be, YIELD_ATTRIBUTION_COLORS.realDelta), 'vs Real Yield Δ').toBeGreaterThanOrEqual(10)
   })
 
   it('no STIR pack colour equals a valence or direction token', () => {

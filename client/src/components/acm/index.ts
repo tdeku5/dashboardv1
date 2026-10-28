@@ -10,4 +10,4 @@ export { AcmChartFrame, isSeriesColor, type AcmLegendItem } from './AcmChartFram
 export { AcmCollapsible } from './AcmCollapsible'
 export { chartTheme } from './chartTheme'
 export { signColor, toneColor, SIGN_TOKENS, type SignToken } from './chartColors'
-export { displayValue, NULL_DASH, type SignTone, type AlertLevel, type CellValue } from './acmFormat'
+export { displayValue, NULL_DASH, roundForDisplay, fmtSignedFixed, type SignTone, type AlertLevel, type CellValue } from './acmFormat'

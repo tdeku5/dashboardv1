@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { CountrySelector, type CountryCode } from '../components/CountrySelector'
-import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, signColor, type AcmColumn, type AcmLegendItem, type SignTone } from '../components/acm'
+import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, fmtSignedFixed, roundForDisplay, signColor, type AcmColumn, type AcmLegendItem, type SignTone } from '../components/acm'
 import { chartTheme, CHART_FONT_MONO, CHART_LABEL_FONT_SIZE, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
 import { toneClass } from '../components/acm/tones'
 import {
@@ -39,6 +39,8 @@ import {
   LABOR_COLORS,
   LABOR_SCENARIO_COLORS,
   ffYearBandColor,
+  MONEY_MARKET_COLORS,
+  RESERVE_DEMAND_COLORS,
   gdpnowQuarterColor,
   type PackName,
 } from '../constants/identityColors'
@@ -467,26 +469,26 @@ function fmtRate(v: number): string {
   return v.toFixed(3)
 }
 
+// Signed formatters: a value that rounds to zero at its displayed precision
+// prints as an unsigned zero (fmtSignedFixed), and its tone is decided on the
+// same rounded value — never "-0.0" in green.
 function fmtSignedPct(v: number | null, digits = 2): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(digits)}`
+  return fmtSignedFixed(v, digits)
 }
 
 function fmtBps(v: number): string {
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 function fmtSignedDecimal(v: number): string {
-  if (Math.abs(v) < 0.05) return '0.0'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 function toneFromBps(v: number): 'cut' | 'hike' | 'flat' {
-  if (v > 0.01) return 'hike'
-  if (v < -0.01) return 'cut'
+  const shown = roundForDisplay(v, 1) // matches summaryFromBps's 1dp "Flat"
+  if (shown > 0) return 'hike'
+  if (shown < 0) return 'cut'
   return 'flat'
 }
 
@@ -512,22 +514,19 @@ function contractTicker(symbol: string): string {
 
 function fmtSignedPrice(v: number | null): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(3)}`
+  return fmtSignedFixed(v, 3)
 }
 
 function fmtBpsValue(v: number | null): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}bp`
+  return fmtSignedFixed(v, 1, 'bp')
 }
 
 // Bare numeric bps formatter — used in table cells where the column header
 // already conveys units, so the "bp" suffix would be redundant.
 function fmtBpsNumber(v: number | null): string {
   if (v == null) return '—'
-  const sign = v >= 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 // Convert a futures price change to its implied-rate change, formatted bare.
@@ -559,20 +558,33 @@ function monthsForward(contract: StripContract, now = new Date()): number {
 // rate or spread change is VALENCE in the bond-price view — increase =
 // negative (red), decrease = positive (green); hike = red, cut = green.
 // Futures prices follow price: price up (rate down) = positive.
+/**
+ * Futures price change → tone, decided on the displayed value: prices show at
+ * 3dp (FF) or as bps of rate at 1dp (strip) — the same 0.001 precision — so a
+ * change that rounds to zero there is untoned.
+ */
 export function stripMoveTone(priceChange: number | null): SignTone | undefined {
-  if (priceChange == null || Math.abs(priceChange) < 1e-9) return undefined
-  return priceChange > 0 ? 'positive' : 'negative'
+  if (priceChange == null) return undefined
+  const shown = roundForDisplay(priceChange, 3)
+  if (shown === 0) return undefined
+  return shown > 0 ? 'positive' : 'negative'
 }
 
-/** Yield / rate / spread level-vs-reference or Δ in bp: up = negative (red), down = positive (green), zero untoned. */
 /** A priced policy move: hike = negative (red: a rate increase), cut = positive (green). */
 export function policyMoveTone(move: 'hike' | 'cut'): 'negative' | 'positive' {
   return move === 'hike' ? 'negative' : 'positive'
 }
 
-export function rateChangeTone(v: number | null): SignTone | undefined {
-  if (v == null || v === 0) return undefined
-  return v > 0 ? 'negative' : 'positive'
+/**
+ * Yield / rate / spread level-vs-reference or Δ: up = negative (red), down =
+ * positive (green). Decided on the value as displayed at `dp` decimals (bp
+ * displays use 1dp), so anything that prints as zero is untoned.
+ */
+export function rateChangeTone(v: number | null, dp = 1): SignTone | undefined {
+  if (v == null) return undefined
+  const shown = roundForDisplay(v, dp)
+  if (shown === 0) return undefined
+  return shown > 0 ? 'negative' : 'positive'
 }
 
 // Named heatmap #3 — strip implied-rate Δ columns and FF price-change cells, valence heat scale. Same
@@ -588,8 +600,20 @@ function stripHeatClass(priceChange: number | null, colMaxAbs: number): string |
   return styles[`stripHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
 }
 
-function rateChangeClass(v: number | null): string | undefined {
-  return toneClass(rateChangeTone(v))
+function rateChangeClass(v: number | null, dp = 1): string | undefined {
+  return toneClass(rateChangeTone(v, dp))
+}
+
+// Named heatmap #4 — CREDIT SPREADS table Δ cells (R3b): the valence heat scale
+// with the strip's quartile-of-column-max buckets; widening (spread up) →
+// heat-negative, tightening → heat-positive; text primary, no tone; opaque panel
+// base. Changes display at 0dp, so one that rounds to zero gets no fill.
+function creditHeatClass(change: number | null, colMaxAbs: number): string | undefined {
+  const tone = rateChangeTone(change, 0)
+  if (!tone || colMaxAbs <= 0) return change == null ? styles.muted : undefined
+  const intensity = Math.abs(change as number) / colMaxAbs
+  const step = 1 + STRIP_HEAT_THRESHOLDS.filter(t => intensity > t).length
+  return styles[`creditHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
 }
 
 // ── UST CURVE (R2d) ─────────────────────────────────────────────────────────
@@ -597,6 +621,15 @@ function rateChangeClass(v: number | null): string | undefined {
 const UST_CHART_RANGES = ['3m', '6m', '1y', '5y', '10y', 'all'] as const
 const ATTR_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
 const CREDIT_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', '10y', 'all'] as const
+const MM_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
+const RDE_CHART_RANGES = ['1y', '2y', '5y', '10y', 'all'] as const
+const MM_CHART_HEIGHT = 220
+/** MONEY MARKETS spread charts (R3b); colours: MONEY_MARKET_COLORS (identity registry), keyed by `key`. */
+const MM_SPREAD_CHARTS = [
+  { key: 'sofrIorb', title: 'SOFR − IORB', subtitle: 'Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere', scarcity: true },
+  { key: 'effrIorb', title: 'EFFR − IORB', subtitle: 'Historically a positive spread has been an indicator of reserve scarcity', scarcity: true },
+  { key: 'sofrEffr', title: 'SOFR − EFFR', subtitle: 'FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos', scarcity: false },
+] as const
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** "Mar '24" — the UST history charts' X tick. */
@@ -611,8 +644,8 @@ function fmtMonthYearTick(date: string): string {
  * would otherwise tone a "+0.0bp" change, so |v| < 1e-9 counts as zero.
  */
 function ustChangeClass(v: number | null | undefined): string | undefined {
-  if (v == null || Math.abs(v) < 1e-9) return styles.muted
-  return rateChangeClass(v) ?? styles.muted
+  if (v == null) return styles.muted
+  return rateChangeClass(v) ?? styles.muted // 1dp bp: a change that prints as 0.0 is muted
 }
 
 /**
@@ -1312,11 +1345,11 @@ export function STIRDashboardPage() {
       { key: 'rate', header: <>Implied<br />Rate</>, kind: 'num', value: (r) => fmtRate(r.impliedRate) },
       { key: 'step', header: <>Bps<br />(Step)</>, kind: 'num', value: (r) => fmtBps(r.stepBps), tone: (r) => signTone(r.stepBps) },
       { key: 'total', header: <>Bps<br />(Total)</>, kind: 'num', value: (r) => fmtBps(r.totalBps), tone: (r) => signTone(r.totalBps) },
-      { key: 'movesStep', header: <>Implied # Cuts/Hikes<br />(Step)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.stepBps / 25), tone: (r) => signTone(r.stepBps) },
+      { key: 'movesStep', header: <>Implied # Cuts/Hikes<br />(Step)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.stepBps / 25), tone: (r) => signTone(r.stepBps / 25) },
     ]
     // Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec
     if (!(country === 'US' && product === 'fedfunds')) {
-      cols.push({ key: 'movesTotal', header: <>Implied # Cuts/Hikes<br />(Total)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.totalBps / 25), tone: (r) => signTone(r.totalBps) })
+      cols.push({ key: 'movesTotal', header: <>Implied # Cuts/Hikes<br />(Total)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.totalBps / 25), tone: (r) => signTone(r.totalBps / 25) })
     }
     cols.push(
       { key: 'sumStep', header: <>Summary<br />(Step)</>, kind: 'label', value: (r) => r.stepSummary, tone: (r) => summaryTone(r.tone) },
@@ -2598,20 +2631,23 @@ export function STIRDashboardPage() {
   }, [ustData])
 
   // CREDIT SPREADS dashboard table. "Last" is a LEVEL → plain text (rule 6:
-  // levels get no colour); the Δ columns are spread CHANGES → widening red,
-  // tightening green. No background fill: the table isn't a named heatmap.
-  const creditDashboardColumns = useMemo<AcmColumn<(typeof creditSpreadDashboard)[number]>[]>(() => [
-    { key: 'label', header: 'Spread', kind: 'label', value: (r) => r.label },
-    { key: 'last', header: 'Last (bp)', kind: 'num', value: (r) => r.current, format: (v) => v.toFixed(0) },
-    ...['1D Δ', '1W Δ', '1M Δ', '3MO Δ', '6MO Δ', 'YTD Δ'].map((header, idx) => ({
-      key: `chg${idx}`,
-      header,
-      kind: 'num' as const,
-      value: (r: (typeof creditSpreadDashboard)[number]) => r.changes[idx],
-      format: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
-      tone: (r: (typeof creditSpreadDashboard)[number]) => rateChangeTone(r.changes[idx]),
-    })),
-  ], [])
+  // levels get no colour). The Δ columns are named heatmap #4 (creditHeatClass):
+  // valence heat fill per column, primary text, no tone.
+  const creditDashboardColumns = useMemo<AcmColumn<(typeof creditSpreadDashboard)[number]>[]>(() => {
+    const colMaxAbs = [0, 1, 2, 3, 4, 5].map(idx => Math.max(0, ...creditSpreadDashboard.map(r => Math.abs(r.changes[idx] ?? 0))))
+    return [
+      { key: 'label', header: 'Spread', kind: 'label', value: (r) => r.label },
+      { key: 'last', header: 'Last (bp)', kind: 'num', value: (r) => r.current, format: (v) => v.toFixed(0) },
+      ...['1D Δ', '1W Δ', '1M Δ', '3MO Δ', '6MO Δ', 'YTD Δ'].map((header, idx) => ({
+        key: `chg${idx}`,
+        header,
+        kind: 'num' as const,
+        value: (r: (typeof creditSpreadDashboard)[number]) => r.changes[idx],
+        format: (v: number) => fmtSignedFixed(v, 0),
+        cellClassName: (r: (typeof creditSpreadDashboard)[number]) => creditHeatClass(r.changes[idx], colMaxAbs[idx]),
+      })),
+    ]
+  }, [creditSpreadDashboard])
 
   const creditOverviewChartData = useMemo(() => {
     const cccSeries = ustData['BAMLH0A3HYC'] || []
@@ -3098,7 +3134,7 @@ export function STIRDashboardPage() {
                           {curveData.map((row) => (
                             <Cell
                               key={row.ticker}
-                              fill={(row.deltaBps ?? 0) > 0 ? signColor('acm-negative') : (row.deltaBps ?? 0) < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'}
+                              fill={roundForDisplay(row.deltaBps ?? 0, 1) > 0 ? signColor('acm-negative') : roundForDisplay(row.deltaBps ?? 0, 1) < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'}
                             />
                           ))}
                           <LabelList content={renderDeltaLabel} />
@@ -3463,7 +3499,8 @@ export function STIRDashboardPage() {
                       <Fragment key={row.rowLabel}>
                         <div className={styles.chgRowLabel}>{row.rowLabel}</div>
                         {row.cells.map(cell => {
-                          const bg = getCellColor(cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          // a change that prints as 0.0 gets no fill (displayed-value rule)
+                          const bg = getCellColor(cell.bps != null && roundForDisplay(cell.bps, 1) === 0 ? 0 : cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
                           return (
                             <div
                               key={`${row.rowLabel}-${cell.lookback}`}
@@ -3472,7 +3509,7 @@ export function STIRDashboardPage() {
                               style={bg ? { background: bg } : undefined}
                             >
                               {cell.bps != null && Number.isFinite(cell.bps)
-                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                ? `${fmtSignedFixed(cell.bps, 1)} bps`
                                 : '—'}
                             </div>
                           )
@@ -3499,7 +3536,7 @@ export function STIRDashboardPage() {
                       <Fragment key={row.rowLabel}>
                         <div className={styles.chgRowLabel}>{row.rowLabel}</div>
                         {row.cells.map(cell => {
-                          const bg = getCellColor(cell.bps, beRealChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          const bg = getCellColor(cell.bps != null && roundForDisplay(cell.bps, 1) === 0 ? 0 : cell.bps, beRealChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
                           return (
                             <div
                               key={`${row.rowLabel}-${cell.lookback}`}
@@ -3508,7 +3545,7 @@ export function STIRDashboardPage() {
                               style={bg ? { background: bg } : undefined}
                             >
                               {cell.bps != null && Number.isFinite(cell.bps)
-                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                ? `${fmtSignedFixed(cell.bps, 1)} bps`
                                 : '—'}
                             </div>
                           )
@@ -3539,8 +3576,8 @@ export function STIRDashboardPage() {
                         label={tenor.label}
                         value={`${tenor.current != null ? tenor.current.toFixed(2) : '—'}%`}
                         valueIsFamily
-                        change={tenor.change != null ? `${tenor.change > 0 ? '+' : ''}${(tenor.change * 100).toFixed(1)}bp` : '—'}
-                        changeClass={ustChangeClass(tenor.change)}
+                        change={tenor.change != null ? fmtSignedFixed(tenor.change * 100, 1, 'bp') : '—'}
+                        changeClass={ustChangeClass(tenor.change == null ? null : tenor.change * 100)}
                         selected={ustSelection?.type === 'yield' && ustSelection.key === tenor.key}
                         onSelect={() => setUstSelection({ type: 'yield', key: tenor.key, label: tenor.label })}
                       />
@@ -3553,9 +3590,9 @@ export function STIRDashboardPage() {
                         key={spread.label}
                         family={UST_FAMILY_COLORS.nominal}
                         label={spread.label}
-                        value={spread.current != null ? `${spread.current > 0 ? '+' : ''}${spread.current.toFixed(1)}bp` : '—'}
+                        value={spread.current != null ? fmtSignedFixed(spread.current, 1, 'bp') : '—'}
                         valueClass={ustLevelClass(spread.current)}
-                        change={spread.change != null ? `${spread.change > 0 ? '+' : ''}${spread.change.toFixed(1)}bp` : '—'}
+                        change={spread.change != null ? fmtSignedFixed(spread.change, 1, 'bp') : '—'}
                         changeClass={ustChangeClass(spread.change)}
                         selected={ustSelection?.type === 'spread' && ustSelection.label === spread.label}
                         onSelect={() => setUstSelection({ type: 'spread', label: spread.label, longKey: spread.long, shortKey: spread.short })}
@@ -3570,9 +3607,9 @@ export function STIRDashboardPage() {
                         key={fly.label}
                         family={UST_FAMILY_COLORS.nominal}
                         label={fly.label}
-                        value={fly.current != null ? `${fly.current > 0 ? '+' : ''}${fly.current.toFixed(1)}bp` : '—'}
+                        value={fly.current != null ? fmtSignedFixed(fly.current, 1, 'bp') : '—'}
                         valueClass={ustLevelClass(fly.current)}
-                        change={fly.change != null ? `${fly.change > 0 ? '+' : ''}${fly.change.toFixed(1)}bp` : '—'}
+                        change={fly.change != null ? fmtSignedFixed(fly.change, 1, 'bp') : '—'}
                         changeClass={ustChangeClass(fly.change)}
                         selected={ustSelection?.type === 'butterfly' && ustSelection.label === fly.label}
                         onSelect={() => setUstSelection({ type: 'butterfly', label: fly.label, lowKey: fly.low, middleKey: fly.middle, highKey: fly.high })}
@@ -3657,8 +3694,8 @@ export function STIRDashboardPage() {
                     label="5Y REAL"
                     value={realYields.real5y.current != null ? `${realYields.real5y.current.toFixed(2)}%` : '—'}
                     valueIsFamily
-                    change={realYields.real5y.change != null ? `${realYields.real5y.change > 0 ? '+' : ''}${(realYields.real5y.change * 100).toFixed(1)}bp` : '—'}
-                    changeClass={ustChangeClass(realYields.real5y.change)}
+                    change={realYields.real5y.change != null ? fmtSignedFixed(realYields.real5y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(realYields.real5y.change == null ? null : realYields.real5y.change * 100)}
                     selected={realSelection.type === 'realYield' && realSelection.key === '5y'}
                     onSelect={() => setRealSelection({ type: 'realYield', key: '5y', label: '5Y Real' })}
                   />
@@ -3667,17 +3704,17 @@ export function STIRDashboardPage() {
                     label="10Y REAL"
                     value={realYields.real10y.current != null ? `${realYields.real10y.current.toFixed(2)}%` : '—'}
                     valueIsFamily
-                    change={realYields.real10y.change != null ? `${realYields.real10y.change > 0 ? '+' : ''}${(realYields.real10y.change * 100).toFixed(1)}bp` : '—'}
-                    changeClass={ustChangeClass(realYields.real10y.change)}
+                    change={realYields.real10y.change != null ? fmtSignedFixed(realYields.real10y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(realYields.real10y.change == null ? null : realYields.real10y.change * 100)}
                     selected={realSelection.type === 'realYield' && realSelection.key === '10y'}
                     onSelect={() => setRealSelection({ type: 'realYield', key: '10y', label: '10Y Real' })}
                   />
                   <UstTile
                     family={UST_FAMILY_COLORS.real}
                     label="5s10s real"
-                    value={realYields.realSpread.current != null ? `${realYields.realSpread.current > 0 ? '+' : ''}${realYields.realSpread.current.toFixed(1)}bp` : '—'}
+                    value={realYields.realSpread.current != null ? fmtSignedFixed(realYields.realSpread.current, 1, 'bp') : '—'}
                     valueClass={ustLevelClass(realYields.realSpread.current)}
-                    change={realYields.realSpread.change != null ? `${realYields.realSpread.change > 0 ? '+' : ''}${realYields.realSpread.change.toFixed(1)}bp` : '—'}
+                    change={realYields.realSpread.change != null ? fmtSignedFixed(realYields.realSpread.change, 1, 'bp') : '—'}
                     changeClass={ustChangeClass(realYields.realSpread.change)}
                     selected={realSelection.type === 'realSpread'}
                     onSelect={() => setRealSelection({ type: 'realSpread', label: '5s10s real' })}
@@ -3748,8 +3785,8 @@ export function STIRDashboardPage() {
                     label="5Y BE"
                     value={breakevens.be5y.current != null ? `${breakevens.be5y.current.toFixed(2)}%` : '—'}
                     valueIsFamily
-                    change={breakevens.be5y.change != null ? `${breakevens.be5y.change > 0 ? '+' : ''}${(breakevens.be5y.change * 100).toFixed(1)}bp` : '—'}
-                    changeClass={ustChangeClass(breakevens.be5y.change)}
+                    change={breakevens.be5y.change != null ? fmtSignedFixed(breakevens.be5y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(breakevens.be5y.change == null ? null : breakevens.be5y.change * 100)}
                     selected={beSelection.type === 'beYield' && beSelection.key === '5y'}
                     onSelect={() => setBeSelection({ type: 'beYield', key: '5y', label: '5Y BE' })}
                   />
@@ -3758,17 +3795,17 @@ export function STIRDashboardPage() {
                     label="10Y BE"
                     value={breakevens.be10y.current != null ? `${breakevens.be10y.current.toFixed(2)}%` : '—'}
                     valueIsFamily
-                    change={breakevens.be10y.change != null ? `${breakevens.be10y.change > 0 ? '+' : ''}${(breakevens.be10y.change * 100).toFixed(1)}bp` : '—'}
-                    changeClass={ustChangeClass(breakevens.be10y.change)}
+                    change={breakevens.be10y.change != null ? fmtSignedFixed(breakevens.be10y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(breakevens.be10y.change == null ? null : breakevens.be10y.change * 100)}
                     selected={beSelection.type === 'beYield' && beSelection.key === '10y'}
                     onSelect={() => setBeSelection({ type: 'beYield', key: '10y', label: '10Y BE' })}
                   />
                   <UstTile
                     family={UST_FAMILY_COLORS.breakeven}
                     label="5s10s BE"
-                    value={breakevens.beSpread.current != null ? `${breakevens.beSpread.current > 0 ? '+' : ''}${breakevens.beSpread.current.toFixed(1)}bp` : '—'}
+                    value={breakevens.beSpread.current != null ? fmtSignedFixed(breakevens.beSpread.current, 1, 'bp') : '—'}
                     valueClass={ustLevelClass(breakevens.beSpread.current)}
-                    change={breakevens.beSpread.change != null ? `${breakevens.beSpread.change > 0 ? '+' : ''}${breakevens.beSpread.change.toFixed(1)}bp` : '—'}
+                    change={breakevens.beSpread.change != null ? fmtSignedFixed(breakevens.beSpread.change, 1, 'bp') : '—'}
                     changeClass={ustChangeClass(breakevens.beSpread.change)}
                     selected={beSelection.type === 'beSpread'}
                     onSelect={() => setBeSelection({ type: 'beSpread', label: '5s10s BE' })}
@@ -3877,7 +3914,7 @@ export function STIRDashboardPage() {
                         labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
                         formatter={(value: unknown, name: string | undefined) => {
                           const labels: Record<string, string> = { nominalChg: `${tenor} Nominal Δ`, beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
-                          return [typeof value === 'number' ? `${value > 0 ? '+' : ''}${value.toFixed(1)}bp` : '—', labels[name ?? ''] || (name ?? '')]
+                          return [typeof value === 'number' ? fmtSignedFixed(value, 1, 'bp') : '—', labels[name ?? ''] || (name ?? '')]
                         }}
                       />
                       <ReferenceLine y={0} {...referenceLines.zero} />
@@ -4031,130 +4068,105 @@ export function STIRDashboardPage() {
         )}
 
         {activeView === 'money' && (
-          <div>
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 12px' }}>
-                MONEY MARKET RATE SPREADS
-              </div>
-
+          <div className={styles.ustStack}>
+            {/* MONEY MARKETS (R3b). The four charts plot spread / elasticity LEVELS
+                over time — lines coloured by identity (registry), no sign colour.
+                The SCARCITY WARNING line and the RDE median keep their registry
+                red (reported as ambiguous at the R3b gate; not decided here). */}
+            <AcmPanel title="MONEY MARKET RATE SPREADS">
               {ustLoading ? (
-                <div className={styles.loading}>Loading money market data…</div>
+                <div className={styles.stateMsg}>Loading money market data…</div>
               ) : (
-                <div className={styles.mmGrid}>
-                  {/* SOFR − IORB (top left) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − IORB</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange1(range)} style={{ border: `1px solid ${mmRange1 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange1 === range ? '#e2e8f0' : '#728197', background: mmRange1 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData1} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − IORB']} />
-                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
-                        <Line type="monotone" dataKey="sofrIorb" stroke="#4EC9B0" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                <div className={styles.ustPair}>
+                  {MM_SPREAD_CHARTS.map((c) => {
+                    const [range, setRange, data] = c.key === 'sofrIorb'
+                      ? [mmRange1, setMmRange1, mmData1] as const
+                      : c.key === 'effrIorb'
+                        ? [mmRange2, setMmRange2, mmData2] as const
+                        : [mmRange3, setMmRange3, mmData3] as const
+                    return (
+                      <AcmChartFrame
+                        key={c.key}
+                        title={c.title}
+                        subtitle={c.subtitle}
+                        legend={c.scarcity
+                          ? [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }, { label: 'Scarcity warning (0bp)', color: MONEY_MARKET_COLORS.scarcityLine }]
+                          : [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }]}
+                        actions={rangeToggle(range, setRange, MM_CHART_RANGES)}
+                        height={MM_CHART_HEIGHT}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                            <CartesianGrid {...chartTheme.grid} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                              formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', c.title]}
+                            />
+                            {c.scarcity ? (
+                              <ReferenceLine
+                                y={0}
+                                stroke={MONEY_MARKET_COLORS.scarcityLine}
+                                strokeWidth={1.5}
+                                label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', ...referenceLabelStyle, fill: MONEY_MARKET_COLORS.scarcityLine }}
+                              />
+                            ) : (
+                              <ReferenceLine y={0} {...referenceLines.zero} />
+                            )}
+                            <Line type="monotone" dataKey={c.key} stroke={MONEY_MARKET_COLORS[c.key]} strokeWidth={1.5} dot={false} connectNulls />
+                            <Brush dataKey="date" {...chartTheme.brush} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
+                    )
+                  })}
 
-                  {/* EFFR − IORB (top right) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>EFFR − IORB</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Historically a positive spread has been an indicator of reserve scarcity</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange2(range)} style={{ border: `1px solid ${mmRange2 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange2 === range ? '#e2e8f0' : '#728197', background: mmRange2 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData2} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'EFFR − IORB']} />
-                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
-                        <Line type="monotone" dataKey="effrIorb" stroke="#fbbf24" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* SOFR − EFFR (bottom left) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − EFFR</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange3(range)} style={{ border: `1px solid ${mmRange3 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange3 === range ? '#e2e8f0' : '#728197', background: mmRange3 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData3} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − EFFR']} />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                        <Line type="monotone" dataKey="sofrEffr" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Reserve Demand Elasticity (bottom right) */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>RESERVE DEMAND ELASTICITY</div>
-                      <button onClick={handleRdeRefresh} disabled={rdeSyncing} style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.12)', color: rdeSyncing ? '#4a5568' : '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '2px 6px', cursor: rdeSyncing ? 'not-allowed' : 'pointer', borderRadius: '2px' }}>{rdeSyncing ? 'SYNCING...' : '↻ REFRESH'}</button>
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Basis point/percentage point — NY Fed estimate of reserve ampleness</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setRdeRange(range)} style={{ border: `1px solid ${rdeRange === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: rdeRange === range ? '#e2e8f0' : '#728197', background: rdeRange === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className={styles.ustRegimeLegend} style={{ paddingBottom: '4px' }}>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />97.5th / 2.5th</span>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#94A3B8' }} />84th / 16th</span>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#EF5350', height: '2px', borderRadius: '1px' }} />50th (median)</span>
-                    </div>
+                  <AcmChartFrame
+                    title="RESERVE DEMAND ELASTICITY"
+                    subtitle="Basis point/percentage point — NY Fed estimate of reserve ampleness"
+                    legend={[
+                      { label: '97.5th / 2.5th', color: RESERVE_DEMAND_COLORS.outer },
+                      { label: '84th / 16th', color: RESERVE_DEMAND_COLORS.inner },
+                      { label: '50th (median)', color: RESERVE_DEMAND_COLORS.median },
+                    ]}
+                    actions={(
+                      <>
+                        {rangeToggle(rdeRange, setRdeRange, RDE_CHART_RANGES)}
+                        <button type="button" className={`${styles.toggleButton} ${styles.mmRefresh}`} onClick={handleRdeRefresh} disabled={rdeSyncing}>
+                          {rdeSyncing ? 'SYNCING...' : '↻ REFRESH'}
+                        </button>
+                      </>
+                    )}
+                    height={MM_CHART_HEIGHT}
+                  >
                     {rdeChartData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={220}>
+                      <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={rdeChartData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                          <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} domain={['auto', 'auto']} />
-                          <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                          <Line type="monotone" dataKey="p97_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="97.5th" />
-                          <Line type="monotone" dataKey="p2_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="2.5th" />
-                          <Line type="monotone" dataKey="p84" stroke="#94A3B8" strokeWidth={1} dot={false} name="84th" />
-                          <Line type="monotone" dataKey="p16" stroke="#94A3B8" strokeWidth={1} dot={false} name="16th" />
-                          <Line type="monotone" dataKey="median" stroke="#EF5350" strokeWidth={2} dot={false} name="Median" />
-                          <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                          <CartesianGrid {...chartTheme.grid} />
+                          <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                          <YAxis {...chartTheme.yAxis} domain={['auto', 'auto']} />
+                          <Tooltip
+                            {...chartTheme.tooltip}
+                            labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                          />
+                          <ReferenceLine y={0} {...referenceLines.zero} />
+                          <Line type="monotone" dataKey="p97_5" stroke={RESERVE_DEMAND_COLORS.outer} strokeWidth={1} dot={false} name="97.5th" />
+                          <Line type="monotone" dataKey="p2_5" stroke={RESERVE_DEMAND_COLORS.outer} strokeWidth={1} dot={false} name="2.5th" />
+                          <Line type="monotone" dataKey="p84" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="84th" />
+                          <Line type="monotone" dataKey="p16" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="16th" />
+                          <Line type="monotone" dataKey="median" stroke={RESERVE_DEMAND_COLORS.median} strokeWidth={2} dot={false} name="Median" />
+                          <Brush dataKey="date" {...chartTheme.brush} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#4a5568', textAlign: 'center', padding: '40px 0' }}>No RDE data — click REFRESH to sync from NY Fed</div>
+                      <div className={styles.stateMsg}>No RDE data — click REFRESH to sync from NY Fed</div>
                     )}
-                  </div>
+                  </AcmChartFrame>
                 </div>
               )}
-            </div>
+            </AcmPanel>
           </div>
         )}
 
@@ -4705,7 +4717,7 @@ export function STIRDashboardPage() {
                         // Rule 6: the spread VALUE is a level → plain primary text; its Δ columns
                         // are changes → increase = negative (red), decrease = positive.
                         const chClass = (v: number | null) => rateChangeClass(v) ?? ''
-                        const fmt = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
+                        const fmt = (v: number | null) => v == null ? '—' : fmtSignedFixed(v, 1)
                         return (
                           <tr key={s.label}>
                             <td

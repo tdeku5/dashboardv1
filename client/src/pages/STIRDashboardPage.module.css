@@ -636,7 +636,23 @@
 .stripHeatNegative2 { background: linear-gradient(var(--acm-heat-negative-2), var(--acm-heat-negative-2)), var(--acm-surface-panel); }
 .stripHeatNegative3 { background: linear-gradient(var(--acm-heat-negative-3), var(--acm-heat-negative-3)), var(--acm-surface-panel); }
 .stripHeatNegative4 { background: linear-gradient(var(--acm-heat-negative-4), var(--acm-heat-negative-4)), var(--acm-surface-panel); }
+/* Named heatmap #4 — CREDIT SPREADS table Δ cells (US + EU CREDIT), valence
+   heat scale: widening → heat-negative, tightening → heat-positive; quartile-
+   of-column-max steps (STIRDashboardPage.creditHeatClass). Primary text, no
+   tone, no alerts; opaque panel base like the strip heatmap. */
+.creditHeatPositive1 { background: linear-gradient(var(--acm-heat-positive-1), var(--acm-heat-positive-1)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive2 { background: linear-gradient(var(--acm-heat-positive-2), var(--acm-heat-positive-2)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive3 { background: linear-gradient(var(--acm-heat-positive-3), var(--acm-heat-positive-3)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive4 { background: linear-gradient(var(--acm-heat-positive-4), var(--acm-heat-positive-4)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative1 { background: linear-gradient(var(--acm-heat-negative-1), var(--acm-heat-negative-1)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative2 { background: linear-gradient(var(--acm-heat-negative-2), var(--acm-heat-negative-2)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative3 { background: linear-gradient(var(--acm-heat-negative-3), var(--acm-heat-negative-3)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative4 { background: linear-gradient(var(--acm-heat-negative-4), var(--acm-heat-negative-4)), var(--acm-surface-panel); color: var(--acm-text-primary); }
 .stripStrong { font-weight: var(--acm-fw-medium); }
+/* MONEY MARKETS RDE refresh (R3b): a lone .toggleButton; disabled while syncing. */
+.mmRefresh { margin-left: var(--acm-space-2); border-radius: var(--acm-radius-md); }
+.mmRefresh:disabled,
+.mmRefresh:disabled:hover { color: var(--acm-text-disabled); background: transparent; cursor: not-allowed; }
 .muted.muted { color: var(--acm-text-tertiary); }
 
 .oiCell {

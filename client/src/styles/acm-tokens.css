@@ -120,9 +120,10 @@
   --acm-status-warning-tint: color-mix(in srgb, var(--acm-status-warning) 8%, transparent);
 
   /* ── Heatmap fills — the one exception to "sign colours text only" ────────
-   * Used ONLY by the named heatmap grids: ReturnsHeatmap and the STIR strip
-   * move cells (implied-rate Δ columns + FF price-change cells) on the
-   * VALENCE scale, and the cellColor grid on red / blue. Rates colour rule
+   * Used ONLY by the named heatmap grids: ReturnsHeatmap, the STIR strip
+   * move cells (implied-rate Δ columns + FF price-change cells) and the
+   * CREDIT SPREADS Δ cells on the VALENCE scale, and the cellColor grid on
+   * red / blue. Rates colour rule
    * (R2b approval): a yield / rate / spread increase is --acm-heat-negative-*,
    * a decrease --acm-heat-positive-* (bond-price view; returns keep up =
    * positive) — EXCEPT the cellColor grid, which is red / blue on its own

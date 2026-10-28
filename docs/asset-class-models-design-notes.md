@@ -11,6 +11,7 @@ The prompts win on any conflict; this file is the quick reference while building
    - the `cellColor` grid (the `--acm-heat-rate-*` scales, per rule 6(b)): `GlobalRatesPage`, `CountryCurvePage`, `STIRDashboardPage` ×2
    - `ReturnsHeatmap` (valence scale `--acm-heat-positive-*` / `--acm-heat-negative-*`)
    - the STIR strip move cells (valence scale; `STIRDashboardPage` `stripHeatClass`, CSS `.stripHeat*`): the implied-rate Δ columns (added at the R2a approval) and the FF table's price-change cells (added at the R2b approval). Price down / rate up → `--acm-heat-negative-*`, price up / rate down → `--acm-heat-positive-*`. Steps by |Δ| ÷ the column's max |Δ|: (0, 25%] → 1, (25, 50%] → 2, (50, 75%] → 3, (75, 100%] → 4; zero / null → no fill, muted text. Each fill sits on an opaque `--acm-surface-panel` base so pack tints and FF year bands never stack under it.
+   - the CREDIT SPREADS table Δ cells (valence scale; `STIRDashboardPage` `creditHeatClass`, CSS `.creditHeat*`; added at the R3b turn): the 1D–YTD Δ columns wherever the table renders (US CREDIT, EU CREDIT). Widening → `--acm-heat-negative-*`, tightening → `--acm-heat-positive-*`; the same quartile-of-column-max steps as the strip; no fill when the change rounds to zero at its 0dp display; the `Last (bp)` level column stays plain.
    - The `cellColor` grid's scale and timing: see rule 6(b).
    - Heatmap cells never carry an alert treatment; cell text is always `--acm-text-primary`.
    - Enforced by `client/src/pages/assetClassModels.heatmaps.test.ts` (only these components may reference `--acm-heat-*`, each on its own scale).
@@ -81,3 +82,14 @@ Section = every file reachable from `pages/STIRDashboardPage.tsx` by relative im
 | `1cfa75e` | section TSX/TS (93 files) | 1,537 | 278 | 146 | 1,961 | 86 |
 | `1cfa75e` | section CSS (18 modules) | 472 | 193 | 355 | 1,020 | 88 |
 | `1cfa75e` | definition layer (22 files) | 213 | 0 | 0 | 213 | 0 |
+
+## Process: branches and the RATES commit (2026-10-28)
+
+`acm-revamp` is pushed to GitHub, so it is **never force-pushed** (supersedes the earlier `git reset --soft` squash plan). Work on it is committed and pushed normally. After R5, once RATES is approved:
+
+1. Commit any remaining R5 work on `acm-revamp` normally and push it normally (no force).
+2. `git switch main`, then `git merge --squash acm-revamp`.
+3. Paste `git diff --cached --stat` and confirm **no `server/` or data-ingestion file** appears; only design work may differ from `main`. Anything else → stop and report.
+4. Commit on `main` as one RATES commit (message summarises R1–R5 and the colour rules), then push `main` normally.
+5. Leave `acm-revamp` on GitHub untouched as an archive; never delete it unless asked.
+6. Continue MACRO and later batches on a new branch `acm-revamp-2` cut from the updated `main`.
