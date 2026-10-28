@@ -1,16 +1,8 @@
 import { useMemo, useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceArea,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import styles from '../pages/STIRDashboardPage.module.css'
+import { fmtSignedFixed } from './acm'
+import { FUNDAMENTAL_MODEL_COLORS as FMC, LABOR_COLORS } from '../constants/identityColors'
+import { FvmLineChart, FvmMessage, FvmOverlayToggle, FvmPanel, FvmStats, FvmToggleGroup, type FvmLine } from './fundamentalPanelParts'
 import { useAUFundamental, type AUFundamentalTab } from '../hooks/useAUFundamental'
 
 // Australian sibling of the EU/CA/JP fundamental panels, adapted to Australia's
@@ -68,7 +60,6 @@ const RANGES = [
 
 type RangeKey = typeof RANGES[number]['key']
 
-const FVM_TICK = { fontSize: 10, fontFamily: 'var(--font-mono)', fill: '#94A3B8' }
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function fmtPeriod(d: string, freq: 'M' | 'Q'): string {
@@ -80,10 +71,10 @@ function fmtPeriod(d: string, freq: 'M' | 'Q'): string {
   return `${SHORT_MONTHS[parseInt(m, 10) - 1]} ${y}`
 }
 
+/** Signed MoM / QoQ in the stats line; a value that rounds to zero prints as 0.00 (near-zero rule). */
 function fmtSignedPct(v: number | null, digits = 2): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(digits)}`
+  return fmtSignedFixed(v, digits)
 }
 
 function fmtPct(v: number | null | undefined, digits = 2): string {
@@ -135,6 +126,8 @@ interface YoYRow {
 }
 
 interface SeqRow { date: string; seq: number | null }
+
+const FREQ_OPTIONS = [{ key: 'MONTHLY', label: 'MONTHLY' }, { key: 'QUARTERLY', label: 'QUARTERLY' }] as const
 
 export function AUFundamentalModelPanel() {
   const [activeTab, setActiveTab] = useState<VisibleTab>('cpi')
@@ -263,197 +256,77 @@ export function AUFundamentalModelPanel() {
 
   const tickFmt = (v: string) => fmtPeriod(v, chartFreq)
 
+  const policyLines: FvmLine[] = showPolicy ? [{ key: 'policy', label: 'RBA Cash Rate', color: FMC.policyRate, width: 1.5 }] : []
+  const overlay = <FvmOverlayToggle label="RBA CASH RATE" on={showPolicy} onToggle={() => setShowPolicy((v) => !v)} />
+  const paceLines: FvmLine[] = [
+    { key: 'p1', label: paceLabel(paceWindows[0], chartFreq), color: FMC.pace1, dash: '5 4' },
+    { key: 'p2', label: paceLabel(paceWindows[1], chartFreq), color: FMC.pace3, dash: '5 4' },
+    { key: 'p3', label: paceLabel(paceWindows[2], chartFreq), color: FMC.pace6, dash: '5 4' },
+  ]
+
   return (
-    <div className={styles.fvmPanel}>
-      <div className={styles.fvmHeader} style={isInflation ? { alignItems: 'flex-start' } : undefined}>
-        <div style={{ minWidth: 0 }}>
-          <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
-          {isInflation && (
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: '#5b6b7d', marginTop: '3px' }}>
-              {subtitleFor(freq, measure)}
-            </div>
+    <FvmPanel
+      actions={isInflation && (
+        <>
+          <FvmToggleGroup options={FREQ_OPTIONS} value={freq} onChange={setFreq} />
+          <FvmToggleGroup options={MEASURES.map((m) => ({ key: m, label: m }))} value={measure} onChange={setMeasure} />
+        </>
+      )}
+      note={isInflation ? subtitleFor(freq, measure) : undefined}
+      tabs={TABS}
+      activeTab={activeTab}
+      onTab={setActiveTab}
+    >
+      {error ? (
+        <FvmMessage>{error}</FvmMessage>
+      ) : loading || !data || !latest ? (
+        <FvmMessage>Loading {TABS.find((t) => t.key === activeTab)?.label} model…</FvmMessage>
+      ) : (
+        <>
+          <FvmStats>{statsLine}</FvmStats>
+          <FvmToggleGroup options={RANGES} value={range} onChange={setRange} className={styles.fvmRangeBar} />
+
+          {activeTab === 'labor' ? (
+            <FvmLineChart
+              title="Unemployment rate"
+              data={laborChartData}
+              lines={[
+                { key: 'rate', label: 'Unemployment (SA)', color: LABOR_COLORS.u3 },
+                { key: 'trend', label: 'Trend', color: FMC.auTrend, width: 1.8 },
+                ...policyLines,
+              ]}
+              height={350}
+              range={laborDomain}
+              tickFormatter={(v) => fmtPeriod(v, 'M')}
+              actions={overlay}
+              namedTooltip
+            />
+          ) : (
+            <>
+              <FvmLineChart
+                title={`CPI ${measure === 'HEADLINE' ? 'Headline' : measure === 'TRIM' ? 'Trimmed mean' : 'Weighted median'} — YoY %`}
+                data={yoyChartData}
+                lines={[{ key: 'yoy', label: 'YoY actual', color: FMC.headline }, ...paceLines, ...policyLines]}
+                targetBand={{ from: 2, to: 3, mid: 2.5, color: FMC.auTargetBand }}
+                referenceLegend={[{ label: '2–3% Target', color: FMC.auTargetBand }]}
+                height={300}
+                range={yoyDomain}
+                tickFormatter={tickFmt}
+                actions={overlay}
+              />
+              <FvmLineChart
+                title={`${seqName} % — Historical ${chartFreq === 'Q' ? 'quarter-over-quarter' : 'month-over-month'} changes`}
+                data={seqChartData}
+                lines={[{ key: 'seq', label: `${seqName} %`, color: FMC.mom, width: 1.5 }]}
+                zeroLine
+                height={250}
+                range={seqDomain}
+                tickFormatter={tickFmt}
+              />
+            </>
           )}
-        </div>
-        {isInflation && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', columnGap: '10px', rowGap: '4px' }}>
-            <div className={styles.fvmMeasureToggle}>
-              {(['MONTHLY', 'QUARTERLY'] as Freq[]).map((f, idx) => (
-                <button
-                  key={f}
-                  className={`${styles.fvmMeasureBtn} ${freq === f ? styles.fvmMeasureBtnActive : ''}`}
-                  onClick={() => setFreq(f)}
-                  style={{
-                    border: `1px solid ${freq === f ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                  }}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <div className={styles.fvmMeasureToggle}>
-              {MEASURES.map((m, idx) => (
-                <button
-                  key={m}
-                  className={`${styles.fvmMeasureBtn} ${measure === m ? styles.fvmMeasureBtnActive : ''}`}
-                  onClick={() => setMeasure(m)}
-                  style={{
-                    border: `1px solid ${measure === m ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                  }}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className={styles.fvmTabs}>
-        {TABS.map((tab, idx) => (
-          <button
-            key={tab.key}
-            className={`${styles.fvmTab} ${activeTab === tab.key ? styles.fvmTabActive : ''}`}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              border: `1px solid ${activeTab === tab.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-              ...(idx > 0 ? { borderLeft: 'none' } : {}),
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.fvmBody}>
-        {error ? (
-          <div className={styles.comingSoon}>{error}</div>
-        ) : loading || !data || !latest ? (
-          <div className={styles.comingSoon}>Loading {TABS.find((t) => t.key === activeTab)?.label} model…</div>
-        ) : (
-          <>
-            <div className={styles.fvmStatsLine}>{statsLine}</div>
-
-            <div className={styles.fvmRangeBar}>
-              {RANGES.map((r, idx) => (
-                <button
-                  key={r.key}
-                  className={`${styles.fvmRangeBtn} ${range === r.key ? styles.fvmRangeBtnActive : ''}`}
-                  onClick={() => setRange(r.key)}
-                  style={{
-                    border: `1px solid ${range === r.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                  }}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowPolicy((v) => !v)}
-              style={{
-                background: showPolicy ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
-                border: `1px solid ${showPolicy ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
-                color: showPolicy ? '#a78bfa' : '#728197',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                padding: '3px 10px',
-                cursor: 'pointer',
-                borderRadius: '2px',
-                marginBottom: '6px',
-              }}
-            >
-              RBA CASH RATE
-            </button>
-
-            {activeTab === 'labor' ? (
-              <>
-                <div className={styles.fvmLegend}>
-                  <span style={{ color: '#e2e8f0' }}>― Unemployment (SA)</span>
-                  <span style={{ color: '#fbbf24' }}>― Trend</span>
-                  {showPolicy && <span style={{ color: '#a78bfa' }}>― RBA Cash Rate</span>}
-                </div>
-
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={laborChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={tickFmt} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={laborDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtPeriod(value, 'M') : '')}
-                    />
-                    <Line type="monotone" dataKey="rate" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls name="Unemployment (SA)" />
-                    <Line type="monotone" dataKey="trend" stroke="#fbbf24" strokeWidth={1.8} dot={false} connectNulls name="Trend" />
-                    {showPolicy && (
-                      <Line type="monotone" dataKey="policy" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="RBA Cash Rate" />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <>
-                <div className={styles.fvmLegend}>
-                  <span style={{ color: '#e2e8f0' }}>― YoY actual</span>
-                  <span style={{ color: '#4ade80' }}>-- {paceLabel(paceWindows[0], chartFreq)}</span>
-                  <span style={{ color: '#22d3ee' }}>-- {paceLabel(paceWindows[1], chartFreq)}</span>
-                  <span style={{ color: '#fbbf24' }}>-- {paceLabel(paceWindows[2], chartFreq)}</span>
-                  <span style={{ color: '#34d399' }}>▮ 2–3% Target</span>
-                  {showPolicy && <span style={{ color: '#a78bfa' }}>― RBA Cash Rate</span>}
-                </div>
-
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={yoyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={tickFmt} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={yoyDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtPeriod(value, chartFreq) : '')}
-                    />
-                    <ReferenceArea y1={2} y2={3} fill="#34d399" fillOpacity={0.07} />
-                    <ReferenceLine y={2.5} stroke="#34d399" strokeDasharray="8 4" strokeOpacity={0.5} />
-                    <Line type="monotone" dataKey="yoy" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="p1" stroke="#4ade80" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    <Line type="monotone" dataKey="p2" stroke="#22d3ee" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    <Line type="monotone" dataKey="p3" stroke="#fbbf24" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    {showPolicy && (
-                      <Line type="monotone" dataKey="policy" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="RBA Cash Rate" />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-
-                <div className={styles.fvmSectionLabel}>
-                  {seqName} % — Historical {chartFreq === 'Q' ? 'quarter-over-quarter' : 'month-over-month'} changes
-                </div>
-
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={seqChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={tickFmt} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={seqDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtPeriod(value, chartFreq) : '')}
-                    />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                    <Line type="monotone" dataKey="seq" stroke="#4EC9B0" strokeWidth={1.5} dot={false} connectNulls />
-                  </LineChart>
-                </ResponsiveContainer>
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </FvmPanel>
   )
 }

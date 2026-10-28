@@ -653,6 +653,12 @@ const MM_SPREAD_CHARTS = [
 // First inflection point on the curve — the contract where the cycle direction
 // reverses. Falls back to the last contract if the curve never reverses, or to
 // the only/last contract for very short curves.
+/** A panel's padded y range snapped to even 1dp ticks (niceAxis, R5b); 'auto' ranges pass through. */
+function fvmNice(range: readonly [number | string, number | string], dp = 1): { domain: [number, number] | [string, string]; ticks?: number[] } {
+  if (typeof range[0] === 'number' && typeof range[1] === 'number') return niceAxis([range[0], range[1]], { dp })
+  return { domain: ['auto', 'auto'] }
+}
+
 function findTerminalContract(contracts: StripContract[]): StripContract | null {
   if (contracts.length === 0) return null
   if (contracts.length < 3) return contracts[contracts.length - 1]
@@ -4192,7 +4198,7 @@ export function STIRDashboardPage() {
                           <LineChart data={fvmYoYDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                             <CartesianGrid {...chartTheme.grid} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={fvmYoYDomain} allowDataOverflow />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(fvmYoYDomain)} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
@@ -4219,7 +4225,7 @@ export function STIRDashboardPage() {
                           <LineChart data={fvmFilteredMomData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                             <CartesianGrid {...chartTheme.grid} vertical={false} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={fvmMomDomain} allowDataOverflow />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(fvmMomDomain)} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
@@ -4304,7 +4310,7 @@ export function STIRDashboardPage() {
                           <LineChart data={laborChartDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                             <CartesianGrid {...chartTheme.grid} vertical={false} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={laborDomain} allowDataOverflow />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(laborDomain)} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
@@ -4332,7 +4338,7 @@ export function STIRDashboardPage() {
                           <LineChart data={filteredPayrollYoY} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                             <CartesianGrid {...chartTheme.grid} vertical={false} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={payrollYoYDomain} allowDataOverflow />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(payrollYoYDomain)} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
@@ -4358,7 +4364,7 @@ export function STIRDashboardPage() {
                           <ComposedChart data={filteredPayrollMoM} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
                             <CartesianGrid {...chartTheme.grid} vertical={false} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(0)} width={42} domain={payrollMoMDomain} allowDataOverflow />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(0)} width={42} {...fvmNice(payrollMoMDomain, 0)} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               cursor={chartTheme.barTooltipCursor}

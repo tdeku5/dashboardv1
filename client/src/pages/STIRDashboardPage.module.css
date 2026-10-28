@@ -1447,6 +1447,15 @@
 .ustTiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* Per-market tile rows (R5a): column count from --ust-cols (set inline, capped), wrapping beyond it. */
 .ustTilesN { grid-template-columns: repeat(var(--ust-cols, 4), minmax(0, 1fr)); }
+/* Fundamental-model panels (R5b): one-line note under the header (JP core
+   convention, AU measure subtitle) and footnotes (BoC core measures). */
+.fvmNote {
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-xs);
+  color: var(--acm-text-tertiary);
+  padding: 0 0 var(--acm-space-2);
+  line-height: var(--acm-lh-prose);
+}
 
 .ustTile {
   display: flex;
