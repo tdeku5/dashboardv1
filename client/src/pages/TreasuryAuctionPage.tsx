@@ -16,7 +16,7 @@ import {
   Tooltip,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
-import { AcmChartFrame, AcmPageHeader, AcmPanel, AcmStatStrip, AcmStatTile } from '../components/acm'
+import { AcmChartFrame, AcmPageHeader, AcmPanel, AcmStatStrip, AcmStatTile, niceAxis } from '../components/acm'
 import { cx } from '../components/acm/acmFormat'
 import { barTooltipCursor, chartTheme, referenceLabelStyle, referenceLines, tooltipLabelStyle, tooltipSurfaceStyle } from '../components/acm/chartTheme'
 import { INVESTOR_CLASS_COLORS, TREASURY_AUCTION_COLORS, type InvestorClassKey } from '../constants/identityColors'
@@ -440,6 +440,9 @@ export function TreasuryAuctionContent() {
   // Cross-route component (RATES › US › TREASURY AUCTIONS and /treasury): its
   // own outermost element carries acm-root (component-level root rule).
   const brushTheme = { ...chartTheme.brush, height: BRUSH_HEIGHT, tickFormatter: brushTickFormatter }
+  // Bid-to-cover: even 1dp ticks over the brushed window (niceAxis, R5a), 0.1x headroom each side.
+  const btcWindow = chartData.slice(brush.start, brush.end + 1).map(a => a.bidToCover).filter((v): v is number => v != null)
+  const btcAxis = niceAxis(btcWindow.length ? [Math.min(...btcWindow) - 0.1, Math.max(...btcWindow) + 0.1] : [], { dp: 1 })
   return (
     <div className={cx('acm-root', styles.taRoot)}>
       <AcmPageHeader
@@ -494,7 +497,7 @@ export function TreasuryAuctionContent() {
                 <ComposedChart data={chartData} margin={{ top: 16, right: 24, bottom: 0, left: 8 }}>
                   <CartesianGrid {...chartTheme.grid} />
                   <XAxis dataKey="auctionDate" {...chartTheme.xAxis} tickFormatter={fmtDate} />
-                  <YAxis {...chartTheme.yAxis} domain={['auto', 'auto']} tickFormatter={(v: number) => v.toFixed(1)} />
+                  <YAxis {...chartTheme.yAxis} domain={btcAxis.domain} ticks={btcAxis.ticks} tickFormatter={(v: number) => v.toFixed(1)} />
                   <Tooltip content={<BtcTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
                   {stats && (
                     <ReferenceLine

@@ -19,33 +19,28 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { AcmChartFrame, fmtSignedFixed, niceAxis, type AcmLegendItem } from '../components/acm'
+import { cx } from '../components/acm/acmFormat'
+import { chartTheme, referenceLines } from '../components/acm/chartTheme'
+import { TENOR_COLORS } from '../constants/identityColors'
+import { cutoffForRange, RangeButtons, type RangeKey } from './PolicyRatePage'
 import styles from './PolicyRatePage.module.css'
 
-// ── Shared visual constants (kept in sync with PolicyRatePage) ──────────────
+// ── Colours: identity registry (R5a) — the same TENOR_COLORS as the US chart ──
+// Every line is a LEVEL (cash rate, yields, tenor − cash spreads): identity
+// colour, never sign (rule 6). Layout + range buttons = PolicyRatePage's pr*.
 
-const COLOR_CASH = '#e2e8f0' // white — same as EFFR on the US chart
-const COLOR_2Y   = '#60a5fa'
-const COLOR_5Y   = '#a78bfa'
-const COLOR_10Y  = '#34d399'
-const COLOR_30Y  = '#f87171'
+const COLOR_CASH = TENOR_COLORS.cash
+const COLOR_2Y   = TENOR_COLORS['2Y']
+const COLOR_5Y   = TENOR_COLORS['5Y']
+const COLOR_10Y  = TENOR_COLORS['10Y']
+const COLOR_30Y  = TENOR_COLORS['30Y']
+const TERM_HEIGHT = 380
+const SPREAD_HEIGHT = 180
 
-const RANGES = [
-  { key: '1y',  label: '1Y',  years: 1 },
-  { key: '2y',  label: '2Y',  years: 2 },
-  { key: '5y',  label: '5Y',  years: 5 },
-  { key: '10y', label: '10Y', years: 10 },
-  { key: '20y', label: '20Y', years: 20 },
-  { key: 'max', label: 'MAX', years: 100 },
-] as const
-type RangeKey = typeof RANGES[number]['key']
-
-function cutoffForRange(range: RangeKey): string {
-  if (range === 'max') return '1900-01-01'
-  const years = RANGES.find(r => r.key === range)!.years
-  const d = new Date()
-  d.setUTCFullYear(d.getUTCFullYear() - years)
-  return d.toISOString().slice(0, 10)
-}
+/** Tenor − cash spreads are signed; '0.00pp' when they round to zero (near-zero rule). */
+const fmtSpreadPp = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? fmtSignedFixed(v, 2, 'pp') : '—')
+const fmtLevelPct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${v.toFixed(2)}%` : '—')
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -107,57 +102,7 @@ async function fetchAll(props: CountryTermStructureProps): Promise<SeriesBundle>
   return { cash, tenors }
 }
 
-// ── UI bits ────────────────────────────────────────────────────────────────
-
 type Tone = 'on' | 'off'
-
-interface RangeButtonsProps {
-  value: RangeKey
-  onChange: (r: RangeKey) => void
-}
-function RangeButtons({ value, onChange }: RangeButtonsProps) {
-  return (
-    <div className={styles.rangeButtons}>
-      {RANGES.map(r => (
-        <button
-          key={r.key}
-          onClick={() => onChange(r.key)}
-          className={value === r.key ? `${styles.rangeBtn} ${styles.rangeBtnActive}` : styles.rangeBtn}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-interface LegendEntry { key: string; label: string; color: string }
-interface LegendBarProps {
-  entries: LegendEntry[]
-  state: Record<string, Tone>
-  onToggle: (key: string) => void
-}
-function LegendBar({ entries, state, onToggle }: LegendBarProps) {
-  return (
-    <div className={styles.legendBar}>
-      {entries.map(e => {
-        const off = state[e.key] === 'off'
-        return (
-          <button
-            key={e.key}
-            onClick={() => onToggle(e.key)}
-            className={styles.legendItem}
-            style={{ color: off ? '#475569' : '#cbd5e1', opacity: off ? 0.55 : 1 }}
-            title={off ? 'Show series' : 'Hide series'}
-          >
-            <span className={styles.legendSwatch} style={{ background: off ? '#475569' : e.color }} />
-            {e.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 // ── Page component ─────────────────────────────────────────────────────────
 
@@ -228,25 +173,13 @@ export function CountryTermStructure(props: CountryTermStructureProps) {
   // line is visibly explained.
   const cashEmpty = bundle != null && bundle.cash.size === 0
 
-  // Legend entries — overnight cash rate first, then tenors.
-  const legend = useMemo<LegendEntry[]>(() => {
-    return [
-      { key: 'cash', label: props.cashLabel, color: COLOR_CASH },
-      ...props.tenors.map(t => ({ key: t.symbol, label: t.label, color: t.color })),
-    ]
-  }, [props.cashLabel, props.tenors])
-
-  if (loading) return <div style={{ padding: 16, color: '#94a3b8' }}>Loading {props.countryLabel} term structure…</div>
-  if (error)   return <div style={{ padding: 16, color: '#f87171' }}>Failed to load: {error}</div>
+  if (loading) return <div className={styles.prStateMsg}>Loading {props.countryLabel} term structure…</div>
+  if (error)   return <div className={styles.prStateError}>Failed to load: {error}</div>
   if (!data)   return null
 
   const hide = (key: string) => toggle[key] === 'off'
   const toggleKey = (key: string) =>
     setToggle(prev => ({ ...prev, [key]: prev[key] === 'off' ? 'on' : 'off' }))
-
-  const subtitle = cashEmpty
-    ? `${props.cashLabel} data not yet ingested — line omitted. (See server logs for collector status.)`
-    : props.subtitle
 
   const toggleSpread = (key: string) => {
     setSelectedSpreads(prev => {
@@ -256,36 +189,33 @@ export function CountryTermStructure(props: CountryTermStructureProps) {
     })
   }
 
+  // Legend — overnight cash rate first, then tenors; click to toggle. A cash
+  // series that was never ingested shows dimmed and can't be toggled on.
+  const legend: AcmLegendItem[] = [
+    { label: props.cashLabel, color: COLOR_CASH, hidden: cashEmpty || hide('cash'), onClick: cashEmpty ? undefined : () => toggleKey('cash') },
+    ...props.tenors.map(t => ({ label: t.label, color: t.color, hidden: hide(t.symbol), onClick: () => toggleKey(t.symbol) })),
+  ]
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <span>POLICY RATE VS TERM STRUCTURE</span>
-        <RangeButtons value={range} onChange={setRange} />
-      </div>
-      <LegendBar entries={legend} state={toggle} onToggle={toggleKey} />
-      {subtitle && (
-        <div style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.04em',
-          color: cashEmpty ? '#fcd34d' : '#6b7889',
-          padding: '4px 16px 0',
-        }}>
-          {subtitle}
+    <div className={styles.prColumn}>
+      {cashEmpty && (
+        <div className={cx(styles.prNote, styles.prNoteWarning)}>
+          {props.cashLabel} data not yet ingested — line omitted. (See server logs for collector status.)
         </div>
       )}
-      <div className={styles.chartArea}>
-        {/* Main term-structure chart */}
-        <ResponsiveContainer width="100%" height={380}>
+      <AcmChartFrame
+        title="POLICY RATE VS TERM STRUCTURE"
+        subtitle={cashEmpty ? undefined : props.subtitle}
+        legend={legend}
+        actions={<RangeButtons value={range} onChange={setRange} />}
+        height={TERM_HEIGHT}
+      >
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-            <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-            <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
-            <Tooltip
-              contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-              labelStyle={{ color: '#cbd5e1' }}
-              formatter={(v: unknown) => `${Number(v).toFixed(2)}%`}
-            />
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
+            <Tooltip {...chartTheme.tooltip} formatter={fmtLevelPct} />
             {!cashEmpty && (
               <Line type="monotone" dataKey="cash" name={props.cashLabel}
                 stroke={COLOR_CASH} strokeWidth={2} dot={false} connectNulls hide={hide('cash')} />
@@ -296,16 +226,16 @@ export function CountryTermStructure(props: CountryTermStructureProps) {
             ))}
           </LineChart>
         </ResponsiveContainer>
+      </AcmChartFrame>
 
-        {/* Spread sub-chart: tenor − cash */}
-        <SpreadSubChart
-          data={data}
-          tenors={props.tenors}
-          cashEmpty={cashEmpty}
-          selected={selectedSpreads}
-          onToggle={toggleSpread}
-        />
-      </div>
+      {/* Spread sub-chart: tenor − cash */}
+      <SpreadSubChart
+        data={data}
+        tenors={props.tenors}
+        cashEmpty={cashEmpty}
+        selected={selectedSpreads}
+        onToggle={toggleSpread}
+      />
     </div>
   )
 }
@@ -323,52 +253,28 @@ interface SpreadSubChartProps {
 function SpreadSubChart({ data, tenors, cashEmpty, selected, onToggle }: SpreadSubChartProps) {
   const visible = tenors.filter(t => selected.has(t.symbol))
   const singleMode = visible.length === 1
+  // even 1dp ticks over the visible spreads, 0 kept for the zero line
+  const yAxis = niceAxis(visible.flatMap(t => data.map(r => r[`spread_${t.symbol}`])).filter((v): v is number => typeof v === 'number'), { dp: 1, includeZero: true, maxIntervals: 4 })
+
+  // Tenor multi-select = the frame legend; disabled (no onClick) without a cash rate.
+  const legend: AcmLegendItem[] = tenors.map(t => ({
+    label: t.label, color: t.color, hidden: !selected.has(t.symbol), onClick: cashEmpty ? undefined : () => onToggle(t.symbol),
+  }))
 
   return (
-    <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px 6px' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', color: '#94a3b8' }}>
-          SPREAD VS CASH RATE
-        </span>
-        {/* Tenor multi-select */}
-        <div style={{ display: 'flex', gap: 4 }}>
-          {tenors.map(t => {
-            const on = selected.has(t.symbol)
-            return (
-              <button
-                key={t.symbol}
-                onClick={() => onToggle(t.symbol)}
-                disabled={cashEmpty}
-                style={{
-                  padding: '3px 9px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  color: on ? '#0f172a' : t.color,
-                  background: on ? t.color : 'transparent',
-                  border: `1px solid ${t.color}`,
-                  borderRadius: 999,
-                  cursor: cashEmpty ? 'not-allowed' : 'pointer',
-                  opacity: cashEmpty ? 0.4 : 1,
-                }}
-                title={cashEmpty ? 'Cash rate unavailable — spreads cannot be computed' : `${t.label} − cash`}
-              >
-                {t.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      <ResponsiveContainer width="100%" height={180}>
+    <AcmChartFrame
+      title="SPREAD VS CASH RATE"
+      subtitle={cashEmpty ? 'Cash rate unavailable — spreads cannot be computed' : 'Tenor − cash (pp) · click a tenor to toggle'}
+      legend={legend}
+      height={SPREAD_HEIGHT}
+    >
+      <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-          <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-            labelStyle={{ color: '#cbd5e1' }}
-            formatter={(v: unknown, name: unknown) => [`${Number(v).toFixed(2)}pp`, String(name)]}
-          />
-          <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+          <CartesianGrid {...chartTheme.grid} />
+          <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+          <YAxis {...chartTheme.yAxis} domain={yAxis.domain} ticks={yAxis.ticks} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+          <Tooltip {...chartTheme.tooltip} formatter={(v: unknown, name: unknown) => [fmtSpreadPp(v), String(name)]} />
+          <ReferenceLine y={0} {...referenceLines.zero} />
           {/* One selected: line + translucent area fill. Two or more: plain lines, no fill. */}
           {singleMode && visible.map(t => (
             <Area
@@ -400,13 +306,12 @@ function SpreadSubChart({ data, tenors, cashEmpty, selected, onToggle }: SpreadS
             />
           ))}
           {/* Brush controls only this sub-chart; range buttons remain the primary
-            * cross-panel sync (see CountryTermStructure header). Fully syncing
-            * the brush across the main chart would require slicing data outside
-            * the Recharts component — deferred. */}
-          <Brush dataKey="date" height={18} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+            * cross-panel sync. Fully syncing the brush across the main chart
+            * would require slicing data outside the Recharts component — deferred. */}
+          <Brush dataKey="date" {...chartTheme.brush} />
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
+    </AcmChartFrame>
   )
 }
 
@@ -414,7 +319,7 @@ function SpreadSubChart({ data, tenors, cashEmpty, selected, onToggle }: SpreadS
 //
 // Standard 2Y / 5Y / 10Y / 30Y per spec. If any tenor's symbol is missing in
 // tv_series at render time it just won't draw a line (the line silently
-// drops); the LegendBar still shows it so the user knows which series was
+// drops); the frame legend still shows it so the user knows which series was
 // intended. EGB / GB / CA / JP / AU all carry the four tenors per the
 // tv_series audit at the time of this commit.
 

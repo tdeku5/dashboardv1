@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { AcmChartFrame, fmtSignedFixed, type AcmLegendItem } from '../components/acm'
+import { AcmChartFrame, fmtSignedFixed, niceAxis, type AcmLegendItem } from '../components/acm'
 import { cx } from '../components/acm/acmFormat'
 import { chartTheme, referenceBand, referenceLines } from '../components/acm/chartTheme'
 import { POLICY_RATE_COLORS, TENOR_COLORS } from '../constants/identityColors'
@@ -38,7 +38,7 @@ const fmtLevelPct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v)
 
 // ── Range selector ──────────────────────────────────────────────────────────
 
-const RANGES = [
+export const RANGES = [
   { key: '1y',  label: '1Y',  years: 1 },
   { key: '2y',  label: '2Y',  years: 2 },
   { key: '5y',  label: '5Y',  years: 5 },
@@ -46,9 +46,9 @@ const RANGES = [
   { key: '20y', label: '20Y', years: 20 },
   { key: 'max', label: 'MAX', years: 100 },
 ] as const
-type RangeKey = typeof RANGES[number]['key']
+export type RangeKey = typeof RANGES[number]['key']
 
-function cutoffForRange(range: RangeKey): string {
+export function cutoffForRange(range: RangeKey): string {
   if (range === 'max') return '1900-01-01'
   const years = RANGES.find(r => r.key === range)!.years
   const d = new Date()
@@ -305,6 +305,11 @@ export function PolicyRatePage() {
   const toggle = (key: string, set: typeof setToggle1) =>
     set(prev => ({ ...prev, [key]: prev[key] === 'off' ? 'on' : 'off' }))
   const hide = (t: Record<string, Tone>, key: string) => t[key] === 'off'
+  // EFFR − inflation axis: even 1dp ticks (niceAxis), over the visible lines only, 0 kept in range for the zero line.
+  const realAxis = niceAxis(
+    inflationData.rows.flatMap(r => [hide(toggle1, 'cpi') ? null : r.realCpi, hide(toggle1, 'pce') ? null : r.realPce]).filter((v): v is number => v != null),
+    { dp: 1, includeZero: true },
+  )
   const legendFor = (entries: Array<{ key: string; label: string; color: string }>, state: Record<string, Tone>, set: typeof setToggle1): AcmLegendItem[] =>
     entries.map(e => ({ label: e.label, color: e.color, hidden: state[e.key] === 'off', onClick: () => toggle(e.key, set) }))
 
@@ -351,7 +356,7 @@ export function PolicyRatePage() {
           <LineChart data={inflationData.rows} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
             <CartesianGrid {...chartTheme.grid} />
             <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
-            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+            <YAxis {...chartTheme.yAxis} domain={realAxis.domain} ticks={realAxis.ticks} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
             <Tooltip {...chartTheme.tooltip} formatter={fmtSpreadPp} />
             <ReferenceLine y={0} {...referenceLines.zero} />
             {inflationData.bands.map((b, i) => (
@@ -407,7 +412,7 @@ interface RangeButtonsProps {
   value: RangeKey
   onChange: (r: RangeKey) => void
 }
-function RangeButtons({ value, onChange }: RangeButtonsProps) {
+export function RangeButtons({ value, onChange }: RangeButtonsProps) {
   return (
     <div className={styles.prRangeButtons}>
       {RANGES.map(r => (
@@ -443,6 +448,8 @@ interface SpreadSubChartUSProps {
 function SpreadSubChartUS({ data, selected, onToggle }: SpreadSubChartUSProps) {
   const visible = US_SPREAD_TENORS.filter(t => selected.has(t.key))
   const singleMode = visible.length === 1
+  // even 1dp ticks over the visible spreads, 0 kept for the zero line
+  const yAxis = niceAxis(visible.flatMap(t => data.map(r => r[`spread_${t.key}`])).filter((v): v is number => typeof v === 'number'), { dp: 1, includeZero: true, maxIntervals: 4 })
   return (
     <AcmChartFrame
       title="SPREAD VS CASH RATE"
@@ -454,7 +461,7 @@ function SpreadSubChartUS({ data, selected, onToggle }: SpreadSubChartUSProps) {
         <ComposedChart data={data} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
           <CartesianGrid {...chartTheme.grid} />
           <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
-          <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+          <YAxis {...chartTheme.yAxis} domain={yAxis.domain} ticks={yAxis.ticks} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
           <Tooltip {...chartTheme.tooltip} formatter={(v: unknown, name: unknown) => [fmtSpreadPp(v), String(name)]} />
           <ReferenceLine y={0} {...referenceLines.zero} />
           {singleMode && visible.map(t => (

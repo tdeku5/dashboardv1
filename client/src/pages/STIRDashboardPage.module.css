@@ -1445,6 +1445,8 @@
 .ustTiles7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 .ustTiles4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ustTiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Per-market tile rows (R5a): column count from --ust-cols (set inline, capped), wrapping beyond it. */
+.ustTilesN { grid-template-columns: repeat(var(--ust-cols, 4), minmax(0, 1fr)); }
 
 .ustTile {
   display: flex;

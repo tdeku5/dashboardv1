@@ -17,19 +17,20 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { CountrySelector, type CountryCode } from '../components/CountrySelector'
-import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, fmtSignedFixed, roundForDisplay, signColor, type AcmColumn, type AcmLegendItem, type SignTone } from '../components/acm'
-import { chartTheme, CHART_FONT_MONO, CHART_LABEL_FONT_SIZE, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, signColor, useBrushWindow, type AcmColumn, type SignTone } from '../components/acm'
+import { chartTheme, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
 import { toneClass } from '../components/acm/tones'
+import { fmtMonthYearTick, rangeToggle, rateChangeClass, rateChangeTone, regimeColor, regimeLegend, renderDeltaLabel, ustChangeClass, ustLevelClass, UstTile } from './ratesShared'
+// rateChangeTone moved to ./ratesShared at R5a; re-exported for existing importers.
+export { rateChangeTone } from './ratesShared'
 import {
   CALENDAR_SPREAD_COLORS,
   CB_SCENARIO_COLORS,
   CURVE_COMPARE_COLORS,
-  CURVE_REGIME_COLORS,
   CREDIT_SPREAD_COLORS,
   YIELD_ATTRIBUTION_COLORS,
   REGIME_OVERLAY_LINE,
   UST_FAMILY_COLORS,
-  type RegimeKey,
   STIR_PACK_BACKGROUNDS,
   STIR_PACK_COLORS,
   SUMMARY_POPUP_LINE,
@@ -575,17 +576,6 @@ export function policyMoveTone(move: 'hike' | 'cut'): 'negative' | 'positive' {
   return move === 'hike' ? 'negative' : 'positive'
 }
 
-/**
- * Yield / rate / spread level-vs-reference or Δ: up = negative (red), down =
- * positive (green). Decided on the value as displayed at `dp` decimals (bp
- * displays use 1dp), so anything that prints as zero is untoned.
- */
-export function rateChangeTone(v: number | null, dp = 1): SignTone | undefined {
-  if (v == null) return undefined
-  const shown = roundForDisplay(v, dp)
-  if (shown === 0) return undefined
-  return shown > 0 ? 'negative' : 'positive'
-}
 
 // Named heatmap #3 — strip implied-rate Δ columns and FF price-change cells, valence heat scale. Same
 // normalisation as the old magnitude-scaled fill (|Δ| / the column's max |Δ|),
@@ -600,9 +590,6 @@ function stripHeatClass(priceChange: number | null, colMaxAbs: number): string |
   return styles[`stripHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
 }
 
-function rateChangeClass(v: number | null, dp = 1): string | undefined {
-  return toneClass(rateChangeTone(v, dp))
-}
 
 // Named heatmap #4 — CREDIT SPREADS table Δ cells (R3b): the valence heat scale
 // with the strip's quartile-of-column-max buckets; widening (spread up) →
@@ -618,7 +605,6 @@ function creditHeatClass(change: number | null, colMaxAbs: number): string | und
 
 // ── UST CURVE (R2d) ─────────────────────────────────────────────────────────
 
-const UST_CHART_RANGES = ['3m', '6m', '1y', '5y', '10y', 'all'] as const
 const ATTR_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
 const CREDIT_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', '10y', 'all'] as const
 const MM_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
@@ -661,91 +647,8 @@ const MM_SPREAD_CHARTS = [
   { key: 'effrIorb', title: 'EFFR − IORB', subtitle: 'Historically a positive spread has been an indicator of reserve scarcity', scarcity: true },
   { key: 'sofrEffr', title: 'SOFR − EFFR', subtitle: 'FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos', scarcity: false },
 ] as const
-const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
-/** "Mar '24" — the UST history charts' X tick. */
-function fmtMonthYearTick(date: string): string {
-  const d = new Date(date)
-  return `${MONTHS_SHORT[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-}
 
-/**
- * A yield / spread / butterfly CHANGE: rule 6 (increase = red, decrease = green);
- * zero or null muted. Differences of yields carry float noise (≈1e-15), which
- * would otherwise tone a "+0.0bp" change, so |v| < 1e-9 counts as zero.
- */
-function ustChangeClass(v: number | null | undefined): string | undefined {
-  if (v == null) return styles.muted
-  return rateChangeClass(v) ?? styles.muted // 1dp bp: a change that prints as 0.0 is muted
-}
-
-/**
- * A spread / butterfly / breakeven LEVEL (e.g. 2s10s at +31bp). Rule 6: levels
- * get no colour — plain primary text; only a missing value is muted.
- */
-function ustLevelClass(v: number | null | undefined): string | undefined {
-  return v == null ? styles.muted : undefined
-}
-
-/** Regime bar colour from the identity registry; unknown / missing → Neutral. */
-function regimeColor(regime: string | null | undefined): string {
-  return (regime && CURVE_REGIME_COLORS[regime as RegimeKey]) || CURVE_REGIME_COLORS.Neutral
-}
-
-/** Regime-chart legend: the seven regimes, plus the overlaid line when it's keyed. */
-function regimeLegend(lineLabel?: string): AcmLegendItem[] {
-  return [
-    ...(Object.entries(CURVE_REGIME_COLORS) as Array<[RegimeKey, string]>).map(([label, color]) => ({ label, color })),
-    ...(lineLabel ? [{ label: lineLabel, color: REGIME_OVERLAY_LINE }] : []),
-  ]
-}
-
-function rangeToggle(value: string, onChange: (r: string) => void, ranges: readonly string[] = UST_CHART_RANGES) {
-  return (
-    <div className={styles.toggleGroup}>
-      {ranges.map((range) => (
-        <button
-          key={range}
-          type="button"
-          className={`${styles.toggleButton} ${value === range ? styles.toggleButtonActive : ''}`}
-          onClick={() => onChange(range)}
-        >
-          {range.toUpperCase()}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-interface UstTileProps {
-  /** UST_FAMILY_COLORS entry: colours the label (and the value when `valueIsFamily`). */
-  family: string
-  label: string
-  value: string
-  valueIsFamily?: boolean
-  valueClass?: string
-  change: string
-  changeClass?: string
-  selected: boolean
-  onSelect: () => void
-}
-
-/** Selectable yield / spread / butterfly tile. */
-function UstTile({ family, label, value, valueIsFamily, valueClass, change, changeClass, selected, onSelect }: UstTileProps) {
-  return (
-    <button
-      type="button"
-      className={`${styles.ustTile} ${selected ? styles.ustTileActive : ''}`}
-      style={{ ['--ust-family' as string]: family }}
-      aria-pressed={selected}
-      onClick={onSelect}
-    >
-      <span className={styles.ustTileLabel}>{label}</span>
-      <span className={`${styles.ustTileValue} ${valueIsFamily ? styles.ustTileValueFamily : ''} ${valueClass ?? ''}`}>{value}</span>
-      <span className={`${styles.ustTileChange} ${changeClass ?? ''}`}>{change}</span>
-    </button>
-  )
-}
 
 // First inflection point on the curve — the contract where the cycle direction
 // reverses. Falls back to the last contract if the curve never reverses, or to
@@ -977,27 +880,6 @@ function sortCurve(points: FuturesCurvePoint[]): FuturesCurvePoint[] {
   return [...points].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate))
 }
 
-function renderDeltaLabel(props: any) {
-  const { x, y, width, height, value } = props
-  if (value == null) return null
-  const numeric = Number(value)
-  // Label beyond the bar's end: above a positive bar, below a negative one.
-  // (Recharts may hand a negative bar a negative height, so take the extent.)
-  const top = Math.min(y, y + height)
-  const bottom = Math.max(y, y + height)
-  return (
-    <text
-      x={x + width / 2}
-      y={numeric >= 0 ? top - 8 : bottom + 14}
-      textAnchor="middle"
-      fill="var(--acm-text-secondary)"
-      fontSize={CHART_LABEL_FONT_SIZE}
-      fontFamily={CHART_FONT_MONO}
-    >
-      {fmtBps(numeric)}
-    </text>
-  )
-}
 
 function CurveTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
@@ -1306,14 +1188,15 @@ export function STIRDashboardPage() {
     })
   }, [curve.currentCurve, curve.lookbackCurve, product, country])
 
-  const curveDomain = useMemo<[number, number]>(() => {
+  // Forward-curve y axis: the ±0.15 padded range snapped to even 2dp ticks (niceAxis, R5a).
+  const curveAxis = useMemo(() => {
     const rates = curveData.flatMap((row) => [row.latestRate, row.benchmarkRate])
       .filter((value): value is number => value != null)
-    if (rates.length === 0) return [0, 5]
-    const min = Math.min(...rates)
-    const max = Math.max(...rates)
-    return [min - 0.15, max + 0.15]
+    if (rates.length === 0) return niceAxis([0, 5], { dp: 2 })
+    return niceAxis([Math.min(...rates) - 0.15, Math.max(...rates) + 0.15], { dp: 2 })
   }, [curveData])
+  // Change-vs-benchmark bars: whole-bp ticks with 0 in range.
+  const curveDeltaAxis = useMemo(() => niceAxis(curveData.map((row) => row.deltaBps).filter((v): v is number => v != null), { dp: 0, includeZero: true }), [curveData])
 
   const summaryRows = useMemo<SummaryRow[]>(() => {
     // Use meeting-based summary when FedWatch meetings are available
@@ -2190,14 +2073,17 @@ export function STIRDashboardPage() {
     return series.length > 0 ? series[idx].date : '—'
   }, [ustData, ycLookback])
 
-  const ycYDomain = useMemo((): [number, number] => {
+  // Curve y axis: the 15% padded range, snapped to even 2dp ticks (niceAxis).
+  const ycYAxis = useMemo(() => {
     const vals = ycCurveData.flatMap((d) => [d.latest, d.offset]).filter((v): v is number => v != null)
-    if (vals.length === 0) return [0, 5]
+    if (vals.length === 0) return niceAxis([0, 5], { dp: 2 })
     const min = Math.min(...vals)
     const max = Math.max(...vals)
     const pad = (max - min) * 0.15 || 0.2
-    return [min - pad, max + pad]
+    return niceAxis([min - pad, max + pad], { dp: 2 })
   }, [ycCurveData])
+  // Change-vs-offset bars: whole-bp ticks, 0 in range (no '-1,-1,-0' labels).
+  const deltaYAxis = useMemo(() => niceAxis(ycCurveData.map(d => d.delta).filter((v): v is number => v != null), { dp: 0, includeZero: true }), [ycCurveData])
 
   const currentYields = useMemo(() => {
     return UST_TENORS.map((tenor) => {
@@ -2774,6 +2660,12 @@ export function STIRDashboardPage() {
   // US and EU Credit tabs (the US-only multi-series overview is rendered above).
   const isEuCredit = country === 'EU'
   const creditLevelData = isEuCredit ? euCreditChartData : creditChartData
+  // HY OAS level chart: even 1dp ticks over the brushed window (niceAxis + useBrushWindow, R5a).
+  const creditOasBrush = useBrushWindow(creditLevelData.length)
+  const creditOasAxis = useMemo(() => niceAxis(
+    creditLevelData.slice(creditOasBrush.start, creditOasBrush.end + 1).map((p) => p.oas).filter((v): v is number => typeof v === 'number'),
+    { dp: 1 },
+  ), [creditLevelData, creditOasBrush.start, creditOasBrush.end])
   const creditRocData = isEuCredit ? euCreditChartData : creditRocChartData
   const creditTabLoading = isEuCredit ? euCreditLoading : ustLoading
   const creditOasLabel = isEuCredit ? 'EU HY OAS' : 'US HY OAS'
@@ -3108,8 +3000,8 @@ export function STIRDashboardPage() {
                         <YAxis
                           {...chartTheme.yAxis}
                           tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                          domain={curveDomain}
-                          allowDataOverflow
+                          domain={curveAxis.domain}
+                          ticks={curveAxis.ticks}
                           label={{ ...chartTheme.axisLabel, value: '%', position: 'top', offset: 10 }}
                         />
                         <Tooltip content={<CurveTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
@@ -3157,6 +3049,8 @@ export function STIRDashboardPage() {
                         />
                         <YAxis
                           {...chartTheme.yAxis}
+                          domain={curveDeltaAxis.domain}
+                          ticks={curveDeltaAxis.ticks}
                           tickFormatter={(v: number) => `${v.toFixed(0)}`}
                           label={{ ...chartTheme.axisLabel, value: 'bps', position: 'top', offset: 10 }}
                         />
@@ -3465,8 +3359,8 @@ export function STIRDashboardPage() {
                       <YAxis
                         {...chartTheme.yAxis}
                         tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                        domain={ycYDomain}
-                        allowDataOverflow
+                        domain={ycYAxis.domain}
+                        ticks={ycYAxis.ticks}
                       />
                       <Tooltip
                         {...chartTheme.tooltip}
@@ -3496,6 +3390,8 @@ export function STIRDashboardPage() {
                       <XAxis dataKey="label" {...chartTheme.xAxis} />
                       <YAxis
                         {...chartTheme.yAxis}
+                        domain={deltaYAxis.domain}
+                        ticks={deltaYAxis.ticks}
                         tickFormatter={(v: number) => `${v.toFixed(0)}`}
                         label={{ ...chartTheme.axisLabel, value: 'bps', position: 'top', offset: 10 }}
                       />
@@ -4046,7 +3942,7 @@ export function STIRDashboardPage() {
                       <ComposedChart data={creditLevelData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
                         <CartesianGrid {...chartTheme.grid} />
                         <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(1)} domain={creditOasAxis.domain} ticks={creditOasAxis.ticks} />
                         <Tooltip
                           {...chartTheme.tooltip}
                           cursor={chartTheme.barTooltipCursor}
@@ -4059,7 +3955,7 @@ export function STIRDashboardPage() {
                           ))}
                         </Bar>
                         <Line type="monotone" dataKey="oas" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
-                        <Brush dataKey="date" {...chartTheme.brush} />
+                        <Brush dataKey="date" {...chartTheme.brush} onChange={creditOasBrush.onChange} />
                       </ComposedChart>
                     </ResponsiveContainer>
                   </AcmChartFrame>
@@ -4720,7 +4616,7 @@ export function STIRDashboardPage() {
                           tickMargin={6}
                           tickFormatter={(v: number) => v.toFixed(1)}
                           label={{ ...chartTheme.axisLabel, value: 'bps', angle: -90, position: 'insideLeft' }}
-                          domain={['auto', 'auto']}
+                          {...niceAxis(col.data.flatMap((d) => [d.spreadBps, d.lookbackBps]).filter((v): v is number => typeof v === 'number'), { dp: 1 })}
                         />
                         <ReferenceLine y={0} {...referenceLines.zero} />
                         <Tooltip

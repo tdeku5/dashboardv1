@@ -149,3 +149,13 @@
 
 .prStateMsg { color: var(--acm-text-tertiary); }
 .prStateError { color: var(--acm-status-warning); }
+
+/* R5a: notes above the CountryTermStructure charts (e.g. cash series not ingested). */
+.prNote {
+  margin-bottom: var(--acm-space-3);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+}
+
+.prNoteWarning { color: var(--acm-status-warning); }
