@@ -220,14 +220,15 @@ export const MONEY_MARKET_COLORS = {
   sofrIorb: '#4EC9B0',
   effrIorb: '#fbbf24',
   sofrEffr: '#a78bfa',
-  /** SOFR/EFFR − IORB zero line + "SCARCITY WARNING" label (source red kept; ambiguity reported at R3b). */
-  scarcityLine: '#EF5350',
+  // SCARCITY WARNING threshold line: not an identity colour — it is an alert,
+  // drawn in --acm-alert-strong (R4 change 1).
 } as const
 
 export const RESERVE_DEMAND_COLORS = {
   outer: '#60a5fa',  // 97.5th / 2.5th
   inner: '#94A3B8',  // 84th / 16th
-  median: '#EF5350',
+  // 50th (median): not an identity colour — the chart theme's neutral
+  // reference-line style, referenceLines.level (R4 change 1).
 } as const
 
 export const CALENDAR_SPREAD_COLORS = {

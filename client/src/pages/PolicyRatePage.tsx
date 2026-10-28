@@ -13,22 +13,28 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { AcmChartFrame, fmtSignedFixed, type AcmLegendItem } from '../components/acm'
+import { cx } from '../components/acm/acmFormat'
+import { chartTheme, referenceBand, referenceLines } from '../components/acm/chartTheme'
+import { POLICY_RATE_COLORS, TENOR_COLORS } from '../constants/identityColors'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
 import styles from './PolicyRatePage.module.css'
 
-// ── Series colours ──────────────────────────────────────────────────────────
+// ── Series colours: identity registry (R4) ─────────────────────────────────
+// Every line is a LEVEL (rates, yields, Y/Y inflation, spreads), so colour is
+// identity, never sign (rule 6). Recession shading = the theme's reference band.
 
-const COLOR_EFFR = '#e2e8f0' // shared across both charts
-// CPI / PCE were originally green / orange. Updated to light blue / light green
-// per design — distinguishable from each other, from EFFR (white), and from
-// chart-2 colours (DGS2=#60A5FA, DGS10=#34D399). Tailwind sky-300 / green-300.
-const COLOR_CPI  = '#7dd3fc'
-const COLOR_PCE  = '#86efac'
-const COLOR_2Y   = '#60a5fa'
-const COLOR_5Y   = '#a78bfa'
-const COLOR_10Y  = '#34d399'
-const COLOR_30Y  = '#f87171'
-const COLOR_RECESSION = 'rgba(148, 163, 184, 0.15)'
+const COLOR_EFFR = POLICY_RATE_COLORS.effr // = TENOR_COLORS.cash, shared across both charts
+const COLOR_CPI  = POLICY_RATE_COLORS.cpi
+const COLOR_PCE  = POLICY_RATE_COLORS.pce
+const COLOR_2Y   = TENOR_COLORS['2Y']
+const COLOR_5Y   = TENOR_COLORS['5Y']
+const COLOR_10Y  = TENOR_COLORS['10Y']
+const COLOR_30Y  = TENOR_COLORS['30Y']
+
+/** Spreads (EFFR − inflation, tenor − EFFR) are signed: '+1.23pp', and '0.00pp' when they round to zero (near-zero rule). */
+const fmtSpreadPp = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? fmtSignedFixed(v, 2, 'pp') : '—')
+const fmtLevelPct = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? `${v.toFixed(2)}%` : '—')
 
 // ── Range selector ──────────────────────────────────────────────────────────
 
@@ -184,63 +190,7 @@ async function fetchAll(): Promise<SeriesBundle> {
   }
 }
 
-// ── Range buttons ───────────────────────────────────────────────────────────
-
-interface RangeButtonsProps {
-  value: RangeKey
-  onChange: (r: RangeKey) => void
-}
-function RangeButtons({ value, onChange }: RangeButtonsProps) {
-  return (
-    <div className={styles.rangeButtons}>
-      {RANGES.map(r => (
-        <button
-          key={r.key}
-          onClick={() => onChange(r.key)}
-          className={value === r.key ? `${styles.rangeBtn} ${styles.rangeBtnActive}` : styles.rangeBtn}
-        >
-          {r.label}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ── Custom HTML legend (above the chart, click-to-toggle) ───────────────────
-//
-// We render a custom legend instead of Recharts' <Legend verticalAlign="top">
-// so that (a) the inflation card's two stacked sub-panels share a single
-// consolidated legend, and (b) the legend keeps a fixed visual position
-// regardless of Recharts' internal layout.
-
 type Tone = 'on' | 'off'
-interface LegendEntry { key: string; label: string; color: string }
-interface LegendBarProps {
-  entries: LegendEntry[]
-  state: Record<string, Tone>
-  onToggle: (key: string) => void
-}
-function LegendBar({ entries, state, onToggle }: LegendBarProps) {
-  return (
-    <div className={styles.legendBar}>
-      {entries.map(e => {
-        const off = state[e.key] === 'off'
-        return (
-          <button
-            key={e.key}
-            onClick={() => onToggle(e.key)}
-            className={styles.legendItem}
-            style={{ color: off ? '#475569' : '#cbd5e1', opacity: off ? 0.55 : 1 }}
-            title={off ? 'Show series' : 'Hide series'}
-          >
-            <span className={styles.legendSwatch} style={{ background: off ? '#475569' : e.color }} />
-            {e.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
 
 // ── Page ────────────────────────────────────────────────────────────────────
 
@@ -348,111 +298,88 @@ export function PolicyRatePage() {
       return next
     })
 
-  if (loading) return <div style={{ padding: 16, color: '#94a3b8' }}>Loading FRED series…</div>
-  if (error)   return <div style={{ padding: 16, color: '#f87171' }}>Failed to load: {error}</div>
+  if (loading) return <div className={styles.prStateMsg}>Loading FRED series…</div>
+  if (error)   return <div className={styles.prStateError}>Failed to load: {error}</div>
   if (!inflationData || !termData) return null
 
   const toggle = (key: string, set: typeof setToggle1) =>
     set(prev => ({ ...prev, [key]: prev[key] === 'off' ? 'on' : 'off' }))
   const hide = (t: Record<string, Tone>, key: string) => t[key] === 'off'
+  const legendFor = (entries: Array<{ key: string; label: string; color: string }>, state: Record<string, Tone>, set: typeof setToggle1): AcmLegendItem[] =>
+    entries.map(e => ({ label: e.label, color: e.color, hidden: state[e.key] === 'off', onClick: () => toggle(e.key, set) }))
 
-  // Inflation legend — show the 3 input series. The two spread series share
-  // colours with their parent inflation series, so an explicit five-row legend
-  // would be redundant; the user spec allows either, and three is cleaner.
-  const inflationLegend: LegendEntry[] = [
+  // Inflation legend — the 3 input series; the two spread lines share their
+  // parent inflation series' colour and toggle with it.
+  const inflationLegend = legendFor([
     { key: 'effr', label: 'EFFR (monthly avg)', color: COLOR_EFFR },
     { key: 'cpi',  label: 'Y/Y Core CPI',       color: COLOR_CPI },
     { key: 'pce',  label: 'Y/Y Core PCEPI',     color: COLOR_PCE },
-  ]
-  const termLegend: LegendEntry[] = [
+  ], toggle1, setToggle1)
+  const termLegend = legendFor([
     { key: 'effr',  label: 'EFFR', color: COLOR_EFFR },
     { key: 'dgs2',  label: '2Y',   color: COLOR_2Y },
     { key: 'dgs5',  label: '5Y',   color: COLOR_5Y },
     { key: 'dgs10', label: '10Y',  color: COLOR_10Y },
     { key: 'dgs30', label: '30Y',  color: COLOR_30Y },
-  ]
+  ], toggle2, setToggle2)
 
   return (
-    <div className={styles.row}>
-      {/* ═══ Chart 1: Policy Rate vs Inflation ═══ */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <span>POLICY RATE VS INFLATION</span>
-          <RangeButtons value={rangeInflation} onChange={setRangeInflation} />
-        </div>
-        <LegendBar
-          entries={inflationLegend}
-          state={toggle1}
-          onToggle={k => toggle(k, setToggle1)}
-        />
-        <div className={styles.chartArea}>
-          {/* Top panel — levels */}
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={inflationData.rows} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-              <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
-              <Tooltip
-                contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-                labelStyle={{ color: '#cbd5e1' }}
-                formatter={(v: unknown) => `${Number(v).toFixed(2)}%`}
-              />
-              {inflationData.bands.map((b, i) => (
-                <ReferenceArea key={`r1a-${i}`} x1={b.x1} x2={b.x2} fill={COLOR_RECESSION} fillOpacity={1} ifOverflow="visible" />
-              ))}
-              <Line type="monotone" dataKey="effr" name="EFFR"           stroke={COLOR_EFFR} strokeWidth={2}   dot={false} connectNulls hide={hide(toggle1, 'effr')} />
-              <Line type="monotone" dataKey="cpi"  name="Y/Y Core CPI"   stroke={COLOR_CPI}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'cpi')} />
-              <Line type="monotone" dataKey="pce"  name="Y/Y Core PCEPI" stroke={COLOR_PCE}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'pce')} />
-            </LineChart>
-          </ResponsiveContainer>
-          {/* Bottom panel — spreads + Brush */}
-          <ResponsiveContainer width="100%" height={210}>
-            <LineChart data={inflationData.rows} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-              <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
-              <Tooltip
-                contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-                labelStyle={{ color: '#cbd5e1' }}
-                formatter={(v: unknown) => `${Number(v).toFixed(2)}pp`}
-              />
-              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
-              {inflationData.bands.map((b, i) => (
-                <ReferenceArea key={`r1b-${i}`} x1={b.x1} x2={b.x2} fill={COLOR_RECESSION} fillOpacity={1} ifOverflow="visible" />
-              ))}
-              <Line type="monotone" dataKey="realCpi" name="EFFR − Y/Y Core CPI"   stroke={COLOR_CPI} strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'cpi')} />
-              <Line type="monotone" dataKey="realPce" name="EFFR − Y/Y Core PCEPI" stroke={COLOR_PCE} strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'pce')} />
-              <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+    <div className={styles.prRow}>
+      {/* ═══ Chart 1: Policy Rate vs Inflation (levels on top, spreads below) ═══ */}
+      <AcmChartFrame
+        title="POLICY RATE VS INFLATION"
+        subtitle="Top: levels · bottom: EFFR − Y/Y inflation (pp)"
+        legend={inflationLegend}
+        actions={<RangeButtons value={rangeInflation} onChange={setRangeInflation} />}
+        height={INFLATION_TOP_HEIGHT + INFLATION_BOTTOM_HEIGHT}
+      >
+        <ResponsiveContainer width="100%" height={INFLATION_TOP_HEIGHT}>
+          <LineChart data={inflationData.rows} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
+            <Tooltip {...chartTheme.tooltip} formatter={fmtLevelPct} />
+            {inflationData.bands.map((b, i) => (
+              <ReferenceArea key={`r1a-${i}`} x1={b.x1} x2={b.x2} {...referenceBand} ifOverflow="visible" />
+            ))}
+            <Line type="monotone" dataKey="effr" name="EFFR"           stroke={COLOR_EFFR} strokeWidth={2}   dot={false} connectNulls hide={hide(toggle1, 'effr')} />
+            <Line type="monotone" dataKey="cpi"  name="Y/Y Core CPI"   stroke={COLOR_CPI}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'cpi')} />
+            <Line type="monotone" dataKey="pce"  name="Y/Y Core PCEPI" stroke={COLOR_PCE}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'pce')} />
+          </LineChart>
+        </ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={INFLATION_BOTTOM_HEIGHT}>
+          <LineChart data={inflationData.rows} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+            <Tooltip {...chartTheme.tooltip} formatter={fmtSpreadPp} />
+            <ReferenceLine y={0} {...referenceLines.zero} />
+            {inflationData.bands.map((b, i) => (
+              <ReferenceArea key={`r1b-${i}`} x1={b.x1} x2={b.x2} {...referenceBand} ifOverflow="visible" />
+            ))}
+            <Line type="monotone" dataKey="realCpi" name="EFFR − Y/Y Core CPI"   stroke={COLOR_CPI} strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'cpi')} />
+            <Line type="monotone" dataKey="realPce" name="EFFR − Y/Y Core PCEPI" stroke={COLOR_PCE} strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle1, 'pce')} />
+            <Brush dataKey="date" {...chartTheme.brush} />
+          </LineChart>
+        </ResponsiveContainer>
+      </AcmChartFrame>
 
-      {/* ═══ Chart 2: Policy Rate vs Term Structure ═══ */}
-      <div className={styles.panel}>
-        <div className={styles.panelHeader}>
-          <span>POLICY RATE VS TERM STRUCTURE</span>
-          <RangeButtons value={rangeTerm} onChange={setRangeTerm} />
-        </div>
-        <LegendBar
-          entries={termLegend}
-          state={toggle2}
-          onToggle={k => toggle(k, setToggle2)}
-        />
-        <div className={styles.chartArea}>
-          {/* Main term-structure chart */}
-          <ResponsiveContainer width="100%" height={380}>
+      {/* ═══ Chart 2: Policy Rate vs Term Structure + spread sub-chart ═══ */}
+      <div className={styles.prColumn}>
+        <AcmChartFrame
+          title="POLICY RATE VS TERM STRUCTURE"
+          legend={termLegend}
+          actions={<RangeButtons value={rangeTerm} onChange={setRangeTerm} />}
+          height={TERM_HEIGHT}
+        >
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart data={termData.rows} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-              <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
-              <Tooltip
-                contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-                labelStyle={{ color: '#cbd5e1' }}
-                formatter={(v: unknown) => `${Number(v).toFixed(2)}%`}
-              />
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+              <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} />
+              <Tooltip {...chartTheme.tooltip} formatter={fmtLevelPct} />
               {termData.bands.map((b, i) => (
-                <ReferenceArea key={`r2-${i}`} x1={b.x1} x2={b.x2} fill={COLOR_RECESSION} fillOpacity={1} ifOverflow="visible" />
+                <ReferenceArea key={`r2-${i}`} x1={b.x1} x2={b.x2} {...referenceBand} ifOverflow="visible" />
               ))}
               <Line type="monotone" dataKey="effr"  name="EFFR" stroke={COLOR_EFFR} strokeWidth={2}   dot={false} connectNulls hide={hide(toggle2, 'effr')} />
               <Line type="monotone" dataKey="dgs2"  name="2Y"   stroke={COLOR_2Y}   strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle2, 'dgs2')} />
@@ -461,20 +388,45 @@ export function PolicyRatePage() {
               <Line type="monotone" dataKey="dgs30" name="30Y"  stroke={COLOR_30Y}  strokeWidth={1.5} dot={false} connectNulls hide={hide(toggle2, 'dgs30')} />
             </LineChart>
           </ResponsiveContainer>
+        </AcmChartFrame>
 
-          {/* Spread sub-chart: tenor − EFFR */}
-          <SpreadSubChartUS
-            data={termData.rows}
-            selected={selectedSpreads}
-            onToggle={toggleSpread}
-          />
-        </div>
+        <SpreadSubChartUS data={termData.rows} selected={selectedSpreads} onToggle={toggleSpread} />
       </div>
     </div>
   )
 }
 
+const INFLATION_TOP_HEIGHT = 300
+const INFLATION_BOTTOM_HEIGHT = 210
+const TERM_HEIGHT = 380
+const SPREAD_HEIGHT = 180
+
+// ── Range buttons ───────────────────────────────────────────────────────────
+
+interface RangeButtonsProps {
+  value: RangeKey
+  onChange: (r: RangeKey) => void
+}
+function RangeButtons({ value, onChange }: RangeButtonsProps) {
+  return (
+    <div className={styles.prRangeButtons}>
+      {RANGES.map(r => (
+        <button
+          key={r.key}
+          type="button"
+          onClick={() => onChange(r.key)}
+          className={cx(styles.prRangeBtn, value === r.key && styles.prRangeBtnActive)}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Spread sub-chart (US — tenor minus EFFR) ────────────────────────────────
+// Tenor selection = the frame legend (click a tenor to toggle it); one tenor
+// shown → shaded area to 0, several → lines.
 
 const US_SPREAD_TENORS: Array<{ key: string; label: string; color: string }> = [
   { key: 'dgs2',  label: '2Y',  color: COLOR_2Y },
@@ -492,47 +444,19 @@ function SpreadSubChartUS({ data, selected, onToggle }: SpreadSubChartUSProps) {
   const visible = US_SPREAD_TENORS.filter(t => selected.has(t.key))
   const singleMode = visible.length === 1
   return (
-    <div style={{ marginTop: 12, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 8 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 12px 6px' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', color: '#94a3b8' }}>
-          SPREAD VS CASH RATE
-        </span>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {US_SPREAD_TENORS.map(t => {
-            const on = selected.has(t.key)
-            return (
-              <button
-                key={t.key}
-                onClick={() => onToggle(t.key)}
-                style={{
-                  padding: '3px 9px',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11,
-                  color: on ? '#0f172a' : t.color,
-                  background: on ? t.color : 'transparent',
-                  border: `1px solid ${t.color}`,
-                  borderRadius: 999,
-                  cursor: 'pointer',
-                }}
-                title={`${t.label} − EFFR`}
-              >
-                {t.label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      <ResponsiveContainer width="100%" height={180}>
+    <AcmChartFrame
+      title="SPREAD VS CASH RATE"
+      subtitle="Tenor − EFFR (pp) · click a tenor to toggle"
+      legend={US_SPREAD_TENORS.map(t => ({ label: t.label, color: t.color, hidden: !selected.has(t.key), onClick: () => onToggle(t.key) }))}
+      height={SPREAD_HEIGHT}
+    >
+      <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} minTickGap={40} />
-          <YAxis stroke="#728197" tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 12 }}
-            labelStyle={{ color: '#cbd5e1' }}
-            formatter={(v: unknown, name: unknown) => [`${Number(v).toFixed(2)}pp`, String(name)]}
-          />
-          <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="3 3" />
+          <CartesianGrid {...chartTheme.grid} />
+          <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={40} />
+          <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}pp`} />
+          <Tooltip {...chartTheme.tooltip} formatter={(v: unknown, name: unknown) => [fmtSpreadPp(v), String(name)]} />
+          <ReferenceLine y={0} {...referenceLines.zero} />
           {singleMode && visible.map(t => (
             <Area
               key={t.key} type="monotone" dataKey={`spread_${t.key}`} name={`${t.label} − EFFR`}
@@ -549,10 +473,10 @@ function SpreadSubChartUS({ data, selected, onToggle }: SpreadSubChartUSProps) {
           {/* Brush controls only the sub-chart (range buttons remain the
             * primary cross-panel sync). Same tradeoff documented in
             * CountryTermStructure.SpreadSubChart. */}
-          <Brush dataKey="date" height={18} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+          <Brush dataKey="date" {...chartTheme.brush} />
         </ComposedChart>
       </ResponsiveContainer>
-    </div>
+    </AcmChartFrame>
   )
 }
 

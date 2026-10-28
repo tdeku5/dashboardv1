@@ -624,6 +624,37 @@ const CREDIT_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', '10y', 'all'] as cons
 const MM_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
 const RDE_CHART_RANGES = ['1y', '2y', '5y', '10y', 'all'] as const
 const MM_CHART_HEIGHT = 220
+/**
+ * Whole-bp y axis for the MONEY MARKETS spread charts (R4 change 2): the
+ * smallest step in MM_TICK_STEPS that covers the plotted values (and 0, for a
+ * threshold chart) in at most 5 intervals. Tick VALUES are integers, so the
+ * 0dp labels can never repeat; the data itself is not touched.
+ */
+const MM_TICK_STEPS = [1, 2, 5, 10, 15, 20, 25, 50, 100, 200, 500] as const
+export function mmBpAxis(values: ReadonlyArray<number>, includeZero: boolean): { domain: [number, number]; ticks: number[] } {
+  let lo = values.length ? Math.min(...values) : 0
+  let hi = values.length ? Math.max(...values) : 0
+  if (includeZero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0) }
+  if (lo === hi) { lo -= 1; hi += 1 }
+  for (const step of MM_TICK_STEPS) {
+    const a = Math.floor(lo / step) * step
+    const b = Math.ceil(hi / step) * step
+    if ((b - a) / step <= 5) {
+      const ticks: number[] = []
+      for (let t = a; t <= b; t += step) ticks.push(t === 0 ? 0 : t)
+      return { domain: [a, b], ticks }
+    }
+  }
+  const step = 10 ** Math.ceil(Math.log10((hi - lo) / 5))
+  const a = Math.floor(lo / step) * step
+  const b = Math.ceil(hi / step) * step
+  const ticks: number[] = []
+  for (let t = a; t <= b; t += step) ticks.push(t)
+  return { domain: [a, b], ticks }
+}
+
+/** SCARCITY WARNING threshold: an alert, not a rate move (R4 change 1). */
+const MM_SCARCITY_COLOR = signColor('acm-alert-strong')
 /** MONEY MARKETS spread charts (R3b); colours: MONEY_MARKET_COLORS (identity registry), keyed by `key`. */
 const MM_SPREAD_CHARTS = [
   { key: 'sofrIorb', title: 'SOFR − IORB', subtitle: 'Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere', scarcity: true },
@@ -4071,8 +4102,8 @@ export function STIRDashboardPage() {
           <div className={styles.ustStack}>
             {/* MONEY MARKETS (R3b). The four charts plot spread / elasticity LEVELS
                 over time — lines coloured by identity (registry), no sign colour.
-                The SCARCITY WARNING line and the RDE median keep their registry
-                red (reported as ambiguous at the R3b gate; not decided here). */}
+                R4: the SCARCITY WARNING threshold is an alert (--acm-alert-strong);
+                the RDE median uses the neutral reference-line style. */}
             <AcmPanel title="MONEY MARKET RATE SPREADS">
               {ustLoading ? (
                 <div className={styles.stateMsg}>Loading money market data…</div>
@@ -4084,13 +4115,14 @@ export function STIRDashboardPage() {
                       : c.key === 'effrIorb'
                         ? [mmRange2, setMmRange2, mmData2] as const
                         : [mmRange3, setMmRange3, mmData3] as const
+                    const axis = mmBpAxis(data.map((pt) => pt[c.key]).filter((v): v is number => typeof v === 'number'), c.scarcity)
                     return (
                       <AcmChartFrame
                         key={c.key}
                         title={c.title}
                         subtitle={c.subtitle}
                         legend={c.scarcity
-                          ? [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }, { label: 'Scarcity warning (0bp)', color: MONEY_MARKET_COLORS.scarcityLine }]
+                          ? [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }, { label: 'Scarcity warning (0bp)', color: MM_SCARCITY_COLOR }]
                           : [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }]}
                         actions={rangeToggle(range, setRange, MM_CHART_RANGES)}
                         height={MM_CHART_HEIGHT}
@@ -4099,18 +4131,21 @@ export function STIRDashboardPage() {
                           <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
                             <CartesianGrid {...chartTheme.grid} />
                             <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
-                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                            {/* explicit whole-bp ticks (mmBpAxis): labels never repeat; 0 always in range on threshold charts */}
+                            <YAxis {...chartTheme.yAxis} ticks={axis.ticks} domain={axis.domain} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
                             <Tooltip
                               {...chartTheme.tooltip}
                               labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
                               formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', c.title]}
                             />
                             {c.scarcity ? (
+                              // extendDomain: the threshold always draws, even when the data never reaches 0bp
                               <ReferenceLine
                                 y={0}
-                                stroke={MONEY_MARKET_COLORS.scarcityLine}
+                                ifOverflow="extendDomain"
+                                stroke={MM_SCARCITY_COLOR}
                                 strokeWidth={1.5}
-                                label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', ...referenceLabelStyle, fill: MONEY_MARKET_COLORS.scarcityLine }}
+                                label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', ...referenceLabelStyle, fill: MM_SCARCITY_COLOR }}
                               />
                             ) : (
                               <ReferenceLine y={0} {...referenceLines.zero} />
@@ -4129,7 +4164,7 @@ export function STIRDashboardPage() {
                     legend={[
                       { label: '97.5th / 2.5th', color: RESERVE_DEMAND_COLORS.outer },
                       { label: '84th / 16th', color: RESERVE_DEMAND_COLORS.inner },
-                      { label: '50th (median)', color: RESERVE_DEMAND_COLORS.median },
+                      { label: '50th (median)', color: String(referenceLines.level.stroke), dashed: true },
                     ]}
                     actions={(
                       <>
@@ -4156,7 +4191,7 @@ export function STIRDashboardPage() {
                           <Line type="monotone" dataKey="p2_5" stroke={RESERVE_DEMAND_COLORS.outer} strokeWidth={1} dot={false} name="2.5th" />
                           <Line type="monotone" dataKey="p84" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="84th" />
                           <Line type="monotone" dataKey="p16" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="16th" />
-                          <Line type="monotone" dataKey="median" stroke={RESERVE_DEMAND_COLORS.median} strokeWidth={2} dot={false} name="Median" />
+                          <Line type="monotone" dataKey="median" {...referenceLines.level} strokeWidth={2} dot={false} name="Median" />
                           <Brush dataKey="date" {...chartTheme.brush} />
                         </LineChart>
                       </ResponsiveContainer>

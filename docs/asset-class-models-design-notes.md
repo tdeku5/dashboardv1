@@ -6,6 +6,7 @@ The prompts win on any conflict; this file is the quick reference while building
 ## Colour rules
 
 1. **Colour is never the only signal of sign.** Every signed number keeps its leading ASCII `-` (Decision 3).
+   - **Near-zero rule (R3b; mandatory per page from R4):** a value that rounds to zero at its displayed precision prints as an unsigned `0.0` (never `-0.0` / `+0.0`) and gets **no tone and no heat fill**. Signed formatters and tone / fill helpers go through `roundForDisplay` / `fmtSignedFixed` (`components/acm/acmFormat.ts`); the underlying value never changes. Every page converted in a turn migrates its signed formatters, listed in that turn's status block; Z reports any left in the section.
 2. **Channels (Rule 2, amended at Turn 1 approval):** valence and direction tokens colour **text only**, except inside the named heatmap components, which use `--acm-heat-*` fills. Alert tokens colour a background tint, badge or outline, never value text. Status-warning is for notes and banners, never data cells.
 3. **Named heatmap components** (the only background-fill sign colours):
    - the `cellColor` grid (the `--acm-heat-rate-*` scales, per rule 6(b)): `GlobalRatesPage`, `CountryCurvePage`, `STIRDashboardPage` ×2
