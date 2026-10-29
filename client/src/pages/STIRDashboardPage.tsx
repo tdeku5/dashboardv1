@@ -20,9 +20,9 @@ import { CountrySelector, type CountryCode } from '../components/CountrySelector
 import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, signColor, useBrushWindow, type AcmColumn, type SignTone } from '../components/acm'
 import { chartTheme, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
 import { toneClass } from '../components/acm/tones'
-import { fmtMonthYearTick, rangeToggle, rateChangeClass, rateChangeTone, regimeColor, regimeLegend, renderDeltaLabel, ustChangeClass, ustLevelClass, UstTile } from './ratesShared'
+import { fmtMonthYearTick, policyMoveTone, rangeToggle, rateChangeClass, rateChangeTone, regimeColor, regimeLegend, renderDeltaLabel, ustChangeClass, ustLevelClass, UstTile } from './ratesShared'
 // rateChangeTone moved to ./ratesShared at R5a; re-exported for existing importers.
-export { rateChangeTone } from './ratesShared'
+export { policyMoveTone, rateChangeTone } from './ratesShared'
 import {
   CALENDAR_SPREAD_COLORS,
   CB_SCENARIO_COLORS,
@@ -571,10 +571,6 @@ export function stripMoveTone(priceChange: number | null): SignTone | undefined 
   return shown > 0 ? 'positive' : 'negative'
 }
 
-/** A priced policy move: hike = negative (red: a rate increase), cut = positive (green). */
-export function policyMoveTone(move: 'hike' | 'cut'): 'negative' | 'positive' {
-  return move === 'hike' ? 'negative' : 'positive'
-}
 
 
 // Named heatmap #3 — strip implied-rate Δ columns and FF price-change cells, valence heat scale. Same

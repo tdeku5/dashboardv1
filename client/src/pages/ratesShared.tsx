@@ -24,6 +24,11 @@ export function rateChangeTone(v: number | null, dp = 1): SignTone | undefined {
   return shown > 0 ? 'negative' : 'positive'
 }
 
+/** A priced policy move: hike = negative (red: a rate increase), cut = positive (green). */
+export function policyMoveTone(move: 'hike' | 'cut'): 'negative' | 'positive' {
+  return move === 'hike' ? 'negative' : 'positive'
+}
+
 export function rateChangeClass(v: number | null, dp = 1): string | undefined {
   return toneClass(rateChangeTone(v, dp))
 }

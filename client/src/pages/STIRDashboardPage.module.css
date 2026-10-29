@@ -1447,6 +1447,165 @@
 .ustTiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 /* Per-market tile rows (R5a): column count from --ust-cols (set inline, capped), wrapping beyond it. */
 .ustTilesN { grid-template-columns: repeat(var(--ust-cols, 4), minmax(0, 1fr)); }
+/* ── GLOBAL (R5c) — token-only; the legacy summary / yieldChanges / spreads*
+   / ocr* rules stay for Z. ───────────────────────────────────────────────── */
+.gsSelect {
+  background: var(--acm-surface-raised);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  padding: var(--acm-space-1) var(--acm-space-2);
+}
+
+.summaryTableAcm {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryTableAcm th {
+  padding: var(--acm-space-2) var(--acm-space-2);
+  text-align: right;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-secondary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
+  white-space: nowrap;
+}
+
+.summaryTableAcm td {
+  padding: var(--acm-space-2) var(--acm-space-2);
+  text-align: right;
+  color: var(--acm-text-primary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+  white-space: nowrap;
+}
+
+.summaryTableAcm th:first-child,
+.summaryTableAcm td:first-child {
+  text-align: left;
+  font-weight: var(--acm-fw-medium);
+}
+
+.summaryTableAcm tr:last-child td { border-bottom: none; }
+
+/* Δ cells: the cellColor named heatmap (fill set inline by getCellColor over an
+   opaque panel base); text stays primary. */
+.summaryTableAcm td.gsHeat { background: var(--acm-surface-panel); color: var(--acm-text-primary); }
+
+/* Regime cells: CURVE_REGIME_COLORS identity fill + dark / light text, set inline. */
+.summaryTableAcm td.gsRegime { text-align: center; font-weight: var(--acm-fw-semibold); }
+
+.gsUnit {
+  color: var(--acm-text-tertiary);
+  font-weight: var(--acm-fw-regular);
+  text-transform: none;
+}
+
+/* 1-day z-score grid: the cellColor named heatmap; opaque panel base, primary text. */
+.gzGrid {
+  display: grid;
+  gap: var(--acm-border-width);
+  background: var(--acm-border-hairline);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+}
+
+.gzCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--acm-space-0-5);
+  padding: var(--acm-space-2) var(--acm-space-3);
+  background: var(--acm-surface-panel);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: pointer;
+}
+
+.gzCell:focus-visible { outline: var(--acm-border-width) solid var(--acm-accent-active); }
+
+.gzHead {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.gzSigma { font-size: var(--acm-fs-md); font-weight: var(--acm-fw-medium); }
+.gzBps { font-size: var(--acm-fs-sm); }
+
+/* GLOBAL calendar-spread table header: market short name under its key. */
+.calHeadName {
+  font-weight: var(--acm-fw-regular);
+  color: var(--acm-text-tertiary);
+  text-transform: none;
+  letter-spacing: var(--acm-tracking-none);
+}
+
+/* GLOBAL small multiples + shared brush (R5c). */
+.gGrid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--acm-space-3);
+}
+
+.gBrush { margin-top: var(--acm-space-2); }
+
+/* Shared legend for the GLOBAL small-multiples grid (same look as AcmChartFrame's legend). */
+.gLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acm-space-1) var(--acm-space-4);
+  margin: 0 0 var(--acm-space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.gLegendButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+  cursor: pointer;
+}
+
+.gLegendButton:hover { color: var(--acm-text-primary); }
+.gLegendButton.gLegendHidden { color: var(--acm-text-disabled); }
+
+.gLegendSwatch {
+  width: var(--acm-space-3);
+  height: var(--acm-space-0-5);
+  background: var(--acm-swatch);
+  border-radius: var(--acm-radius-sm);
+}
+
+.gLegendHidden .gLegendSwatch { opacity: 0.35; }
+
+/* Small-multiple frames sit in a grid: no bottom margin of their own. */
+.gMini.gMini { margin-bottom: 0; }
+
+.gTipRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--acm-space-3);
+}
+
 /* Fundamental-model panels (R5b): one-line note under the header (JP core
    convention, AU measure subtitle) and footnotes (BoC core measures). */
 .fvmNote {

@@ -28,10 +28,16 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { AcmChartFrame, AcmPanel, niceAxis, type AcmLegendItem } from '../components/acm'
+import { chartTheme, referenceLines, tooltipLabelStyle, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { countryColor } from '../constants/identityColors'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
+import { rangeToggle } from './ratesShared'
 import styles from './STIRDashboardPage.module.css'
 
-// ── Countries (colours match the existing Global Forward Curves grid) ────────
+// ── Countries — colours: the registry's country map (countryColor), R5c ──────
+// Policy rates, implied paths and real policy rates are LEVELS: identity
+// colour per country, never a sign colour (rule 6).
 
 type CountryKey = 'US' | 'UK' | 'EU' | 'CAD' | 'JPY' | 'AUS'
 
@@ -43,13 +49,15 @@ interface CountryMeta {
   market: string             // FedWatch market key for the implied path
 }
 
+const cc = (key: string): string => countryColor(key) ?? 'var(--acm-text-secondary)'
+
 const COUNTRIES: CountryMeta[] = [
-  { key: 'US',  label: 'US',  color: '#60a5fa', cashCode: null,     market: 'SR3'  },
-  { key: 'UK',  label: 'UK',  color: '#a78bfa', cashCode: 'SONIA',  market: 'SO3'  },
-  { key: 'EU',  label: 'EU',  color: '#facc15', cashCode: 'ECBDFR', market: 'EUR'  },
-  { key: 'CAD', label: 'CAD', color: '#f87171', cashCode: 'CORRA',  market: 'CRA'  },
-  { key: 'JPY', label: 'JPY', color: '#f472b6', cashCode: 'TONA',   market: 'TOA3' },
-  { key: 'AUS', label: 'AUS', color: '#22d3ee', cashCode: 'AONIA',  market: 'AUS'  },
+  { key: 'US',  label: 'US',  color: cc('US'), cashCode: null,     market: 'SR3'  },
+  { key: 'UK',  label: 'UK',  color: cc('UK'), cashCode: 'SONIA',  market: 'SO3'  },
+  { key: 'EU',  label: 'EU',  color: cc('EU'), cashCode: 'ECBDFR', market: 'EUR'  },
+  { key: 'CAD', label: 'CAD', color: cc('CAD'), cashCode: 'CORRA',  market: 'CRA'  },
+  { key: 'JPY', label: 'JPY', color: cc('JPY'), cashCode: 'TONA',   market: 'TOA3' },
+  { key: 'AUS', label: 'AUS', color: cc('AUS'), cashCode: 'AONIA',  market: 'AUS'  },
 ]
 
 // ── Range buttons (shared visual with the Policy Rate grid below) ────────────
@@ -63,6 +71,7 @@ const RANGES = [
   { key: 'max', label: 'MAX', years: 100 },
 ] as const
 type RangeKey = typeof RANGES[number]['key']
+const RANGE_KEYS: readonly RangeKey[] = RANGES.map(r => r.key)
 
 function cutoffMsForRange(range: RangeKey): number {
   if (range === 'max') return 0
@@ -244,74 +253,7 @@ async function fetchAll(): Promise<RawBundle> {
   return { cashByCountry, fwdByCountry, inflByCountry }
 }
 
-// ── Shared UI: range buttons + country legend ────────────────────────────────
-
-function RangeButtons({ value, onChange }: { value: RangeKey; onChange: (r: RangeKey) => void }) {
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {RANGES.map(r => {
-        const active = value === r.key
-        return (
-          <button
-            key={r.key}
-            onClick={() => onChange(r.key)}
-            style={{
-              padding: '3px 8px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.04em',
-              cursor: 'pointer',
-              color: active ? '#0f172a' : '#94a3b8',
-              background: active ? '#60a5fa' : 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: 2,
-            }}
-          >
-            {r.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-function CountryLegend({
-  toggle, onToggle,
-}: { toggle: Record<CountryKey, boolean>; onToggle: (k: CountryKey) => void }) {
-  return (
-    <div
-      style={{
-        display: 'flex', flexWrap: 'wrap', gap: '6px 14px',
-        padding: '6px 10px', marginBottom: 8,
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(255, 255, 255, 0.02)', borderRadius: 2,
-      }}
-    >
-      {COUNTRIES.map(c => {
-        const off = !toggle[c.key]
-        return (
-          <button
-            key={c.key}
-            onClick={() => onToggle(c.key)}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              background: 'transparent', border: 0, padding: 0, cursor: 'pointer',
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em',
-              color: off ? '#475569' : '#cbd5e1', opacity: off ? 0.55 : 1,
-            }}
-            title={off ? 'Show country' : 'Hide country'}
-          >
-            <span style={{
-              width: 14, height: 3, borderRadius: 1, display: 'inline-block',
-              background: off ? '#475569' : c.color,
-            }} />
-            {c.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
+// ── Tooltip ──────────────────────────────────────────────────────────────────
 
 // Compact tooltip showing only the series that actually have a value at the
 // hovered date (each country carries up to two keys on Chart 1, most null on
@@ -325,13 +267,10 @@ function ChartTooltip({ active, payload, label }: {
   const rows = payload.filter(p => typeof p.value === 'number' && Number.isFinite(p.value))
   if (rows.length === 0) return null
   return (
-    <div style={{
-      background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)',
-      padding: '6px 9px', fontFamily: 'var(--font-mono)', fontSize: 11,
-    }}>
-      <div style={{ color: '#cbd5e1', marginBottom: 4 }}>{fmtFullDate(Number(label))}</div>
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{fmtFullDate(Number(label))}</div>
       {rows.map((r, i) => (
-        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 14, color: r.color }}>
+        <div key={i} className={styles.gTipRow} style={{ color: r.color }}>
           <span>{r.name}</span>
           <span>{(r.value as number).toFixed(2)}%</span>
         </div>
@@ -351,6 +290,8 @@ interface OverlayRangeChartProps {
   valueKeysForCountry: (c: CountryKey) => string[]
   renderLines: (visible: Record<CountryKey, boolean>) => ReactNode
   zeroLine?: boolean
+  /** Y-axis width (px); the real-rate chart is widened so '-10.0%' (MAX range) does not clip. */
+  yWidth?: number
 }
 
 function computeYDomain(rows: OverlayRow[], keys: string[]): [number, number] | ['auto', 'auto'] {
@@ -371,7 +312,7 @@ function computeYDomain(rows: OverlayRow[], keys: string[]): [number, number] | 
 }
 
 function OverlayRangeChart({
-  title, subtitle, allRows, valueKeysForCountry, renderLines, zeroLine,
+  title, subtitle, allRows, valueKeysForCountry, renderLines, zeroLine, yWidth = 40,
 }: OverlayRangeChartProps) {
   const [range, setRange] = useState<RangeKey>('2y')
   const [brushIdx, setBrushIdx] = useState<{ start: number; end: number } | null>(null)
@@ -396,101 +337,71 @@ function OverlayRangeChart({
   const yDomain = computeYDomain(visibleRows, yKeys)
 
   const toggleKey = (k: CountryKey) => setToggle(prev => ({ ...prev, [k]: !prev[k] }))
+  // Visible-window y axis, snapped to even 1dp ticks (niceAxis).
+  const yAxis = typeof yDomain[0] === 'number' && typeof yDomain[1] === 'number'
+    ? niceAxis([yDomain[0], yDomain[1]], { dp: 1, includeZero: Boolean(zeroLine) && yDomain[0] < 0 && yDomain[1] > 0 })
+    : null
+  const legend: AcmLegendItem[] = COUNTRIES.map(c => ({ label: c.label, color: c.color, hidden: !toggle[c.key], onClick: () => toggleKey(c.key) }))
 
   return (
-    <div
-      style={{
-        background: 'var(--surface, #0b1220)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: 2, display: 'flex', flexDirection: 'column', minWidth: 0,
-      }}
+    <AcmChartFrame
+      title={title}
+      subtitle={subtitle}
+      legend={legend}
+      actions={rangeToggle(range, (r) => setRange(r as RangeKey), RANGE_KEYS)}
+      height={CHART_HEIGHT + (axisRows.length > 1 ? BRUSH_HEIGHT : 0)}
     >
-      <div
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 8, padding: '8px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(255, 255, 255, 0.02)',
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 700,
-            letterSpacing: '0.06em', color: '#e2e8f0',
-          }}>
-            {title}
-          </div>
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.02em',
-            color: '#64748b', marginTop: 2,
-          }}>
-            {subtitle}
-          </div>
-        </div>
-        <RangeButtons value={range} onChange={setRange} />
-      </div>
-
-      <div style={{ padding: '8px 12px 0' }}>
-        <CountryLegend toggle={toggle} onToggle={toggleKey} />
-      </div>
-
-      <ResponsiveContainer width="100%" height={540}>
+      <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
         <LineChart data={visibleRows} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+          <CartesianGrid {...chartTheme.grid} />
           <XAxis
             dataKey="t"
             type="number"
             scale="time"
             domain={['dataMin', 'dataMax']}
-            stroke="#728197"
-            tick={{ fontSize: 9, fill: '#94a3b8' }}
+            {...chartTheme.xAxis}
             tickFormatter={fmtAxisDate}
             minTickGap={48}
           />
           <YAxis
-            stroke="#728197"
-            tick={{ fontSize: 9, fill: '#94a3b8' }}
+            {...chartTheme.yAxis}
             tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-            width={40}
-            domain={yDomain}
-            allowDataOverflow={false}
+            width={yWidth}
+            {...(yAxis ? { domain: yAxis.domain, ticks: yAxis.ticks } : { domain: ['auto', 'auto'] as [string, string] })}
           />
-          <Tooltip content={<ChartTooltip />} />
-          {zeroLine && (
-            <ReferenceLine y={0} stroke="#64748b" strokeDasharray="4 4" strokeOpacity={0.6} />
-          )}
+          <Tooltip content={<ChartTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+          {zeroLine && <ReferenceLine y={0} {...referenceLines.zero} />}
           {renderLines(toggle)}
         </LineChart>
       </ResponsiveContainer>
 
       {axisRows.length > 1 && (
-        <div style={{ padding: '4px 12px 10px' }}>
-          <ResponsiveContainer width="100%" height={42}>
-            <LineChart data={axisRows} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-              <XAxis dataKey="t" hide type="number" domain={['dataMin', 'dataMax']} />
-              <YAxis hide domain={[0, 1]} />
-              <Brush
-                key={range}
-                dataKey="t"
-                height={30}
-                stroke="#728197"
-                fill="#0d1520"
-                travellerWidth={6}
-                tickFormatter={(ms: number) => fmtAxisDate(ms)}
-                onChange={(e: { startIndex?: number; endIndex?: number } | null) => {
-                  if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
-                    if (e.startIndex === 0 && e.endIndex === axisRows.length - 1) setBrushIdx(null)
-                    else setBrushIdx({ start: e.startIndex, end: e.endIndex })
-                  }
-                }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <ResponsiveContainer width="100%" height={BRUSH_HEIGHT}>
+          <LineChart data={axisRows} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+            <XAxis dataKey="t" hide type="number" domain={['dataMin', 'dataMax']} />
+            <YAxis hide domain={[0, 1]} />
+            <Brush
+              key={range}
+              dataKey="t"
+              {...chartTheme.brush}
+              height={30}
+              tickFormatter={(ms: number) => fmtAxisDate(ms)}
+              onChange={(e: { startIndex?: number; endIndex?: number } | null) => {
+                if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
+                  if (e.startIndex === 0 && e.endIndex === axisRows.length - 1) setBrushIdx(null)
+                  else setBrushIdx({ start: e.startIndex, end: e.endIndex })
+                }
+              }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       )}
-    </div>
+    </AcmChartFrame>
   )
 }
+
+const CHART_HEIGHT = 540
+const BRUSH_HEIGHT = 46
 
 // ── Section ──────────────────────────────────────────────────────────────────
 
@@ -596,17 +507,13 @@ export function GlobalPolicyPathRealRateSection() {
     ))
 
   return (
-    <div className={styles.yieldChangesSection}>
-      <div className={styles.yieldChangesHeader}>
-        <div className={styles.yieldChangesTitle}>GLOBAL POLICY PATHS &amp; REAL RATES</div>
-      </div>
-
+    <AcmPanel title="GLOBAL POLICY PATHS & REAL RATES">
       {loading ? (
-        <div className={styles.loading}>Loading global policy paths &amp; real rates…</div>
+        <div className={styles.stateMsg}>Loading global policy paths &amp; real rates…</div>
       ) : error ? (
-        <div className={styles.error}>{error}</div>
+        <div className={styles.stateError}>{error}</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+        <div className={styles.ustPair}>
           <OverlayRangeChart
             title="GLOBAL POLICY RATES & IMPLIED PATHS"
             subtitle="Solid = realized overnight rate · Dashed = STIR-implied forward path"
@@ -621,9 +528,10 @@ export function GlobalPolicyPathRealRateSection() {
             valueKeysForCountry={c => [`${c}_real`]}
             renderLines={renderRealLines}
             zeroLine
+            yWidth={48}
           />
         </div>
       )}
-    </div>
+    </AcmPanel>
   )
 }
