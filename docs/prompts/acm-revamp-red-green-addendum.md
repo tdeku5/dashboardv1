@@ -71,3 +71,5 @@ The rendered heatmap and vol premium colours must be **pixel-identical** before 
 
 ---
 **Superseded (2026-10-27):** Decision 1's "text on heat cells follows red/green" was reversed during Phase 2 by direct instruction. Heat-cell text stays the primary text colour, because red/green text over the heat steps measured only 1.86–3.98:1 contrast. `CLAUDE.md` and the design notes are authoritative.
+
+**Clarified (2026-10-29, R5c ruling 1):** the GLOBAL RATES SUMMARY Δ columns (2Y/5Y/10Y/30Y, 2s10s Δ, 10s30s Δ — the `deltaCellStyle` backgrounds named in Decision 1) stay on the red / blue `--acm-heat-rate-*` scale with primary text, as listed in design notes rule 6 exception (1). Terminal − OCR and ±6M / ±12M − Terminal stay red / green text.

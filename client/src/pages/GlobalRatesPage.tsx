@@ -17,11 +17,10 @@ import { useGlobalRatesSummary, type CurveRegimeName, type NextMove } from '../h
 import { getCellColor } from '../lib/cellColor'
 import { AcmChartFrame, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, type AcmLegendItem } from '../components/acm'
 import { chartTheme, referenceLines } from '../components/acm/chartTheme'
-import { luminance } from '../lib/paletteCheck'
 import { toneClass } from '../components/acm/tones'
-import { countryColor, CURVE_REGIME_COLORS, type RegimeKey } from '../constants/identityColors'
+import { countryColor } from '../constants/identityColors'
 import { DailyChangeModal } from '../components/DailyChangeModal'
-import { policyMoveTone, rateChangeClass } from './ratesShared'
+import { policyMoveTone, rateChangeClass, regimeTintBackground } from './ratesShared'
 import { GlobalPolicyTermStructureSection } from './GlobalPolicyTermStructureSection'
 import { GlobalPolicyPathRealRateSection } from './GlobalPolicyPathRealRateSection'
 import { GlobalForwardCurvesSection } from './GlobalForwardCurvesSection'
@@ -32,7 +31,7 @@ import styles from './STIRDashboardPage.module.css'
 // (registry countryColor). Summary: yield / curve Δ columns join the cellColor
 // named heatmap (red / blue, text primary — addendum Decision 1); Terminal − OCR
 // and ±6M / ±12M − Terminal follow rule 6 (increase red); HIKE red, CUT green;
-// regime cells keep their CURVE_REGIME_COLORS identity fill. Calendar spread
+// regime cells take a uniform tint of their identity colour, primary text. Calendar spread
 // values are LEVELS (plain), as on STIR STRIPS.
 
 /** Registry identity colour for a country / market key; a muted fallback if unmapped. */
@@ -100,19 +99,10 @@ function deltaHeat(value: number | null, columnAbsMax: number): string | undefin
   return getCellColor(value, columnAbsMax, 'red-blue')
 }
 
-// Relative luminance of the two text tokens a regime cell can use
-// (--acm-surface-bg, --acm-text-primary), for picking the higher-contrast one.
-export const DARK_TEXT_LUMINANCE = 0.0078 // #0E1621 — pinned to the token by assetClassModels.global.test.ts
-export const LIGHT_TEXT_LUMINANCE = 0.7697 // #DDE4ED
-
-/** Regime cell: its registry identity colour as the fill; dark or light text, whichever contrasts more. */
+/** Regime cell: a uniform tint of its registry identity colour over the panel; text stays primary (R5d ruling 2). */
 function regimeCellStyle(regime: CurveRegimeName | null): React.CSSProperties | undefined {
-  const bg = regime ? CURVE_REGIME_COLORS[regime as RegimeKey] : undefined
-  if (!bg) return undefined
-  const l = luminance(bg)
-  const dark = (l + 0.05) / (DARK_TEXT_LUMINANCE + 0.05)
-  const light = (LIGHT_TEXT_LUMINANCE + 0.05) / (l + 0.05)
-  return { background: bg, color: dark >= light ? 'var(--acm-surface-bg)' : 'var(--acm-text-primary)' }
+  const bg = regimeTintBackground(regime)
+  return bg ? { background: bg } : undefined
 }
 
 function columnAbsMax(values: Array<number | null>): number {

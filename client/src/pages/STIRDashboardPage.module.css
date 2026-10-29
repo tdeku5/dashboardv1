@@ -1501,7 +1501,8 @@
    opaque panel base); text stays primary. */
 .summaryTableAcm td.gsHeat { background: var(--acm-surface-panel); color: var(--acm-text-primary); }
 
-/* Regime cells: CURVE_REGIME_COLORS identity fill + dark / light text, set inline. */
+/* Regime cells: a uniform 0.36 tint of the CURVE_REGIME_COLORS identity (set inline,
+   ratesShared.regimeTintBackground) over the panel; text stays primary. */
 .summaryTableAcm td.gsRegime { text-align: center; font-weight: var(--acm-fw-semibold); }
 
 .gsUnit {
@@ -1596,6 +1597,17 @@
 }
 
 .gLegendHidden .gLegendSwatch { opacity: 0.35; }
+
+.gLegendSwatchDashed {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--acm-swatch) 0 var(--acm-space-1),
+    transparent var(--acm-space-1) var(--acm-space-2)
+  );
+}
+
+/* Static legend rows (no toggle) use the button look without the pointer. */
+li.gLegendButton { cursor: default; }
 
 /* Small-multiple frames sit in a grid: no bottom margin of their own. */
 .gMini.gMini { margin-bottom: 0; }

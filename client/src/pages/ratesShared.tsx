@@ -61,6 +61,23 @@ export function regimeColor(regime: string | null | undefined): string {
   return (regime && CURVE_REGIME_COLORS[regime as RegimeKey]) || CURVE_REGIME_COLORS.Neutral
 }
 
+/**
+ * Regime TEXT cells (R5d ruling 2): a tint of the regime's registry colour at
+ * one uniform alpha over an opaque panel base, with primary text. 0.36 is the
+ * highest alpha at which primary text stays ≥ 4.5:1 on all seven regimes over
+ * both --acm-surface-bg and --acm-surface-panel (tightest: Steepener Twist,
+ * 4.64 on panel); pinned by assetClassModels.global.test.ts. Chart bars and
+ * legend chips keep the full identity colour (regimeColor).
+ */
+export const REGIME_TINT_ALPHA = 0.36
+
+export function regimeTintBackground(regime: string | null | undefined): string | undefined {
+  const c = regime ? CURVE_REGIME_COLORS[regime as RegimeKey] : undefined
+  if (!c) return undefined
+  const tint = `color-mix(in srgb, ${c} ${Math.round(REGIME_TINT_ALPHA * 100)}%, transparent)`
+  return `linear-gradient(${tint}, ${tint}), var(--acm-surface-panel)`
+}
+
 /** Regime-chart legend: the seven regimes, plus the overlaid line when it's keyed. */
 export function regimeLegend(lineLabel?: string): AcmLegendItem[] {
   return [

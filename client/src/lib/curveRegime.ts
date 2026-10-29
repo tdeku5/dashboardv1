@@ -1,3 +1,4 @@
+import { CURVE_REGIME_COLORS } from '../constants/identityColors'
 export type CurveRegime =
   | 'Bull Steepener'
   | 'Bear Steepener'
@@ -25,15 +26,12 @@ export function classifyRegime(
   return 'Neutral'
 }
 
-export const REGIME_COLORS: Record<string, string> = {
-  'Bull Steepener': '#66bb6a',
-  'Bear Steepener': '#c62828',
-  'Steepener Twist': '#ffee58',
-  'Bull Flattener': '#42a5f5',
-  'Bear Flattener': '#ab47bc',
-  'Flattener Twist': '#ff9100',
-  'Neutral': '#728197',
-}
+/**
+ * The seven regime identity colours — the registry's CURVE_REGIME_COLORS (R5d).
+ * Kept under this name for existing importers; Bear Steepener is the registry's
+ * contrast-lifted #D33734 (was #c62828 here, 2.57:1).
+ */
+export const REGIME_COLORS: Readonly<Record<string, string>> = CURVE_REGIME_COLORS
 
 export interface SpreadChartPoint {
   date: string

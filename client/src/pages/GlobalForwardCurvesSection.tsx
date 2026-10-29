@@ -5,8 +5,9 @@
 // Each cell mirrors the per-country Forward Pricing tab (STIRDashboardPage,
 // activeView === 'pricing'): a two-panel chart where the top panel is the
 // implied-rate forward curve (latest solid vs benchmark dashed) and the bottom
-// panel is the per-contract day-over-day change in bps (green = up, red =
-// down) — i.e. the gap between the solid and dashed lines at each contract.
+// panel is the per-contract change in implied rate vs the benchmark, in bps —
+// rule 6 (R5d): rate up = red, rate down = green, as on FORWARD PRICING (it was
+// teal-up / red-down before) — i.e. the gap between the solid and dashed lines.
 // Data is read straight from the same `/api/futures/curve/:root` endpoint the
 // per-country tabs use, one hook instance per cell, so there is no duplicate
 // ingestion or computation.
@@ -35,14 +36,15 @@ import {
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useOvernightRates } from '../hooks/useOvernightRates'
 import { fetchFredSeries } from '../lib/fred'
+import { AcmChartFrame, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, signColor } from '../components/acm'
+import { chartTheme, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { CURVE_COMPARE_COLORS } from '../constants/identityColors'
 import styles from './STIRDashboardPage.module.css'
 
-// ── Visual constants (kept in sync with the per-country pricing tab) ─────────
+// ── Colours: the registry (as on the per-country FORWARD PRICING tab) ────────
 
-const COLOR_LATEST = '#2196F3'   // solid blue — today's curve
-const COLOR_BENCHMARK = '#888888' // dashed grey — prior-date curve
-const COLOR_UP = '#4EC9B0'        // teal — contract rate up vs benchmark
-const COLOR_DOWN = '#EF5350'      // red — contract rate down vs benchmark
+const COLOR_LATEST = CURVE_COMPARE_COLORS.forwardLatest   // today's curve (a LEVEL: identity)
+const COLOR_BENCHMARK = CURVE_COMPARE_COLORS.benchmark    // prior-date curve, dashed
 
 // ── Lookback (benchmark distance) buttons ────────────────────────────────────
 
@@ -82,9 +84,9 @@ const NON_US_CASH_CODES = COUNTRIES
 function fmtRate(v: number): string {
   return v.toFixed(3)
 }
+/** Signed 1dp bp; 0.0 when it rounds to zero (near-zero rule). */
 function fmtBps(v: number): string {
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 function contractTicker(symbol: string): string {
   return symbol.replace(/^\//, '')
@@ -107,87 +109,24 @@ function CurveTooltip({ active, payload, label }: any) {
   const row = payload[0]?.payload as CurveRow | undefined
   if (!row) return null
   return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipTitle}>{label}</div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Latest</span>
-        <span className={styles.tooltipValue}>
+    <div className={styles.curveTip} style={tooltipSurfaceStyle}>
+      <div className={styles.curveTipTitle}>{label}</div>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Latest</span>
+        <span>
           {row.latestPrice != null ? row.latestPrice.toFixed(3) : '—'} | {row.latestRate != null ? `${fmtRate(row.latestRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Benchmark</span>
-        <span className={styles.tooltipValue}>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Benchmark</span>
+        <span>
           {row.benchmarkPrice != null ? row.benchmarkPrice.toFixed(3) : '—'} | {row.benchmarkRate != null ? `${fmtRate(row.benchmarkRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Delta</span>
-        <span className={styles.tooltipValue}>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Delta</span>
+        <span>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
       </div>
-    </div>
-  )
-}
-
-// ── Range buttons ────────────────────────────────────────────────────────────
-
-function LookbackButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {LOOKBACKS.map(r => {
-        const active = value === r.key
-        return (
-          <button
-            key={r.key}
-            onClick={() => onChange(r.key)}
-            style={{
-              padding: '4px 10px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              cursor: 'pointer',
-              color: active ? '#0f172a' : '#94a3b8',
-              background: active ? '#60a5fa' : 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: 2,
-            }}
-          >
-            {r.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Shared legend (static: Latest solid / Benchmark dashed) ──────────────────
-
-function SharedLegend() {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '8px 18px',
-        padding: '8px 12px',
-        marginBottom: 8,
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(255, 255, 255, 0.02)',
-        borderRadius: 2,
-        fontFamily: 'var(--font-mono)',
-        fontSize: 11,
-        letterSpacing: '0.04em',
-        color: '#cbd5e1',
-      }}
-    >
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 16, height: 3, borderRadius: 1, background: COLOR_LATEST, display: 'inline-block' }} />
-        Latest
-      </span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ width: 16, height: 0, borderTop: `2px dashed ${COLOR_BENCHMARK}`, display: 'inline-block' }} />
-        Benchmark
-      </span>
     </div>
   )
 }
@@ -222,131 +161,76 @@ function ForwardCurveCell({ cfg, lookback, cashRate }: CellProps) {
     })
   }, [curve.currentCurve, curve.lookbackCurve, showBenchmark])
 
-  const curveDomain = useMemo<[number, number]>(() => {
+  // The ±0.15 padded range snapped to even 2dp ticks; Δ bars on whole-bp ticks with 0 in range (niceAxis).
+  const curveAxis = useMemo(() => {
     const rates = curveData
       .flatMap(row => [row.latestRate, showBenchmark ? row.benchmarkRate : null])
       .filter((v): v is number => v != null)
-    if (rates.length === 0) return [0, 5]
-    return [Math.min(...rates) - 0.15, Math.max(...rates) + 0.15]
+    if (rates.length === 0) return niceAxis([0, 5], { dp: 2, maxIntervals: 4 })
+    return niceAxis([Math.min(...rates) - 0.15, Math.max(...rates) + 0.15], { dp: 2, maxIntervals: 4 })
   }, [curveData, showBenchmark])
+  const deltaAxis = useMemo(() => niceAxis(curveData.map(r => r.deltaBps).filter((v): v is number => v != null), { dp: 0, includeZero: true, maxIntervals: 4 }), [curveData])
 
   return (
-    <div
-      style={{
-        background: 'var(--surface, #0b1220)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: 2,
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
-      }}
+    <AcmChartFrame
+      title={cfg.label}
+      subtitle={`${cfg.product} · Current ${cfg.cashLabel}: ${cashRate != null ? `${cashRate.toFixed(2)}%` : '—'}`}
+      height={TOP_HEIGHT + (showBenchmark ? BOTTOM_HEIGHT : 0)}
+      className={styles.gMini}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          padding: '6px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(255, 255, 255, 0.02)',
-          gap: 8,
-        }}
-      >
-        <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#e2e8f0' }}>
-            {cfg.label}
-          </span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.04em', color: '#64748b', whiteSpace: 'nowrap' }}>
-            {cfg.product}
-          </span>
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.04em', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-          Current {cfg.cashLabel}: {cashRate != null ? `${cashRate.toFixed(2)}%` : '—'}
-        </span>
-      </div>
-
       {curve.error ? (
-        <div className={styles.error} style={{ padding: 12 }}>{curve.error}</div>
+        <div className={styles.stateError}>{curve.error}</div>
       ) : curve.loading ? (
-        <div className={styles.loading} style={{ padding: 12 }}>Loading…</div>
+        <div className={styles.stateMsg}>Loading…</div>
       ) : (
-        <div style={{ padding: '2px 2px 0' }}>
-          {/* Top panel — forward curve (latest solid + benchmark dashed) */}
-          <ResponsiveContainer width="100%" height={310}>
+        <>
+          {/* Top panel — forward curve (latest solid + benchmark dashed): LEVELS, identity colours */}
+          <ResponsiveContainer width="100%" height={TOP_HEIGHT}>
             <LineChart data={curveData} margin={{ top: 8, right: 10, left: 2, bottom: 0 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis dataKey="ticker" stroke="#728197" tick={false} tickLine={false} height={4} />
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="ticker" {...chartTheme.xAxis} tick={false} tickLine={false} height={4} />
               <YAxis
-                stroke="#728197"
-                tick={{ fontSize: 9, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                {...chartTheme.yAxis}
                 tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                domain={curveDomain}
-                width={40}
-                allowDataOverflow
+                domain={curveAxis.domain}
+                ticks={curveAxis.ticks}
+                width={Y_WIDTH}
               />
-              <Tooltip content={<CurveTooltip />} />
-              <Line
-                type="monotone"
-                dataKey="latestRate"
-                name="Latest"
-                stroke={COLOR_LATEST}
-                strokeWidth={2}
-                dot={{ r: 2 }}
-                connectNulls
-                isAnimationActive={false}
-              />
+              <Tooltip content={<CurveTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+              <Line type="monotone" dataKey="latestRate" name="Latest" stroke={COLOR_LATEST} strokeWidth={2} dot={{ r: 2, fill: COLOR_LATEST }} connectNulls isAnimationActive={false} />
               {showBenchmark && (
-                <Line
-                  type="monotone"
-                  dataKey="benchmarkRate"
-                  name="Benchmark"
-                  stroke={COLOR_BENCHMARK}
-                  strokeWidth={1.5}
-                  strokeDasharray="4 4"
-                  dot={{ r: 1.5 }}
-                  connectNulls
-                  isAnimationActive={false}
-                />
+                <Line type="monotone" dataKey="benchmarkRate" name="Benchmark" stroke={COLOR_BENCHMARK} strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 1.5, fill: COLOR_BENCHMARK }} connectNulls isAnimationActive={false} />
               )}
             </LineChart>
           </ResponsiveContainer>
 
-          {/* Bottom panel — per-contract day-over-day bps step bars */}
+          {/* Bottom panel — per-contract implied-rate change vs benchmark (bps): rule 6 */}
           {showBenchmark && (
-            <ResponsiveContainer width="100%" height={150}>
+            <ResponsiveContainer width="100%" height={BOTTOM_HEIGHT}>
               <BarChart data={curveData} margin={{ top: 4, right: 10, left: 2, bottom: 4 }}>
-                <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="ticker"
-                  stroke="#728197"
-                  tick={{ fontSize: 8, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                  angle={-45}
-                  textAnchor="end"
-                  interval={0}
-                  tickMargin={10}
-                  height={56}
-                />
-                <YAxis
-                  stroke="#728197"
-                  tick={{ fontSize: 9, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                  tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                  width={40}
-                />
-                <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                <Tooltip content={<CurveTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
+                <CartesianGrid {...chartTheme.grid} vertical={false} />
+                <XAxis dataKey="ticker" {...chartTheme.xAxis} angle={-45} textAnchor="end" interval={0} tickMargin={10} height={56} />
+                <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}`} width={Y_WIDTH} domain={deltaAxis.domain} ticks={deltaAxis.ticks} />
+                <ReferenceLine y={0} {...referenceLines.zero} />
+                <Tooltip content={<CurveTooltip />} cursor={chartTheme.barTooltipCursor} isAnimationActive={false} />
                 <Bar dataKey="deltaBps" radius={[2, 2, 0, 0]} isAnimationActive={false}>
-                  {curveData.map((row) => (
-                    <Cell key={row.ticker} fill={(row.deltaBps ?? 0) >= 0 ? COLOR_UP : COLOR_DOWN} />
-                  ))}
+                  {curveData.map((row) => {
+                    const shown = roundForDisplay(row.deltaBps ?? 0, 1) // the tooltip's 1dp: 0.0 → neutral
+                    return <Cell key={row.ticker} fill={shown > 0 ? signColor('acm-negative') : shown < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'} />
+                  })}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           )}
-        </div>
+        </>
       )}
-    </div>
+    </AcmChartFrame>
   )
 }
+
+const TOP_HEIGHT = 310
+const BOTTOM_HEIGHT = 150
+const Y_WIDTH = 40
 
 // ── Section ──────────────────────────────────────────────────────────────────
 
@@ -382,21 +266,44 @@ export function GlobalForwardCurvesSection() {
   }, [overnight.data, usSofr])
 
   return (
-    <div className={styles.yieldChangesSection}>
-      <div className={styles.yieldChangesHeader}>
-        <div className={styles.yieldChangesTitle}>GLOBAL FORWARD CURVES W/ DELTAS</div>
-        <LookbackButtons value={lookback} onChange={setLookback} />
-      </div>
+    <AcmPanel
+      title="GLOBAL FORWARD CURVES W/ DELTAS"
+      actions={(
+        <div className={styles.toggleGroup}>
+          {LOOKBACKS.map(r => (
+            <button
+              key={r.key}
+              type="button"
+              aria-pressed={lookback === r.key}
+              className={`${styles.toggleButton} ${lookback === r.key ? styles.toggleButtonActive : ''}`}
+              onClick={() => setLookback(r.key)}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      )}
+    >
+      <ul className={styles.gLegend}>
+        <li className={styles.gLegendButton}>
+          <span aria-hidden="true" className={styles.gLegendSwatch} style={{ ['--acm-swatch' as string]: COLOR_LATEST }} />
+          Latest
+        </li>
+        <li className={styles.gLegendButton}>
+          <span aria-hidden="true" className={`${styles.gLegendSwatch} ${styles.gLegendSwatchDashed}`} style={{ ['--acm-swatch' as string]: COLOR_BENCHMARK }} />
+          Benchmark
+        </li>
+        <li className={styles.gLegendButton}>
+          <span aria-hidden="true" className={styles.gLegendSwatch} style={{ ['--acm-swatch' as string]: signColor('acm-negative') }} />
+          Rate up
+        </li>
+        <li className={styles.gLegendButton}>
+          <span aria-hidden="true" className={styles.gLegendSwatch} style={{ ['--acm-swatch' as string]: signColor('acm-positive') }} />
+          Rate down
+        </li>
+      </ul>
 
-      <SharedLegend />
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 12,
-        }}
-      >
+      <div className={styles.gGrid3}>
         {COUNTRIES.map(cfg => (
           <ForwardCurveCell
             key={cfg.key}
@@ -406,6 +313,6 @@ export function GlobalForwardCurvesSection() {
           />
         ))}
       </div>
-    </div>
+    </AcmPanel>
   )
 }
