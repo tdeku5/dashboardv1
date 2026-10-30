@@ -121,3 +121,20 @@
 .dim {
   color: #4a5568;
 }
+
+/* ── M1 (token-only): the vst* classes are the only ones VolSummaryTable uses;
+   the table itself is AcmDataTable. Rules above are legacy, removed at Z. */
+.vstAsOf {
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+}
+
+.vstState {
+  padding: var(--acm-space-6) var(--acm-space-4);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.vstStateError { color: var(--acm-status-warning); }

@@ -26,7 +26,14 @@ import {
 } from '../hooks/useCrossAssetVol'
 import { useCavSummary } from '../hooks/useCavSummary'
 import { VolSummaryTable } from '../components/VolSummaryTable'
+import { AcmChartFrame, AcmPageHeader, fmtSignedFixed, niceAxis, type AcmLegendItem } from '../components/acm'
+import { cx } from '../components/acm/acmFormat'
+import { chartTheme, referenceLines, tooltipLabelStyle, tooltipSurfaceStyle } from '../components/acm/chartTheme'
 import styles from './CrossAssetVolPage.module.css'
+
+// M1 (MACRO): vol index levels and their z-scores are LEVELS — identity colours
+// from the registry (VOL_INDEX_COLORS via CAV_COLOR), plain text, no sign
+// colour. Reference lines (0, ±1σ, ±2σ, ±3σ) use the theme's reference styles.
 
 const RANGES: ReadonlyArray<{ key: CavRangeKey; label: string }> = [
   { key: '1m',  label: '1M' },
@@ -57,10 +64,10 @@ function fmtNum(v: number | null | undefined, decimals = 2): string {
   return v.toFixed(decimals)
 }
 
+/** Signed 2dp σ, ASCII '-' (Decision 3); 0.00σ when it rounds to zero (near-zero rule). */
 function fmtZ(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  const sign = v >= 0 ? '+' : '−'
-  return `${sign}${Math.abs(v).toFixed(2)}σ`
+  return fmtSignedFixed(v, 2, 'σ')
 }
 
 interface RangeButtonsProps<T extends string> {
@@ -72,13 +79,14 @@ interface RangeButtonsProps<T extends string> {
 
 function ButtonRow<T extends string>({ items, value, onChange, label }: RangeButtonsProps<T>) {
   return (
-    <div className={styles.rangeRow}>
-      <span className={styles.rangeLabel}>{label}</span>
+    <div className={styles.cavRangeRow}>
+      <span className={styles.cavRangeLabel}>{label}</span>
       {items.map((it) => (
         <button
           key={it.key}
           type="button"
-          className={`${styles.btn} ${value === it.key ? styles.btnActive : ''}`}
+          aria-pressed={value === it.key}
+          className={cx(styles.cavBtn, value === it.key && styles.cavBtnActive)}
           onClick={() => onChange(it.key)}
         >
           {it.label}
@@ -113,15 +121,15 @@ function LevelsTooltip({ active, payload, label }: LevelsTooltipProps) {
     )
   if (rows.length === 0) return null
   return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{label}</div>
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{label}</div>
       {rows.map((p) => {
         const k = p.dataKey as CavKey
         return (
-          <div key={p.dataKey} className={styles.tooltipRow}>
-            <span className={styles.tooltipDot} style={{ background: p.color }} />
-            <span className={styles.tooltipName}>{CAV_LABEL[k] ?? p.dataKey}</span>
-            <span className={styles.tooltipVal}>{fmtNum(p.value)}</span>
+          <div key={p.dataKey} className={styles.cavTipRow}>
+            <span className={styles.cavTipDot} style={{ background: p.color }} />
+            <span className={styles.cavTipName}>{CAV_LABEL[k] ?? p.dataKey}</span>
+            <span>{fmtNum(p.value)}</span>
           </div>
         )
       })}
@@ -166,109 +174,60 @@ function LevelsChart({ rangeLabel, data, loading, error }: LevelsChartProps) {
     })
   }
 
+  const legend: AcmLegendItem[] = CAV_KEYS.map(k => ({ label: CAV_LABEL[k], color: CAV_COLOR[k], hidden: hidden.has(k), onClick: () => toggle(k) }))
+  // One axis per series in its identity colour; even whole-number ticks per axis (niceAxis).
+  const axes = useMemo(() => Object.fromEntries(CAV_KEYS.map(k => [k, niceAxis(series.map(r => r[k]).filter((v): v is number => typeof v === 'number'), { dp: 0 })])) as Record<CavKey, ReturnType<typeof niceAxis>>, [series])
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.panelTitle}>VOL LEVELS</div>
-        <div className={styles.panelSubtitle}>range: {rangeLabel}</div>
-      </div>
-
+    <AcmChartFrame title="VOL LEVELS" subtitle={`range: ${rangeLabel}`} legend={legend} height={CHART_HEIGHT}>
       {missing.length > 0 && !allMissing && (
-        <div className={styles.warning}>
-          Missing data for: {missing.map(k => CAV_LABEL[k]).join(', ')}
-        </div>
+        <div className={styles.cavWarning}>Missing data for: {missing.map(k => CAV_LABEL[k]).join(', ')}</div>
       )}
-
-      <div className={styles.chartWrap}>
-        {loading && <div className={styles.placeholder}>Loading…</div>}
-        {error && <div className={styles.placeholder}>Failed to load: {error}</div>}
-        {!loading && !error && allMissing && (
-          <div className={styles.placeholder}>Vol levels data unavailable.</div>
-        )}
-        {!loading && !error && !allMissing && series.length === 0 && (
-          <div className={styles.placeholder}>No data in selected range.</div>
-        )}
-        {hasData && (
-          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-            <LineChart data={series} margin={{ top: 28, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                interval="preserveStartEnd"
-                minTickGap={40}
-                xAxisId={0}
+      {loading && <div className={styles.cavState}>Loading…</div>}
+      {error && <div className={cx(styles.cavState, styles.cavStateError)}>Failed to load: {error}</div>}
+      {!loading && !error && allMissing && <div className={styles.cavState}>Vol levels data unavailable.</div>}
+      {!loading && !error && !allMissing && series.length === 0 && <div className={styles.cavState}>No data in selected range.</div>}
+      {hasData && (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series} margin={{ top: 28, right: 8, left: 8, bottom: 4 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} xAxisId={0} />
+            {LEVELS_AXIS_LAYOUT.map(({ key, orientation }) => (
+              <YAxis
+                key={key}
+                yAxisId={key}
+                orientation={orientation}
+                hide={hidden.has(key)}
+                {...chartTheme.yAxis}
+                stroke={CAV_COLOR[key]}
+                strokeOpacity={0.7}
+                tick={{ ...chartTheme.tick, fill: CAV_COLOR[key], fillOpacity: 0.85 }}
+                tickFormatter={(v: number) => v.toFixed(0)}
+                domain={axes[key].domain}
+                ticks={axes[key].ticks}
+                width={44}
+                label={{ ...chartTheme.axisLabel, value: CAV_LABEL[key], position: 'top', offset: 10, fill: CAV_COLOR[key] }}
               />
-              {LEVELS_AXIS_LAYOUT.map(({ key, orientation }) => (
-                <YAxis
-                  key={key}
-                  yAxisId={key}
-                  orientation={orientation}
-                  hide={hidden.has(key)}
-                  stroke={CAV_COLOR[key]}
-                  strokeOpacity={0.7}
-                  tick={{
-                    fill: CAV_COLOR[key],
-                    fillOpacity: 0.85,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                  }}
-                  tickFormatter={(v: number) => v.toFixed(0)}
-                  domain={['auto', 'auto']}
-                  width={44}
-                  label={{
-                    value: CAV_LABEL[key],
-                    position: 'top',
-                    offset: 10,
-                    fill: CAV_COLOR[key],
-                    fontSize: 10,
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                  }}
-                />
-              ))}
-              <Tooltip content={<LevelsTooltip />} />
-              {CAV_KEYS.map((k) => (
-                <Line
-                  key={k}
-                  type="monotone"
-                  yAxisId={k}
-                  dataKey={k}
-                  stroke={CAV_COLOR[k]}
-                  strokeWidth={1.6}
-                  dot={false}
-                  hide={hidden.has(k)}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className={styles.legendRow}>
-        {CAV_KEYS.map((k) => {
-          const isHidden = hidden.has(k)
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`${styles.legendChip} ${isHidden ? styles.legendChipHidden : ''}`}
-              onClick={() => toggle(k)}
-            >
-              <span
-                className={`${styles.legendDot} ${isHidden ? styles.legendDotHidden : ''}`}
-                style={{ background: CAV_COLOR[k] }}
+            ))}
+            <Tooltip content={<LevelsTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+            {CAV_KEYS.map((k) => (
+              <Line
+                key={k}
+                type="monotone"
+                yAxisId={k}
+                dataKey={k}
+                stroke={CAV_COLOR[k]}
+                strokeWidth={1.6}
+                dot={false}
+                hide={hidden.has(k)}
+                connectNulls
+                isAnimationActive={false}
               />
-              <span>{CAV_LABEL[k]}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </AcmChartFrame>
   )
 }
 
@@ -294,21 +253,21 @@ function ZScoreTooltip({ active, payload, label }: ZTooltipProps) {
   const visible = payload.filter((p) => p.value != null && Number.isFinite(p.value))
   if (visible.length === 0) return null
   return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{label}</div>
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{label}</div>
       {visible.map((p) => {
         // dataKey is `${cavKey}_z` — recover the underlying CavKey.
         const cavKey = p.dataKey.replace(/_z$/, '') as CavKey
         const cell: CavZscoreCell | null = row[cavKey] ?? null
         return (
           <div key={p.dataKey}>
-            <div className={styles.tooltipRow}>
-              <span className={styles.tooltipDot} style={{ background: p.color }} />
-              <span className={styles.tooltipName}>{CAV_LABEL[cavKey] ?? cavKey}</span>
-              <span className={styles.tooltipVal}>{fmtZ(p.value)}</span>
+            <div className={styles.cavTipRow}>
+              <span className={styles.cavTipDot} style={{ background: p.color }} />
+              <span className={styles.cavTipName}>{CAV_LABEL[cavKey] ?? cavKey}</span>
+              <span>{fmtZ(p.value)}</span>
             </div>
             {cell && (
-              <div className={styles.tooltipMeta}>
+              <div className={styles.cavTipMeta}>
                 value {fmtNum(cell.value)} · μ {fmtNum(cell.mean)} · σ {fmtNum(cell.stdev)}
               </div>
             )}
@@ -377,109 +336,60 @@ function ZScoreChart({ rangeLabel, lookback, setLookback, lookbackLabel, data, l
     })
   }
 
+  const legend: AcmLegendItem[] = CAV_KEYS.map(k => ({ label: CAV_LABEL[k], color: CAV_COLOR[k], hidden: hidden.has(k), onClick: () => toggle(k) }))
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.panelTitle}>VOL Z-SCORES</div>
-        <div className={styles.panelSubtitle}>
-          range: {rangeLabel} · lookback: {lookbackLabel}
-        </div>
-      </div>
-
-      <ButtonRow
-        items={LOOKBACKS}
-        value={lookback}
-        onChange={setLookback}
-        label="Z-SCORE LOOKBACK:"
-      />
-
+    <AcmChartFrame
+      title="VOL Z-SCORES"
+      subtitle={`range: ${rangeLabel} · lookback: ${lookbackLabel}`}
+      legend={legend}
+      actions={<ButtonRow items={LOOKBACKS} value={lookback} onChange={setLookback} label="Z-SCORE LOOKBACK:" />}
+      height={CHART_HEIGHT}
+    >
       {(missing.length > 0 || notes.length > 0) && !allMissing && (
-        <div className={styles.warning}>
-          {missing.length > 0 && (
-            <span>Missing data for: {missing.map(k => CAV_LABEL[k]).join(', ')}</span>
-          )}
+        <div className={styles.cavWarning}>
+          {missing.length > 0 && <span>Missing data for: {missing.map(k => CAV_LABEL[k]).join(', ')}</span>}
           {notes.map((n, i) => <span key={i}>{n}</span>)}
         </div>
       )}
+      {loading && <div className={styles.cavState}>Loading…</div>}
+      {error && <div className={cx(styles.cavState, styles.cavStateError)}>Failed to load: {error}</div>}
+      {!loading && !error && allMissing && <div className={styles.cavState}>Z-score data unavailable.</div>}
+      {!loading && !error && !allMissing && rawSeries.length === 0 && <div className={styles.cavState}>No data in selected range.</div>}
+      {hasData && (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={flatSeries} margin={{ top: 12, right: 24, left: 8, bottom: 4 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
+            <YAxis
+              {...chartTheme.yAxis}
+              tickFormatter={(v: number) => fmtSignedFixed(v, 0, 'σ')}
+              domain={yDomain}
+              ticks={[-3, -2, -1, 0, 1, 2, 3].filter(t => t >= yDomain[0] && t <= yDomain[1])}
+            />
+            <Tooltip content={<ZScoreTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
 
-      <div className={styles.chartWrap}>
-        {loading && <div className={styles.placeholder}>Loading…</div>}
-        {error && <div className={styles.placeholder}>Failed to load: {error}</div>}
-        {!loading && !error && allMissing && (
-          <div className={styles.placeholder}>Z-score data unavailable.</div>
-        )}
-        {!loading && !error && !allMissing && rawSeries.length === 0 && (
-          <div className={styles.placeholder}>No data in selected range.</div>
-        )}
-        {hasData && (
-          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-            <LineChart data={flatSeries} margin={{ top: 12, right: 24, left: 8, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                interval="preserveStartEnd"
-                minTickGap={40}
+            <ReferenceLine y={0} {...referenceLines.zero} />
+            {[-1, 1].map(y => <ReferenceLine key={y} y={y} {...referenceLines.level} />)}
+            {[-2, 2, -3, 3].map(y => <ReferenceLine key={y} y={y} {...referenceLines.levelFaint} />)}
+
+            {CAV_KEYS.map((k) => (
+              <Line
+                key={k}
+                type="monotone"
+                dataKey={`${k}_z`}
+                stroke={CAV_COLOR[k]}
+                strokeWidth={1.6}
+                dot={false}
+                hide={hidden.has(k)}
+                connectNulls={false}
+                isAnimationActive={false}
               />
-              <YAxis
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}σ`}
-                domain={yDomain}
-                ticks={[-3, -2, -1, 0, 1, 2, 3].filter(t => t >= yDomain[0] && t <= yDomain[1])}
-              />
-              <Tooltip content={<ZScoreTooltip />} />
-
-              <ReferenceLine y={0} stroke="#5a6b7e" />
-              {[-1, 1].map(y => (
-                <ReferenceLine key={y} y={y} stroke="#3a4555" strokeDasharray="2 4" />
-              ))}
-              {[-2, 2].map(y => (
-                <ReferenceLine key={y} y={y} stroke="#4a5568" strokeDasharray="3 3" />
-              ))}
-              {[-3, 3].map(y => (
-                <ReferenceLine key={y} y={y} stroke="#3a4555" strokeDasharray="2 6" />
-              ))}
-
-              {CAV_KEYS.map((k) => (
-                <Line
-                  key={k}
-                  type="monotone"
-                  dataKey={`${k}_z`}
-                  stroke={CAV_COLOR[k]}
-                  strokeWidth={1.6}
-                  dot={false}
-                  hide={hidden.has(k)}
-                  connectNulls={false}
-                  isAnimationActive={false}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className={styles.legendRow}>
-        {CAV_KEYS.map((k) => {
-          const isHidden = hidden.has(k)
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`${styles.legendChip} ${isHidden ? styles.legendChipHidden : ''}`}
-              onClick={() => toggle(k)}
-            >
-              <span
-                className={`${styles.legendDot} ${isHidden ? styles.legendDotHidden : ''}`}
-                style={{ background: CAV_COLOR[k] }}
-              />
-              <span>{CAV_LABEL[k]}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </AcmChartFrame>
   )
 }
 
@@ -499,20 +409,10 @@ export function CrossAssetVolPage() {
   const lookbackLabel = LOOKBACKS.find(l => l.key === lookback)?.label ?? lookback.toUpperCase()
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.pageHeader}>
-        <div className={styles.pageTitle}>CROSS ASSET VOL</div>
-        <div className={styles.pageSubtitle}>as of {asOf}</div>
-      </div>
-
+    <div className={styles.cavShell}>
+      <AcmPageHeader title="CROSS ASSET VOL" asOf={asOf} />
       <ButtonRow items={RANGES} value={range} onChange={setRange} label="RANGE:" />
-
-      <LevelsChart
-        rangeLabel={rangeLabel}
-        data={levels.data}
-        loading={levels.loading}
-        error={levels.error}
-      />
+      <LevelsChart rangeLabel={rangeLabel} data={levels.data} loading={levels.loading} error={levels.error} />
       <ZScoreChart
         rangeLabel={rangeLabel}
         lookback={lookback}
@@ -522,12 +422,7 @@ export function CrossAssetVolPage() {
         loading={zscores.loading}
         error={zscores.error}
       />
-      <VolSummaryTable
-        asOfDate={summary.data?.asOfDate ?? null}
-        data={summary.data}
-        loading={summary.loading}
-        error={summary.error}
-      />
+      <VolSummaryTable asOfDate={summary.data?.asOfDate ?? null} data={summary.data} loading={summary.loading} error={summary.error} />
     </div>
   )
 }
