@@ -96,3 +96,12 @@ Section = every file reachable from `pages/STIRDashboardPage.tsx` by relative im
 4. Commit on `main` as one RATES commit (message summarises R1–R5 and the colour rules), then push `main` normally.
 5. Leave `acm-revamp` on GitHub untouched as an archive; never delete it unless asked.
 6. Continue MACRO and later batches on a new branch `acm-revamp-2` cut from the updated `main`.
+
+### Remaining batches (2026-10-30, `asset-class-revamp-m1.md`)
+
+RATES is merged (`cfb9a01`; `acm-revamp` kept as the archive). The remaining batches follow the same process, one at a time:
+
+- Each batch has its own branch cut from the updated `main`: `acm-revamp-2` (MACRO), `acm-revamp-3` (EQUITIES), `acm-revamp-4` (FX), `acm-revamp-5` (COMMODITIES), `acm-revamp-6` (Z).
+- Every sub-turn ends with a green check, an explicit-path commit and a normal push, before its status block.
+- At the batch gate: stop for approval, then squash-merge into `main` with the steps above (pre-merge checks, `git pull --ff-only`, staged stat with nothing under `server/`, one commit, normal push).
+- Merged batch branches stay untouched on GitHub as archives; never force-pushed or deleted unless asked.
