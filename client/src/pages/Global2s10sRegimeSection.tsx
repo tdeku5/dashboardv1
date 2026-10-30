@@ -31,7 +31,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { buildSpreadChartData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
+import { AcmChartFrame, AcmPanel, fmtSignedFixed, niceAxis, useBrushWindow } from '../components/acm'
+import { chartTheme } from '../components/acm/chartTheme'
+import { REGIME_OVERLAY_LINE } from '../constants/identityColors'
+import { buildSpreadChartData, type SpreadChartPoint } from '../lib/curveRegime'
+import { rangeToggle, regimeColor, regimeLegend } from './ratesShared'
 import styles from './STIRDashboardPage.module.css'
 
 type WD = { date: string; value: number }
@@ -87,46 +91,20 @@ function fmtAxisDate(date: string): string {
   return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
 }
 
-// ── Shared range buttons ─────────────────────────────────────────────────────
-
-function RangeButtons({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className={styles.ustRangeBar}>
-      {RANGES.map((range, idx) => (
-        <button
-          key={range}
-          className={`${styles.fvmRangeBtn} ${value === range ? styles.fvmRangeBtnActive : ''}`}
-          onClick={() => onChange(range)}
-          style={{
-            border: `1px solid ${value === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-            ...(idx > 0 ? { borderLeft: 'none' } : {}),
-            fontSize: '0.75rem',
-            padding: '4px 10px',
-          }}
-        >
-          {range.toUpperCase()}
-        </button>
-      ))}
-    </div>
-  )
-}
-
-// ── Shared regime legend (7 regime colors + 2s10s line) ──────────────────────
+// ── Shared regime legend (7 regime identity colours + the 2s10s line) ────────
+// The 2s10s spread is a LEVEL: bars take the regime identity colour (registry),
+// the line REGIME_OVERLAY_LINE — no sign colour (rule 6).
 
 function RegimeLegend() {
   return (
-    <div className={styles.ustRegimeLegend}>
-      {Object.entries(REGIME_COLORS).map(([name, color]) => (
-        <span key={name} className={styles.ustRegimeLegendItem}>
-          <span className={styles.ustRegimeSwatch} style={{ background: color }} />
-          {name}
-        </span>
+    <ul className={styles.gLegend}>
+      {regimeLegend('2s10s').map(item => (
+        <li key={item.label} className={styles.gLegendButton}>
+          <span aria-hidden="true" className={styles.gLegendSwatch} style={{ ['--acm-swatch' as string]: item.color }} />
+          {item.label}
+        </li>
       ))}
-      <span className={styles.ustRegimeLegendItem}>
-        <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-        2s10s
-      </span>
-    </div>
+    </ul>
   )
 }
 
@@ -164,78 +142,44 @@ function RegimeCell({ cfg, range, regimeLookback }: { cfg: RegimeCountry; range:
     return cutoff ? full.filter(p => p.date >= cutoff) : full
   }, [series, regimeLookback, range])
 
-  return (
-    <div
-      style={{
-        background: 'var(--surface, #0b1220)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: 2,
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
-        minHeight: 340,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 8,
-          padding: '6px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(255, 255, 255, 0.02)',
-        }}
-      >
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: '#e2e8f0' }}>
-          {cfg.label}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.04em', color: '#64748b', whiteSpace: 'nowrap' }}>
-          {cfg.long} − {cfg.short}
-        </span>
-      </div>
+  // Even whole-bp ticks over the brushed window (niceAxis + useBrushWindow).
+  const brushWin = useBrushWindow(data.length)
+  const yAxis = niceAxis(data.slice(brushWin.start, brushWin.end + 1).map(p => p.spread), { dp: 0 })
 
+  return (
+    <AcmChartFrame title={cfg.label} subtitle={`${cfg.long} − ${cfg.short}`} height={CELL_HEIGHT} className={styles.gMini}>
       {error ? (
-        <div className={styles.error} style={{ padding: 12 }}>{error}</div>
+        <div className={styles.stateError}>{error}</div>
       ) : loading ? (
-        <div className={styles.loading} style={{ padding: 12 }}>Loading…</div>
+        <div className={styles.stateMsg}>Loading…</div>
       ) : data.length === 0 ? (
-        <div className={styles.loading} style={{ padding: 12 }}>No data</div>
+        <div className={styles.stateMsg}>No data</div>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 18, left: 4, bottom: 12 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-            <XAxis
-              dataKey="date"
-              stroke="#728197"
-              tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={fmtAxisDate}
-              interval="preserveStartEnd"
-              minTickGap={50}
-            />
-            <YAxis
-              stroke="#728197"
-              tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-              tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-              width={44}
-            />
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtAxisDate} interval="preserveStartEnd" minTickGap={50} />
+            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} width={44} domain={yAxis.domain} ticks={yAxis.ticks} />
             <Tooltip
-              contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              labelStyle={{ color: '#94A3B8' }}
-              formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
+              {...chartTheme.tooltip}
+              cursor={chartTheme.barTooltipCursor}
+              formatter={(value: unknown) => (typeof value === 'number' ? fmtSignedFixed(value, 1, 'bp') : '—')}
             />
             <Bar dataKey="spread" barSize={3} isAnimationActive={false}>
               {data.map((point, idx) => (
-                <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
+                <Cell key={idx} fill={regimeColor(point.regime)} />
               ))}
             </Bar>
-            <Line type="monotone" dataKey="spread" stroke="#ffffff" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-            <Brush dataKey="date" height={26} stroke="#728197" fill="#0d1520" travellerWidth={8} tickFormatter={fmtAxisDate} />
+            <Line type="monotone" dataKey="spread" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+            <Brush dataKey="date" {...chartTheme.brush} height={26} tickFormatter={fmtAxisDate} onChange={brushWin.onChange} />
           </ComposedChart>
         </ResponsiveContainer>
       )}
-    </div>
+    </AcmChartFrame>
   )
 }
+
+const CELL_HEIGHT = 300
 
 // ── Section ──────────────────────────────────────────────────────────────────
 
@@ -244,38 +188,30 @@ export function Global2s10sRegimeSection() {
   const [regimeLookback, setRegimeLookback] = useState(20)
 
   return (
-    <div className={styles.yieldChangesSection}>
-      <div className={styles.yieldChangesHeader}>
-        <div className={styles.yieldChangesTitle}>GLOBAL 2s10s YIELD CURVE REGIMES</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <RangeButtons value={range} onChange={setRange} />
-          <label className={styles.ustLookbackWrap}>
-            <span className={styles.ustLookbackLabel}>Lookback (days):</span>
+    <AcmPanel
+      title="GLOBAL 2s10s YIELD CURVE REGIMES"
+      actions={(
+        <>
+          {rangeToggle(range, setRange, RANGES)}
+          <label className={styles.ustLookback}>
+            <span>Lookback (days):</span>
             <input
               className={styles.laborInput}
               type="number"
               min="1"
               value={regimeLookback}
               onChange={(e) => setRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
-              style={{ width: '50px' }}
             />
           </label>
-        </div>
-      </div>
-
+        </>
+      )}
+    >
       <RegimeLegend />
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-          gap: 12,
-        }}
-      >
+      <div className={styles.gGrid3}>
         {COUNTRIES.map(cfg => (
           <RegimeCell key={cfg.key} cfg={cfg} range={range} regimeLookback={regimeLookback} />
         ))}
       </div>
-    </div>
+    </AcmPanel>
   )
 }

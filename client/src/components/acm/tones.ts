@@ -7,6 +7,8 @@ export function toneClass(tone: SignTone | undefined): string | undefined {
     case 'negative': return tones.negative
     case 'dir-up': return tones.dirUp
     case 'dir-down': return tones.dirDown
+    case 'vol-premium-up': return tones.volPremiumUp
+    case 'vol-premium-down': return tones.volPremiumDown
     default: return undefined
   }
 }

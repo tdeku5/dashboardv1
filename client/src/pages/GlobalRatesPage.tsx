@@ -1,9 +1,9 @@
 import { Fragment, useMemo, useState } from 'react'
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -15,46 +15,32 @@ import { useGlobalCalendarSpreads } from '../hooks/useGlobalCalendarSpreads'
 import { useGlobalYieldChanges, type YieldChangeMetric, type YieldChangeRowKey } from '../hooks/useGlobalYieldChanges'
 import { useGlobalRatesSummary, type CurveRegimeName, type NextMove } from '../hooks/useGlobalRatesSummary'
 import { getCellColor } from '../lib/cellColor'
-import { REGIME_COLORS } from '../lib/curveRegime'
-import { ReferenceLine } from 'recharts'
+import { AcmChartFrame, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, type AcmLegendItem } from '../components/acm'
+import { chartTheme, referenceLines } from '../components/acm/chartTheme'
+import { toneClass } from '../components/acm/tones'
+import { countryColor } from '../constants/identityColors'
 import { DailyChangeModal } from '../components/DailyChangeModal'
+import { policyMoveTone, rateChangeClass, regimeTintBackground } from './ratesShared'
 import { GlobalPolicyTermStructureSection } from './GlobalPolicyTermStructureSection'
 import { GlobalPolicyPathRealRateSection } from './GlobalPolicyPathRealRateSection'
 import { GlobalForwardCurvesSection } from './GlobalForwardCurvesSection'
 import { Global2s10sRegimeSection } from './Global2s10sRegimeSection'
 import styles from './STIRDashboardPage.module.css'
 
-const COUNTRY_COLORS: Record<string, string> = {
-  US: '#60a5fa',
-  UK: '#a78bfa',
-  DE: '#facc15',
-  FR: '#fb923c',
-  IT: '#34d399',
-  CA: '#f87171',
-  JP: '#f472b6',
-  AU: '#22d3ee',
-}
+// R5c: GLOBAL on ACM primitives. Curves are LEVELS in country identity colours
+// (registry countryColor). Summary: yield / curve Δ columns join the cellColor
+// named heatmap (red / blue, text primary — addendum Decision 1); Terminal − OCR
+// and ±6M / ±12M − Terminal follow rule 6 (increase red); HIKE red, CUT green;
+// regime cells take a uniform tint of their identity colour, primary text. Calendar spread
+// values are LEVELS (plain), as on STIR STRIPS.
+
+/** Registry identity colour for a country / market key; a muted fallback if unmapped. */
+const cc = (key: string): string => countryColor(key) ?? 'var(--acm-text-secondary)'
 
 const YIELD_COUNTRIES = ['US', 'UK', 'DE', 'FR', 'IT', 'CA', 'JP', 'AU'] as const
 const FORWARD_COUNTRIES = ['US', 'UK', 'EU', 'CA', 'JP', 'AU'] as const
 
-const FORWARD_COLORS: Record<string, string> = {
-  US: '#60a5fa',
-  UK: '#a78bfa',
-  EU: '#facc15',
-  CA: '#f87171',
-  JP: '#f472b6',
-  AU: '#22d3ee',
-}
 
-const SPREAD_MARKET_COLORS: Record<string, string> = {
-  SR3: '#60a5fa',
-  SO3: '#a78bfa',
-  EUR: '#facc15',
-  CRA: '#f87171',
-  TOA3: '#f472b6',
-  AUS: '#22d3ee',
-}
 
 const STRIDE_LABELS: Record<number, string> = { 1: '3m', 2: '6m', 3: '9m', 4: '12m' }
 
@@ -91,67 +77,32 @@ const REGIME_LOOKBACK_OPTIONS = [
   { value: '20d', label: '20D' }, { value: '60d', label: '60D' }, { value: '200d', label: '200D' },
 ] as const
 
-// Rates-trader convention: positive bps in yield = red (bearish, rates up).
-function deltaColorClass(v: number | null): string {
-  if (v == null) return styles.cellNeutral
-  if (v > 0) return styles.cellNegative
-  if (v < 0) return styles.cellPositive
-  return ''
+/** HIKE = red, CUT = green (a priced policy move); HOLD / missing muted. */
+function nextMoveClass(v: NextMove): string | undefined {
+  if (v === 'HIKE') return toneClass(policyMoveTone('hike'))
+  if (v === 'CUT') return toneClass(policyMoveTone('cut'))
+  return styles.muted
 }
 
-// Terminal − OCR, and the two forward-vs-terminal columns: positive = hikes
-// still required to reach terminal (red); negative = cuts to reach terminal
-// (green). Shared so the three policy-spread columns colour identically.
-function terminalSpreadColorClass(v: number | null): string {
-  if (v == null) return styles.cellNeutral
-  if (v > 0) return styles.cellNegative
-  if (v < 0) return styles.cellPositive
-  return ''
-}
-
-function nextMoveColorClass(v: NextMove): string {
-  if (v === 'HIKE') return styles.cellNegative
-  if (v === 'CUT') return styles.cellPositive
-  return styles.cellNeutral
-}
-
+/** Signed 1dp bp; a value that rounds to zero prints as 0.0 (near-zero rule). */
 function fmtSignedBps(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
-// Per-column gradient: blue for negative, red for positive, intensity scales
-// with |value| / column's |max|. Cap alpha at 0.35 so the green/red text on
-// top stays legible.
-function deltaCellStyle(value: number | null, columnAbsMax: number): React.CSSProperties | undefined {
-  if (value == null || !Number.isFinite(value) || columnAbsMax === 0) return undefined
-  const intensity = Math.min(1, Math.abs(value) / columnAbsMax)
-  const alpha = (intensity * 0.35).toFixed(3)
-  if (value < 0) return { background: `rgba(59, 130, 246, ${alpha})` }
-  if (value > 0) return { background: `rgba(239, 68, 68, ${alpha})` }
-  return undefined
+/**
+ * Summary Δ cell: the cellColor named heatmap on the rate scale (red = up, blue
+ * = down), per column max; a change that prints as 0.0 gets no fill.
+ */
+function deltaHeat(value: number | null, columnAbsMax: number): string | undefined {
+  if (value == null || !Number.isFinite(value) || roundForDisplay(value, 1) === 0) return undefined
+  return getCellColor(value, columnAbsMax, 'red-blue')
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const m = hex.replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i)
-  if (!m) return { r: 128, g: 128, b: 128 }
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) }
-}
-
-// Pick black or white text for a given background based on luminance. Above
-// ~0.55 → dark text reads better; below → white text.
-function regimeCellStyle(regime: CurveRegimeName | null): React.CSSProperties {
-  if (!regime) return { color: '#94a3b8' }
-  const bg = REGIME_COLORS[regime]
-  if (!bg) return { color: '#94a3b8' }
-  const { r, g, b } = hexToRgb(bg)
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
-  return {
-    background: bg,
-    color: luminance > 0.55 ? '#000000' : '#ffffff',
-    fontWeight: 700,
-  }
+/** Regime cell: a uniform tint of its registry identity colour over the panel; text stays primary (R5d ruling 2). */
+function regimeCellStyle(regime: CurveRegimeName | null): React.CSSProperties | undefined {
+  const bg = regimeTintBackground(regime)
+  return bg ? { background: bg } : undefined
 }
 
 function columnAbsMax(values: Array<number | null>): number {
@@ -165,16 +116,15 @@ function columnAbsMax(values: Array<number | null>): number {
   return max
 }
 
+/** z-score / bp in the 1-day grid; a value that rounds to zero prints unsigned. */
 function fmtSigma(z: number | null | undefined): string {
   if (z == null || !Number.isFinite(z)) return '—'
-  const sign = z >= 0 ? '+' : '-'
-  return `${sign}${Math.abs(z).toFixed(3)}σ`
+  return fmtSignedFixed(z, 3, 'σ')
 }
 
 function fmtBps(b: number | null | undefined): string {
   if (b == null || !Number.isFinite(b)) return '—'
-  const sign = b >= 0 ? '+' : '-'
-  return `${sign}${Math.abs(b).toFixed(2)} bps`
+  return fmtSignedFixed(b, 2, ' bps')
 }
 
 export function GlobalRatesPage() {
@@ -194,18 +144,10 @@ export function GlobalRatesPage() {
 
   const [detailCell, setDetailCell] = useState<{ country: string; countryLabel: string; tenor: YieldChangeRowKey } | null>(null)
 
-  const fmtSpread = (v: number | undefined): string => {
-    if (typeof v !== 'number') return '—'
-    return `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
-  }
-  const spreadCellClass = (v: string | number | undefined): string => {
-    if (typeof v !== 'number') return styles.cellEmpty
-    if (v > 0) return styles.ocrPositive
-    if (v < 0) return styles.ocrNegative
-    return ''
-  }
+  // Calendar spread values are LEVELS: plain text, signed; 0.0 when they round to zero.
+  const fmtSpread = (v: number | undefined): string => (typeof v === 'number' ? fmtSignedFixed(v, 1) : '—')
 
-  const ycYDomain = useMemo((): [number, number] => {
+  const ycYDomain = useMemo(() => {
     const vals: number[] = []
     for (const r of yieldData.tenors) {
       for (const c of YIELD_COUNTRIES) {
@@ -213,14 +155,15 @@ export function GlobalRatesPage() {
         if (v != null) vals.push(v)
       }
     }
-    if (vals.length === 0) return [0, 6]
+    if (vals.length === 0) return niceAxis([0, 6], { dp: 2 })
     const min = Math.min(...vals)
     const max = Math.max(...vals)
     const pad = (max - min) * 0.1 || 0.3
-    return [min - pad, max + pad]
+    // the 10% padded range snapped to even 2dp ticks (niceAxis)
+    return niceAxis([min - pad, max + pad], { dp: 2 })
   }, [yieldData.tenors])
 
-  const fwdYDomain = useMemo((): [number, number] => {
+  const fwdYDomain = useMemo(() => {
     const vals: number[] = []
     for (const r of forwardData.contracts) {
       for (const c of FORWARD_COUNTRIES) {
@@ -228,11 +171,12 @@ export function GlobalRatesPage() {
         if (v != null) vals.push(v)
       }
     }
-    if (vals.length === 0) return [0, 6]
+    if (vals.length === 0) return niceAxis([0, 6], { dp: 2 })
     const min = Math.min(...vals)
     const max = Math.max(...vals)
     const pad = (max - min) * 0.1 || 0.3
-    return [min - pad, max + pad]
+    // the 10% padded range snapped to even 2dp ticks (niceAxis)
+    return niceAxis([min - pad, max + pad], { dp: 2 })
   }, [forwardData.contracts])
 
   const maxYears = useMemo(() => {
@@ -256,43 +200,53 @@ export function GlobalRatesPage() {
     return result
   }, [yieldChanges.countries])
 
+  const lookbackInput = (id: string, value: number, onChange: (v: number) => void) => (
+    <label className={styles.ustLookback} htmlFor={id}>
+      <span>t −</span>
+      <input
+        id={id}
+        className={`${styles.laborInput} ${styles.inputNarrow}`}
+        type="number"
+        min="0"
+        max="252"
+        value={value}
+        onChange={(e) => onChange(Math.max(0, parseInt(e.target.value) || 0))}
+      />
+    </label>
+  )
+  const countryLegend = (keys: readonly string[]): AcmLegendItem[] => keys.map(k => ({ label: k, color: cc(k) }))
+  const spreadStrides = ([1, 2, 3, 4] as const).filter(s => (spreadsData.strides[s]?.length ?? 0) > 0)
+
   return (
-    <div className={styles.fullPanel}>
+    <div className={styles.ustStack}>
       {/* ═══ Global Rates Summary ═══ */}
-      <div className={styles.globalSummarySection}>
-        <div className={styles.summaryHeader}>
-          <h3 className={styles.summaryTitle}>GLOBAL RATES SUMMARY</h3>
-          <div className={styles.summaryControls}>
-            <div className={styles.summaryControl}>
-              <label htmlFor="summaryYieldLookback">YIELD Δ LOOKBACK:</label>
-              <select
-                id="summaryYieldLookback"
-                value={summaryYieldLookback}
-                onChange={e => setSummaryYieldLookback(e.target.value)}
-              >
+      <AcmPanel
+        title="GLOBAL RATES SUMMARY"
+        actions={(
+          <>
+            <label className={styles.ustLookback} htmlFor="summaryYieldLookback">
+              <span>YIELD Δ LOOKBACK:</span>
+              <select id="summaryYieldLookback" className={styles.gsSelect} value={summaryYieldLookback} onChange={e => setSummaryYieldLookback(e.target.value)}>
                 {YIELD_LOOKBACK_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-            </div>
-            <div className={styles.summaryControl}>
-              <label htmlFor="summaryRegimeLookback">REGIME LOOKBACK:</label>
-              <select
-                id="summaryRegimeLookback"
-                value={summaryRegimeLookback}
-                onChange={e => setSummaryRegimeLookback(e.target.value)}
-              >
+            </label>
+            <label className={styles.ustLookback} htmlFor="summaryRegimeLookback">
+              <span>REGIME LOOKBACK:</span>
+              <select id="summaryRegimeLookback" className={styles.gsSelect} value={summaryRegimeLookback} onChange={e => setSummaryRegimeLookback(e.target.value)}>
                 {REGIME_LOOKBACK_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-            </div>
-          </div>
-        </div>
+            </label>
+          </>
+        )}
+      >
         {summary.loading ? (
-          <div className={styles.loading}>Loading summary…</div>
+          <div className={styles.stateMsg}>Loading summary…</div>
         ) : summary.error ? (
-          <div className={styles.error}>{summary.error}</div>
+          <div className={styles.stateError}>{summary.error}</div>
         ) : summary.data ? (() => {
           const rows = summary.data.rows
           const max2Y  = columnAbsMax(rows.map(r => r.delta2Y))
@@ -305,290 +259,197 @@ export function GlobalRatesPage() {
           // state, so the header can never describe a window the data is not
           // actually from (e.g. mid-fetch after a dropdown change).
           const regimeWindowLabel = `${summary.data.regimeLookbackDays}D`
+          const heatCell = (v: number | null, max: number) => {
+            const bg = deltaHeat(v, max)
+            return <td className={styles.gsHeat} data-col="delta" data-cell-color data-heat={bg} style={bg ? { background: bg } : undefined}>{fmtSignedBps(v)}</td>
+          }
+          const regimeCell = (r: CurveRegimeName | null) => (
+            <td className={styles.gsRegime} data-col="regime" style={regimeCellStyle(r)}>{r ? REGIME_SHORT_LABELS[r] : '—'}</td>
+          )
+          const spreadCell = (v: number | null) => <td data-col="spread" className={rateChangeClass(v) ?? (v == null ? styles.muted : undefined)}>{fmtSignedBps(v)}</td>
           return (
-          <table className={styles.summaryTable}>
+          <table className={styles.summaryTableAcm}>
             <thead>
               <tr>
-                <th className={styles.colCountry}>Country</th>
-                <th className={styles.colDelta}>2Y Δ</th>
-                <th className={styles.colDelta}>5Y Δ</th>
-                <th className={styles.colDelta}>10Y Δ</th>
-                <th className={styles.colDelta}>30Y Δ</th>
-                <th className={styles.colRegime}>2s10s</th>
-                <th className={styles.colDelta}>2s10s Δ <span className={styles.unitSuffix}>({regimeWindowLabel})</span></th>
-                <th className={styles.colRegime}>10s30s</th>
-                <th className={styles.colDelta}>10s30s Δ <span className={styles.unitSuffix}>({regimeWindowLabel})</span></th>
-                <th className={styles.colNextMove}>Next CB Move</th>
-                <th className={styles.colSpread}>Terminal − OCR <span className={styles.unitSuffix}>(bps)</span></th>
-                <th className={styles.colSpread}>+6M − Terminal <span className={styles.unitSuffix}>(bps)</span></th>
-                <th className={styles.colSpread}>+12M − Terminal <span className={styles.unitSuffix}>(bps)</span></th>
+                <th data-col="country">Country</th>
+                <th data-col="delta">2Y Δ</th>
+                <th data-col="delta">5Y Δ</th>
+                <th data-col="delta">10Y Δ</th>
+                <th data-col="delta">30Y Δ</th>
+                <th data-col="regime">2s10s</th>
+                <th data-col="delta">2s10s Δ <span className={styles.gsUnit}>({regimeWindowLabel})</span></th>
+                <th data-col="regime">10s30s</th>
+                <th data-col="delta">10s30s Δ <span className={styles.gsUnit}>({regimeWindowLabel})</span></th>
+                <th data-col="nextmove">Next CB Move</th>
+                <th data-col="spread">Terminal − OCR <span className={styles.gsUnit}>(bps)</span></th>
+                <th data-col="spread">+6M − Terminal <span className={styles.gsUnit}>(bps)</span></th>
+                <th data-col="spread">+12M − Terminal <span className={styles.gsUnit}>(bps)</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.map(row => (
                 <tr key={row.country}>
-                  <td className={styles.colCountry}>{row.country}</td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta2Y)}`}  style={deltaCellStyle(row.delta2Y, max2Y)}>{fmtSignedBps(row.delta2Y)}</td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta5Y)}`}  style={deltaCellStyle(row.delta5Y, max5Y)}>{fmtSignedBps(row.delta5Y)}</td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta10Y)}`} style={deltaCellStyle(row.delta10Y, max10Y)}>{fmtSignedBps(row.delta10Y)}</td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta30Y)}`} style={deltaCellStyle(row.delta30Y, max30Y)}>{fmtSignedBps(row.delta30Y)}</td>
-                  <td className={styles.colRegime} style={regimeCellStyle(row.regime2s10s)}>
-                    {row.regime2s10s ? REGIME_SHORT_LABELS[row.regime2s10s] : '—'}
-                  </td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta2s10s)}`} style={deltaCellStyle(row.delta2s10s, max2s10s)}>{fmtSignedBps(row.delta2s10s)}</td>
-                  <td className={styles.colRegime} style={regimeCellStyle(row.regime10s30s)}>
-                    {row.regime10s30s ? REGIME_SHORT_LABELS[row.regime10s30s] : '—'}
-                  </td>
-                  <td className={`${styles.colDelta} ${deltaColorClass(row.delta10s30s)}`} style={deltaCellStyle(row.delta10s30s, max10s30s)}>{fmtSignedBps(row.delta10s30s)}</td>
-                  <td className={`${styles.colNextMove} ${nextMoveColorClass(row.nextMove)}`}>{row.nextMove ?? '—'}</td>
-                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.terminalMinusOcr)}`}>
-                    {fmtSignedBps(row.terminalMinusOcr)}
-                  </td>
-                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.fwd6mMinusTerminal)}`}>
-                    {fmtSignedBps(row.fwd6mMinusTerminal)}
-                  </td>
-                  <td className={`${styles.colSpread} ${terminalSpreadColorClass(row.fwd12mMinusTerminal)}`}>
-                    {fmtSignedBps(row.fwd12mMinusTerminal)}
-                  </td>
+                  <td data-col="country">{row.country}</td>
+                  {heatCell(row.delta2Y, max2Y)}
+                  {heatCell(row.delta5Y, max5Y)}
+                  {heatCell(row.delta10Y, max10Y)}
+                  {heatCell(row.delta30Y, max30Y)}
+                  {regimeCell(row.regime2s10s)}
+                  {heatCell(row.delta2s10s, max2s10s)}
+                  {regimeCell(row.regime10s30s)}
+                  {heatCell(row.delta10s30s, max10s30s)}
+                  <td data-col="nextmove" className={nextMoveClass(row.nextMove)}>{row.nextMove ?? '—'}</td>
+                  {spreadCell(row.terminalMinusOcr)}
+                  {spreadCell(row.fwd6mMinusTerminal)}
+                  {spreadCell(row.fwd12mMinusTerminal)}
                 </tr>
               ))}
             </tbody>
           </table>
           )
         })() : null}
-      </div>
+      </AcmPanel>
 
-      <div className={styles.globalTopRow}>
-      {/* ═══ Global Yield Curves ═══ */}
-      <div className={styles.ustDashboard} style={{ minWidth: 0 }}>
-        <div className={styles.ustYcHeader}>
-          <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>GLOBAL SOVEREIGN YIELD CURVES</div>
-          <div className={styles.ustYcControls}>
-            <div className={styles.spreadLookbackControl}>
-              <label htmlFor="ycLookback">t −</label>
-              <input
-                id="ycLookback"
-                type="number"
-                min="0"
-                max="252"
-                value={yieldLookback}
-                onChange={(e) => setYieldLookback(Math.max(0, parseInt(e.target.value) || 0))}
-                className={styles.spreadLookbackInput}
-              />
-            </div>
-            <button
-              onClick={() => setCompressed(v => !v)}
-              style={{
-                background: compressed ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
-                border: `1px solid ${compressed ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-                color: compressed ? '#60a5fa' : '#728197',
-                fontFamily: 'var(--font-mono)', fontSize: '0.65rem', fontWeight: 600,
-                padding: '3px 10px', cursor: 'pointer', borderRadius: '2px',
-              }}
-            >
-              COMPRESSED
-            </button>
-          </div>
-        </div>
-        <div className={styles.ustYcDates}>
-          {'\u25CF'} AS OF: {yieldData.asOfDate || '—'}{yieldLookback > 0 && ` (t − ${yieldLookback})`}
-        </div>
-
-        {yieldData.loading ? (
-          <div className={styles.loading}>Loading global yield curves…</div>
-        ) : yieldData.error ? (
-          <div className={styles.error}>{yieldData.error}</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={600}>
-            <LineChart data={yieldData.tenors} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey={compressed ? 'years' : 'tenor'}
-                type={compressed ? 'number' : 'category'}
-                stroke="#728197"
-                tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                {...(compressed ? {
-                  domain: [0, maxYears] as [number, number],
-                  ticks: yieldData.tenors.map(t => t.years),
-                  tickFormatter: (v: number) => v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`,
-                } : {})}
-              />
-              <YAxis
-                stroke="#728197"
-                tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                domain={ycYDomain}
-                allowDataOverflow
-              />
-              <Tooltip
-                contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                formatter={(value: unknown, name: string | undefined) => [value != null && typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
-                labelFormatter={(label: unknown) => {
-                  if (compressed) {
-                    const v = Number(label)
-                    return v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`
-                  }
-                  return String(label)
-                }}
-              />
-              <Legend
-                verticalAlign="top"
-                height={28}
-                wrapperStyle={{ paddingBottom: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}
-              />
-              {YIELD_COUNTRIES.map(c => (
-                <Line
-                  key={c}
-                  name={c}
-                  type="monotone"
-                  dataKey={c}
-                  stroke={COUNTRY_COLORS[c]}
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  connectNulls={false}
+      <div className={styles.ustPair}>
+        {/* ═══ Global Yield Curves ═══ */}
+        <AcmChartFrame
+          title="GLOBAL SOVEREIGN YIELD CURVES"
+          subtitle={`● AS OF: ${yieldData.asOfDate || '—'}${yieldLookback > 0 ? ` (t − ${yieldLookback})` : ''}`}
+          legend={countryLegend(YIELD_COUNTRIES)}
+          actions={(
+            <>
+              {lookbackInput('ycLookback', yieldLookback, setYieldLookback)}
+              <button
+                type="button"
+                className={`${styles.toggleButton} ${compressed ? styles.toggleButtonActive : ''}`}
+                aria-pressed={compressed}
+                onClick={() => setCompressed(v => !v)}
+              >
+                COMPRESSED
+              </button>
+            </>
+          )}
+          height={600}
+        >
+          {yieldData.loading ? (
+            <div className={styles.stateMsg}>Loading global yield curves…</div>
+          ) : yieldData.error ? (
+            <div className={styles.stateError}>{yieldData.error}</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={yieldData.tenors} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
+                <CartesianGrid {...chartTheme.grid} vertical={false} />
+                <XAxis
+                  dataKey={compressed ? 'years' : 'tenor'}
+                  type={compressed ? 'number' : 'category'}
+                  {...chartTheme.xAxis}
+                  {...(compressed ? {
+                    domain: [0, maxYears] as [number, number],
+                    ticks: yieldData.tenors.map(t => t.years),
+                    tickFormatter: (v: number) => v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`,
+                  } : {})}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* ═══ Global Forward Curves ═══ */}
-      <div className={styles.ustDashboard} style={{ minWidth: 0 }}>
-        <div className={styles.ustYcHeader}>
-          <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>GLOBAL FORWARD CURVES (STIR STRIPS)</div>
-          <div className={styles.ustYcControls}>
-            <div className={styles.spreadLookbackControl}>
-              <label htmlFor="fwdLookback">t −</label>
-              <input
-                id="fwdLookback"
-                type="number"
-                min="0"
-                max="252"
-                value={forwardLookback}
-                onChange={(e) => setForwardLookback(Math.max(0, parseInt(e.target.value) || 0))}
-                className={styles.spreadLookbackInput}
-              />
-            </div>
-          </div>
-        </div>
-        <div className={styles.ustYcDates}>
-          {'\u25CF'} AS OF: {forwardData.asOfDate || '—'}{forwardLookback > 0 && ` (t − ${forwardLookback})`}
-        </div>
-
-        {forwardData.loading ? (
-          <div className={styles.loading}>Loading global forward curves…</div>
-        ) : forwardData.error ? (
-          <div className={styles.error}>{forwardData.error}</div>
-        ) : (
-          <ResponsiveContainer width="100%" height={600}>
-            <LineChart data={forwardData.contracts} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                dataKey="code"
-                stroke="#728197"
-                tick={{ fontSize: 11, fontWeight: 600, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
-                tickMargin={8}
-                interval="preserveStartEnd"
-                minTickGap={30}
-              />
-              <YAxis
-                stroke="#728197"
-                tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                domain={fwdYDomain}
-                allowDataOverflow
-              />
-              <Tooltip
-                contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                formatter={(value: unknown, name: string | undefined) => [value != null && typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
-              />
-              <Legend
-                verticalAlign="top"
-                height={28}
-                wrapperStyle={{ paddingBottom: 8, fontSize: 11, fontFamily: 'var(--font-mono)' }}
-              />
-              {FORWARD_COUNTRIES.map(c => (
-                <Line
-                  key={c}
-                  name={c}
-                  type="monotone"
-                  dataKey={c}
-                  stroke={FORWARD_COLORS[c]}
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  connectNulls={false}
+                <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(2)}%`} domain={ycYDomain.domain} ticks={ycYDomain.ticks} />
+                <Tooltip
+                  {...chartTheme.tooltip}
+                  formatter={(value: unknown, name: string | undefined) => [value != null && typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
+                  labelFormatter={(label: unknown) => {
+                    if (compressed) {
+                      const v = Number(label)
+                      return v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`
+                    }
+                    return String(label)
+                  }}
                 />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
+                {YIELD_COUNTRIES.map(c => (
+                  <Line key={c} name={c} type="monotone" dataKey={c} stroke={cc(c)} strokeWidth={2} dot={{ r: 3, fill: cc(c) }} connectNulls={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </AcmChartFrame>
+
+        {/* ═══ Global Forward Curves ═══ */}
+        <AcmChartFrame
+          title="GLOBAL FORWARD CURVES (STIR STRIPS)"
+          subtitle={`● AS OF: ${forwardData.asOfDate || '—'}${forwardLookback > 0 ? ` (t − ${forwardLookback})` : ''}`}
+          legend={countryLegend(FORWARD_COUNTRIES)}
+          actions={lookbackInput('fwdLookback', forwardLookback, setForwardLookback)}
+          height={600}
+        >
+          {forwardData.loading ? (
+            <div className={styles.stateMsg}>Loading global forward curves…</div>
+          ) : forwardData.error ? (
+            <div className={styles.stateError}>{forwardData.error}</div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={forwardData.contracts} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
+                <CartesianGrid {...chartTheme.grid} vertical={false} />
+                <XAxis dataKey="code" {...chartTheme.xAxis} tickMargin={8} interval="preserveStartEnd" minTickGap={30} />
+                <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(2)}%`} domain={fwdYDomain.domain} ticks={fwdYDomain.ticks} />
+                <Tooltip
+                  {...chartTheme.tooltip}
+                  formatter={(value: unknown, name: string | undefined) => [value != null && typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
+                />
+                {FORWARD_COUNTRIES.map(c => (
+                  <Line key={c} name={c} type="monotone" dataKey={c} stroke={cc(c)} strokeWidth={2} dot={{ r: 3, fill: cc(c) }} connectNulls={false} />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </AcmChartFrame>
       </div>
 
-      {/* ═══ Global Bond Yields — 1 Day Change ═══ */}
-      <div className={styles.yieldChangesSection}>
-        <div className={styles.yieldChangesHeader}>
-          <div className={styles.yieldChangesTitle}>GLOBAL BOND YIELDS — 1 DAY CHANGE</div>
-          <div className={styles.yieldChangesDate}>
-            {'●'} AS OF: {yieldChanges.asOfDate || '—'}
-          </div>
-        </div>
+      {/* ═══ Global Bond Yields — 1 Day Change: the z-score grid (cellColor named heatmap, red / blue) ═══ */}
+      <AcmPanel title="GLOBAL BOND YIELDS — 1 DAY CHANGE" footer={<>σ — 200 Day Standard Deviation · bottom two rows show curve differentials</>}>
+        <div className={styles.ustAsOf}>● AS OF: {yieldChanges.asOfDate || '—'}</div>
         {yieldChanges.loading ? (
-          <div className={styles.loading}>Loading yield changes…</div>
+          <div className={styles.stateMsg}>Loading yield changes…</div>
         ) : yieldChanges.error ? (
-          <div className={styles.error}>{yieldChanges.error}</div>
+          <div className={styles.stateError}>{yieldChanges.error}</div>
         ) : (
-          <>
-            <div
-              className={styles.yieldChangesGrid}
-              style={{ gridTemplateColumns: `repeat(${YIELD_CHANGE_COUNTRIES.length}, 1fr)` }}
-            >
-              {YIELD_CHANGE_ROWS.map((row) => (
-                <Fragment key={row}>
-                  {YIELD_CHANGE_COUNTRIES.map(({ key, label }) => {
-                    const country = yieldChanges.countries[key]
-                    const metric: YieldChangeMetric | null | undefined = country?.[row]
-                    const z = metric?.zScore
-                    const bg = getCellColor(z, yieldChangeRowMaxAbs[row], 'red-blue')
-                    const cellStyle: React.CSSProperties = { cursor: 'pointer', ...(bg ? { background: bg } : {}) }
-                    return (
-                      <div
-                        key={`${key}-${row}`}
-                        className={styles.yieldChangeCell}
-                        style={cellStyle}
-                        onClick={() => setDetailCell({ country: key, countryLabel: label, tenor: row })}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            setDetailCell({ country: key, countryLabel: label, tenor: row })
-                          }
-                        }}
-                      >
-                        <div className={styles.yieldChangeCellHeader}>{label} {row}</div>
-                        {metric ? (
-                          <>
-                            <div className={styles.yieldChangeSigma}>{fmtSigma(z)}</div>
-                            <div className={styles.yieldChangeBps}>{fmtBps(metric.changeBps)}</div>
-                          </>
-                        ) : (
-                          <div className={styles.yieldChangeSigma}>—</div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </Fragment>
-              ))}
-            </div>
-            <div className={styles.yieldChangeFooter}>
-              σ — 200 Day Standard Deviation<br />
-              Bottom two rows show curve differentials
-            </div>
-          </>
+          <div className={styles.gzGrid} style={{ gridTemplateColumns: `repeat(${YIELD_CHANGE_COUNTRIES.length}, minmax(0, 1fr))` }}>
+            {YIELD_CHANGE_ROWS.map((row) => (
+              <Fragment key={row}>
+                {YIELD_CHANGE_COUNTRIES.map(({ key, label }) => {
+                  const country = yieldChanges.countries[key]
+                  const metric: YieldChangeMetric | null | undefined = country?.[row]
+                  const z = metric?.zScore
+                  // a z that prints as 0.000 gets no fill (near-zero rule)
+                  const bg = getCellColor(z != null && roundForDisplay(z, 3) === 0 ? 0 : z, yieldChangeRowMaxAbs[row], 'red-blue')
+                  return (
+                    <div
+                      key={`${key}-${row}`}
+                      className={styles.gzCell}
+                      data-cell-color
+                      style={bg ? { background: bg } : undefined}
+                      onClick={() => setDetailCell({ country: key, countryLabel: label, tenor: row })}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setDetailCell({ country: key, countryLabel: label, tenor: row })
+                        }
+                      }}
+                    >
+                      <div className={styles.gzHead}>{label} {row}</div>
+                      {metric ? (
+                        <>
+                          <div className={styles.gzSigma}>{fmtSigma(z)}</div>
+                          <div className={styles.gzBps}>{fmtBps(metric.changeBps)}</div>
+                        </>
+                      ) : (
+                        <div className={styles.gzSigma}>—</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </Fragment>
+            ))}
+          </div>
         )}
-      </div>
+      </AcmPanel>
 
       {/* ═══ Global Policy Paths & Real Rates (cross-country overlays) ═══ */}
       <GlobalPolicyPathRealRateSection />
@@ -599,72 +460,37 @@ export function GlobalRatesPage() {
       {/* ═══ Global Forward Curves (2x3 — STIR forward curve + delta bars) ═══ */}
       <GlobalForwardCurvesSection />
 
-      {/* ═══ Global Calendar Spreads ═══ */}
-      <div className={styles.spreadsDashboardFullWidth}>
-        <div className={styles.spreadsDashboardHeader}>
-          <div className={styles.spreadsHeader}>GLOBAL CALENDAR SPREADS</div>
-          <div className={styles.spreadLookbackControl}>
-            <label htmlFor="spreadsLookback">t −</label>
-            <input
-              id="spreadsLookback"
-              type="number"
-              min="0"
-              max="252"
-              value={spreadsLookback}
-              onChange={(e) => setSpreadsLookback(Math.max(0, parseInt(e.target.value) || 0))}
-              className={styles.spreadLookbackInput}
-            />
-          </div>
-        </div>
-        <div className={styles.spreadsDateLabels}>
-          {'●'} AS OF: {spreadsData.asOfDate || '—'}{spreadsLookback > 0 && ` (t − ${spreadsLookback})`}
-        </div>
-
+      {/* ═══ Global Calendar Spreads — values are LEVELS (plain), as on STIR STRIPS ═══ */}
+      <AcmPanel title="GLOBAL CALENDAR SPREADS" actions={lookbackInput('spreadsLookback', spreadsLookback, setSpreadsLookback)}>
+        <div className={styles.ustAsOf}>● AS OF: {spreadsData.asOfDate || '—'}{spreadsLookback > 0 && ` (t − ${spreadsLookback})`}</div>
         {spreadsData.loading ? (
-          <div className={styles.loading}>Loading global spreads…</div>
+          <div className={styles.stateMsg}>Loading global spreads…</div>
         ) : spreadsData.error ? (
-          <div className={styles.error}>{spreadsData.error}</div>
+          <div className={styles.stateError}>{spreadsData.error}</div>
         ) : (
-          <div
-            className={styles.spreadsGrid}
-            style={{ gridTemplateColumns: `repeat(${[1, 2, 3, 4].filter(s => (spreadsData.strides[s]?.length ?? 0) > 0).length || 1}, 1fr)` }}
-          >
-            {([1, 2, 3, 4] as const).filter(s => (spreadsData.strides[s]?.length ?? 0) > 0).map((stride) => {
+          <div className={styles.calGrid} style={{ gridTemplateColumns: `repeat(${spreadStrides.length || 1}, minmax(0, 1fr))` }}>
+            {spreadStrides.map((stride) => {
               const rows = spreadsData.strides[stride] ?? []
+              const axis = niceAxis(rows.flatMap(r => spreadsData.countries.map(c => r[c.marketKey])).filter((v): v is number => typeof v === 'number'), { dp: 1 })
               return (
-                <div key={stride} className={styles.spreadColumn}>
-                  <div className={styles.spreadColumnTitle}>{STRIDE_LABELS[stride]} Spreads</div>
-                  <div className={styles.spreadChartContainer}>
+                <div key={stride} className={styles.calColumn}>
+                  <AcmChartFrame title={`${STRIDE_LABELS[stride]} Spreads`} legend={countryLegend(spreadsData.countries.map(c => c.marketKey))} height={420} className={styles.calFrame}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={rows} margin={{ top: 12, right: 12, left: 8, bottom: 50 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="label"
-                          tick={{ fontSize: 10, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
-                          tickMargin={8}
-                          angle={-30}
-                          textAnchor="end"
-                          height={50}
-                          interval={0}
-                          stroke="#728197"
-                        />
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="label" {...chartTheme.xAxis} tickMargin={8} angle={-30} textAnchor="end" height={50} interval={0} />
                         <YAxis
-                          tick={{ fontSize: 11, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickMargin={6}
                           tickFormatter={(v: number) => v.toFixed(1)}
-                          label={{ value: 'bps', angle: -90, position: 'insideLeft', fill: '#cbd5e1', fontSize: 10 }}
-                          domain={['auto', 'auto']}
-                          stroke="#728197"
+                          label={{ ...chartTheme.axisLabel, value: 'bps', angle: -90, position: 'insideLeft' }}
+                          domain={axis.domain}
+                          ticks={axis.ticks}
                         />
-                        <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                        <ReferenceLine y={0} {...referenceLines.zero} />
                         <Tooltip
-                          contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                          formatter={(v: unknown, name: string | undefined) => [typeof v === 'number' ? `${v.toFixed(2)}bp` : '—', name ?? '']}
-                        />
-                        <Legend
-                          verticalAlign="top"
-                          height={24}
-                          wrapperStyle={{ paddingBottom: 4, fontSize: 11, fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.tooltip}
+                          formatter={(v: unknown, name: string | undefined) => [typeof v === 'number' ? `${fmtSignedFixed(v, 2)}bp` : '—', name ?? '']}
                         />
                         {spreadsData.countries.map((c) => (
                           <Line
@@ -672,24 +498,24 @@ export function GlobalRatesPage() {
                             name={c.marketKey}
                             type="linear"
                             dataKey={c.marketKey}
-                            stroke={SPREAD_MARKET_COLORS[c.marketKey] ?? '#cbd5e1'}
+                            stroke={cc(c.marketKey)}
                             strokeWidth={1.5}
-                            dot={{ r: 3, fill: SPREAD_MARKET_COLORS[c.marketKey] ?? '#cbd5e1' }}
+                            dot={{ r: 3, fill: cc(c.marketKey) }}
                             connectNulls={false}
                             isAnimationActive={false}
                           />
                         ))}
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
-                  <table className={styles.spreadTable}>
+                  </AcmChartFrame>
+                  <table className={styles.calTable}>
                     <thead>
                       <tr>
                         <th>Spread</th>
                         {spreadsData.countries.map((c) => (
                           <th key={c.marketKey}>
-                            <div className={styles.marketKeyHeader}>{c.marketKey}</div>
-                            <div className={styles.marketNameHeader}>{c.shortName}</div>
+                            <div>{c.marketKey}</div>
+                            <div className={styles.calHeadName}>{c.shortName}</div>
                           </th>
                         ))}
                       </tr>
@@ -700,11 +526,7 @@ export function GlobalRatesPage() {
                           <td>{row.label}</td>
                           {spreadsData.countries.map((c) => {
                             const v = row[c.marketKey]
-                            return (
-                              <td key={c.marketKey} className={spreadCellClass(v)}>
-                                {typeof v === 'number' ? fmtSpread(v) : '—'}
-                              </td>
-                            )
+                            return <td key={c.marketKey} className={typeof v === 'number' ? undefined : styles.muted}>{fmtSpread(typeof v === 'number' ? v : undefined)}</td>
                           })}
                         </tr>
                       ))}
@@ -715,7 +537,7 @@ export function GlobalRatesPage() {
             })}
           </div>
         )}
-      </div>
+      </AcmPanel>
 
       {/* ═══ Global 2s10s Yield Curve Regimes (2x3) ═══ */}
       <Global2s10sRegimeSection />

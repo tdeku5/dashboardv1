@@ -14,6 +14,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { GlobalRatesPage } from './GlobalRatesPage'
 import { RATES_SUMMARY_20D, RATES_SUMMARY_60D } from './__fixtures__/ratesSummaryPayloads'
+import { cellHeatStep } from '../lib/cellColor'
 import type { RatesSummaryResponse } from '../hooks/useGlobalRatesSummary'
 
 const EXPECTED_HEADERS_20D = [
@@ -181,33 +182,42 @@ describe('rendered values (expectations taken from the DOM, not from a report)',
 })
 
 // ── Heatmap: the curve Δ columns reuse the yield-Δ treatment ────────────────
+// R5c: the Δ columns are the cellColor named heatmap on the --acm-heat-rate-*
+// scale (red = up, blue = down; addendum Decision 1), steps 1–4 by |Δ| ÷ the
+// column's max — no longer an rgba alpha. Columns are tagged with data-col.
+
+const heatStep = (cell: HTMLTableCellElement): { side: 'up' | 'down' | null; step: number } => {
+  // data-heat mirrors the inline fill (happy-dom drops var() backgrounds from style)
+  const m = /acm-heat-rate-(up|down)-(\d)/.exec(cell.getAttribute('data-heat') ?? '')
+  return m ? { side: m[1] as 'up' | 'down', step: Number(m[2]) } : { side: null, step: 0 }
+}
 
 describe('heatmap styling', () => {
-  it('curve Δ cells carry the same colDelta class as the yield Δ cells', async () => {
+  it('curve Δ cells carry the same delta column tag as the yield Δ cells', async () => {
     const t = await summaryTable()
     const cells = Array.from(t.querySelectorAll('tbody tr')[0].querySelectorAll('td'))
-    const cls = (i: number) => cells[i].getAttribute('class') ?? ''
-    for (const i of [1, 2, 3, 4, 6, 8]) expect(cls(i)).toMatch(/colDelta/)
-    for (const i of [5, 7]) expect(cls(i)).toMatch(/colRegime/)
-    for (const i of [10, 11, 12]) expect(cls(i)).toMatch(/colSpread/)
+    const col = (i: number) => cells[i].getAttribute('data-col') ?? ''
+    for (const i of [1, 2, 3, 4, 6, 8]) expect(col(i)).toBe('delta')
+    for (const i of [5, 7]) expect(col(i)).toBe('regime')
+    for (const i of [10, 11, 12]) expect(col(i)).toBe('spread')
   })
 
-  it('curve Δ cells get a background gradient, scaled per column', async () => {
+  it('curve Δ cells get a rate-scale heat fill, scaled per column', async () => {
     const t = await summaryTable()
     // JP is the only negative 2s10s Δ in the 20D payload (-4.9 of max 18.19),
-    // so it must be blue-tinted while the positives are red-tinted.
+    // so it must take the blue (down) side while the positives take red (up).
     const rows = Array.from(t.querySelectorAll('tbody tr'))
     const cellFor = (ctry: string, i: number) => {
       const tr = rows.find(r => (r.querySelector('td')?.textContent ?? '').trim() === ctry)
       return (tr as HTMLTableRowElement).querySelectorAll('td')[i] as HTMLTableCellElement
     }
-    expect(cellFor('JP', 6).style.background).toMatch(/rgba\(59, 130, 246/)   // blue
-    expect(cellFor('FR', 6).style.background).toMatch(/rgba\(239, 68, 68/)    // red
-    // FR is the column max (18.19) → strongest alpha of the positives.
-    const frAlpha = Number(/,\s*([\d.]+)\)$/.exec(cellFor('FR', 6).style.background)?.[1])
-    const usAlpha = Number(/,\s*([\d.]+)\)$/.exec(cellFor('US', 6).style.background)?.[1])
-    expect(frAlpha).toBeGreaterThan(usAlpha)
-    expect(frAlpha).toBeCloseTo(0.35, 2)
+    expect(heatStep(cellFor('JP', 6)).side).toBe('down')
+    expect(heatStep(cellFor('FR', 6)).side).toBe('up')
+    // FR is the column max (18.19) → the strongest step; US is weaker.
+    expect(heatStep(cellFor('FR', 6)).step).toBe(4)
+    expect(heatStep(cellFor('US', 6)).step).toBeLessThan(heatStep(cellFor('FR', 6)).step)
+    // Text stays primary on heat cells: the cells carry no tone class.
+    expect(cellFor('FR', 6).getAttribute('class') ?? '').not.toMatch(/negative|positive/)
   })
 
   it('the two curve Δ columns are scaled independently of the yield Δ columns', async () => {
@@ -215,11 +225,13 @@ describe('heatmap styling', () => {
     const rows = Array.from(t.querySelectorAll('tbody tr'))
     const tr = rows.find(r => (r.querySelector('td')?.textContent ?? '').trim() === 'FR') as HTMLTableRowElement
     const tds = tr.querySelectorAll('td')
-    // FR is the max of 2s10s Δ (+18.19) so alpha is capped, but FR's 2Y Δ
-    // (-5.78) is NOT its column max (JP -6.5 is), so its alpha is lower.
-    const a = (i: number) => Number(/,\s*([\d.]+)\)$/.exec((tds[i] as HTMLTableCellElement).style.background)?.[1])
-    expect(a(6)).toBeCloseTo(0.35, 2)
-    expect(a(1)).toBeLessThan(0.35)
+    // FR is the max of 2s10s Δ (+18.19) → the top step. FR's 2Y Δ (-5.78) is
+    // scaled by the 2Y column's own max (JP -6.5), not by the 2s10s max: its
+    // step matches 5.78 / 6.5 and differs from 5.78 / 18.19.
+    expect(heatStep(tds[6] as HTMLTableCellElement).step).toBe(4)
+    const fr2y = heatStep(tds[1] as HTMLTableCellElement).step
+    expect(fr2y).toBe(cellHeatStep(-5.78, 6.5))
+    expect(fr2y).not.toBe(cellHeatStep(-5.78, 18.19))
   })
 })
 
@@ -319,26 +331,17 @@ describe('null rendering', () => {
 
 // ── Width budget (D3) ──────────────────────────────────────────────────────
 
-describe('width budget', () => {
-  it('the 13 declared column widths sum to 1188px, inside the 1200px container', async () => {
-    // Mirrors the CSS: .colCountry 74 | .colDelta 84 ×6 | .colRegime 100 ×2
-    //                 | .colNextMove 110 | .colSpread 100 ×3
+describe('column layout', () => {
+  // R5c: columns size to their content (no fixed px widths); the browser probe
+  // checks the table does not overflow its panel. Here: every column is tagged.
+  it('all 13 columns are classified: 1 country, 6 Δ, 2 regime, 1 next move, 3 policy spread', async () => {
     const t = await summaryTable()
-    const classes = Array.from(t.querySelectorAll('thead th')).map(th => th.getAttribute('class') ?? '')
-    const WIDTH: Array<[RegExp, number]> = [
-      [/colCountry/, 74], [/colDelta/, 84], [/colRegime/, 100],
-      [/colNextMove/, 110], [/colSpread/, 100],
-    ]
-    const total = classes.reduce((sum, c) => {
-      const hit = WIDTH.find(([re]) => re.test(c))
-      expect(hit, `unclassified column: ${c}`).toBeTruthy()
-      return sum + (hit as [RegExp, number])[1]
-    }, 0)
-    expect(total).toBe(1188)
-    expect(total).toBeLessThanOrEqual(1200)
-    // 6 colDelta (4 yield + 2 curve), 2 colRegime, 3 colSpread.
-    expect(classes.filter(c => /colDelta/.test(c))).toHaveLength(6)
-    expect(classes.filter(c => /colRegime/.test(c))).toHaveLength(2)
-    expect(classes.filter(c => /colSpread/.test(c))).toHaveLength(3)
+    const cols = Array.from(t.querySelectorAll('thead th')).map(th => th.getAttribute('data-col') ?? '')
+    expect(cols).toHaveLength(13)
+    expect(cols.filter(c => c === 'country')).toHaveLength(1)
+    expect(cols.filter(c => c === 'delta')).toHaveLength(6)
+    expect(cols.filter(c => c === 'regime')).toHaveLength(2)
+    expect(cols.filter(c => c === 'nextmove')).toHaveLength(1)
+    expect(cols.filter(c => c === 'spread')).toHaveLength(3)
   })
 })

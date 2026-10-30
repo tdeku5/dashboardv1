@@ -14,9 +14,12 @@ import {
   CartesianGrid,
   ReferenceLine,
   Tooltip,
-  Legend,
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
+import { AcmChartFrame, AcmPageHeader, AcmPanel, AcmStatStrip, AcmStatTile, niceAxis } from '../components/acm'
+import { cx } from '../components/acm/acmFormat'
+import { barTooltipCursor, chartTheme, referenceLabelStyle, referenceLines, tooltipLabelStyle, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { INVESTOR_CLASS_COLORS, TREASURY_AUCTION_COLORS, type InvestorClassKey } from '../constants/identityColors'
 import { fetchAuctions, fetchInvestorClassData, type AuctionRecord, type InvestorClassRecord } from '../lib/treasury'
 import styles from './TreasuryAuctionPage.module.css'
 
@@ -48,31 +51,14 @@ const QUICK_PERIODS = [
   { label: 'All',  months: Infinity },
 ] as const
 
-const TICK = { fontSize: 11, fontFamily: 'var(--font-mono)', fill: '#64748B' }
-
-const TOOLTIP_STYLE = {
-  contentStyle: {
-    background:   '#090e15',
-    border:       '1px solid rgba(255,255,255,0.13)',
-    borderRadius: 2,
-    fontFamily:   'var(--font-mono)',
-    fontSize:     11,
-    padding:      '6px 10px',
-  },
-  labelStyle:  { color: '#94A3B8', marginBottom: 4, letterSpacing: '0.05em' },
-  itemStyle:   { color: '#CBD5E1', padding: '1px 0' },
-  cursor:      { stroke: 'rgba(255,255,255,0.08)', strokeWidth: 1 },
-}
-
-const BRUSH_STYLE = {
-  height:         34,
-  stroke:         'rgba(255,255,255,0.10)',
-  fill:           '#070b10',
-  travellerWidth: 6,
-  gap:            3,
-} as const
-
-const ACCENT = '#38bdf8'   // sky blue
+// R4: every metric here is a LEVEL (bid-to-cover, high yield, offering
+// amount, allotment shares) — identity colours from the registry, never sign
+// colours (rule 6); no yield changes are shown. Chart chrome = chartTheme.
+const BTC_COLOR = TREASURY_AUCTION_COLORS.bidToCover
+const OFFERING_COLOR = TREASURY_AUCTION_COLORS.offeringAmount
+const CHART_HEIGHT = 300
+/** Brush with date ticks: the theme brush, tall enough for its tick labels. */
+const BRUSH_HEIGHT = 34
 
 // ── Formatters ───────────────────────────────────────────────────────────────
 
@@ -107,37 +93,25 @@ function BtcTooltip({ active, payload }: {
   if (!d) return null
 
   return (
-    <div style={{
-      background: '#090e15',
-      border: '1px solid rgba(255,255,255,0.13)',
-      borderRadius: 2,
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      padding: '6px 10px',
-      lineHeight: 1.6,
-    }}>
-      <div style={{ color: '#94A3B8', marginBottom: 2, letterSpacing: '0.05em' }}>
-        {fmtFullDate(d.auctionDate)}
-      </div>
-      <div style={{ color: '#CBD5E1' }}>
-        <span style={{ color: ACCENT }}>Bid/Cover:</span>{' '}
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{fmtFullDate(d.auctionDate)}</div>
+      <div className={styles.taTipRow}>
+        <span style={{ color: BTC_COLOR }}>Bid/Cover:</span>{' '}
         {d.bidToCover != null ? d.bidToCover.toFixed(2) : '—'}x
       </div>
       {d.highYield != null && (
-        <div style={{ color: '#CBD5E1' }}>
-          <span style={{ color: '#94A3B8' }}>High Yield:</span>{' '}
+        <div className={styles.taTipRow}>
+          <span className={styles.taTipKey}>High Yield:</span>{' '}
           {d.highYield.toFixed(3)}%
         </div>
       )}
       {d.offeringAmount != null && (
-        <div style={{ color: '#CBD5E1' }}>
-          <span style={{ color: '#94A3B8' }}>Offering:</span>{' '}
+        <div className={styles.taTipRow}>
+          <span className={styles.taTipKey}>Offering:</span>{' '}
           {fmtAmount(d.offeringAmount)}
         </div>
       )}
-      <div style={{ color: '#4e6070', fontSize: 10, marginTop: 2 }}>
-        {d.securityTerm} {d.securityType}
-      </div>
+      <div className={styles.taTipMeta}>{d.securityTerm} {d.securityType}</div>
     </div>
   )
 }
@@ -154,46 +128,32 @@ function OfferingTooltip({ active, payload }: {
   if (!d) return null
 
   return (
-    <div style={{
-      background: '#090e15',
-      border: '1px solid rgba(255,255,255,0.13)',
-      borderRadius: 2,
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      padding: '6px 10px',
-      lineHeight: 1.6,
-    }}>
-      <div style={{ color: '#94A3B8', marginBottom: 2, letterSpacing: '0.05em' }}>
-        {fmtFullDate(d.auctionDate)}
-      </div>
-      <div style={{ color: '#CBD5E1' }}>
-        <span style={{ color: '#f59e0b' }}>Offering:</span>{' '}
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{fmtFullDate(d.auctionDate)}</div>
+      <div className={styles.taTipRow}>
+        <span style={{ color: OFFERING_COLOR }}>Offering:</span>{' '}
         {d.offeringAmountB != null ? `$${d.offeringAmountB.toFixed(1)}B` : '—'}
       </div>
-      <div style={{ color: '#4e6070', fontSize: 10, marginTop: 2 }}>
-        {d.securityTerm} {d.securityType}
-      </div>
-      {d.reopening === 'Yes' && (
-        <div style={{ color: '#94A3B8', fontSize: 10, marginTop: 2 }}>
-          Reopening
-        </div>
-      )}
+      <div className={styles.taTipMeta}>{d.securityTerm} {d.securityType}</div>
+      {d.reopening === 'Yes' && <div className={styles.taTipMeta}>Reopening</div>}
     </div>
   )
 }
 
 // ── Investor class config ──────────────────────────────────────────────────
 
-const IC_CATEGORIES = [
-  { key: 'dealersAndBrokers',       label: 'Dealers & Brokers',       color: '#3b82f6' },
-  { key: 'foreignAndInternational', label: 'Foreign & International', color: '#f59e0b' },
-  { key: 'investmentFunds',        label: 'Investment Funds',        color: '#10b981' },
-  { key: 'depositoryInstitutions', label: 'Depository Institutions', color: '#8b5cf6' },
-  { key: 'pensionAndRetirement',   label: 'Pension & Retirement',    color: '#ec4899' },
-  { key: 'federalReserve',         label: 'Federal Reserve',         color: '#ef4444' },
-  { key: 'individuals',            label: 'Individuals',             color: '#6b7280' },
-  { key: 'other',                  label: 'Other',                   color: '#374151' },
-] as const
+// Colours: INVESTOR_CLASS_COLORS (identity registry; Individuals #868D9B and
+// Other #687385 are the contrast-lifted values).
+const IC_CATEGORIES: ReadonlyArray<{ key: InvestorClassKey; label: string; color: string }> = [
+  { key: 'dealersAndBrokers',       label: 'Dealers & Brokers',       color: INVESTOR_CLASS_COLORS.dealersAndBrokers },
+  { key: 'foreignAndInternational', label: 'Foreign & International', color: INVESTOR_CLASS_COLORS.foreignAndInternational },
+  { key: 'investmentFunds',         label: 'Investment Funds',        color: INVESTOR_CLASS_COLORS.investmentFunds },
+  { key: 'depositoryInstitutions',  label: 'Depository Institutions', color: INVESTOR_CLASS_COLORS.depositoryInstitutions },
+  { key: 'pensionAndRetirement',    label: 'Pension & Retirement',    color: INVESTOR_CLASS_COLORS.pensionAndRetirement },
+  { key: 'federalReserve',          label: 'Federal Reserve',         color: INVESTOR_CLASS_COLORS.federalReserve },
+  { key: 'individuals',             label: 'Individuals',             color: INVESTOR_CLASS_COLORS.individuals },
+  { key: 'other',                   label: 'Other',                   color: INVESTOR_CLASS_COLORS.other },
+]
 
 const IC_TERM_OPTIONS = [
   { value: '2-Note',  label: '2-Year Note',  secType: 'Note', term: 2  },
@@ -219,25 +179,15 @@ function ICTooltip({ active, payload }: {
   if (!d) return null
 
   return (
-    <div style={{
-      background: '#090e15',
-      border: '1px solid rgba(255,255,255,0.13)',
-      borderRadius: 2,
-      fontFamily: 'var(--font-mono)',
-      fontSize: 11,
-      padding: '6px 10px',
-      lineHeight: 1.7,
-    }}>
-      <div style={{ color: '#94A3B8', marginBottom: 3, letterSpacing: '0.05em' }}>
-        {fmtFullDate(d.issueDate)}
-      </div>
+    <div style={tooltipSurfaceStyle}>
+      <div style={tooltipLabelStyle}>{fmtFullDate(d.issueDate)}</div>
       {IC_CATEGORIES.map(cat => {
         const val = d[`${cat.key}Raw`] as number | null
         if (val == null) return null
         return (
-          <div key={cat.key} style={{ color: '#CBD5E1', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 1, background: cat.color, flexShrink: 0 }} />
-            <span style={{ color: '#94A3B8' }}>{cat.label}:</span>
+          <div key={cat.key} className={cx(styles.taTipRow, styles.taTipSwatchRow)}>
+            <span className={styles.taTipSwatch} style={{ background: cat.color }} />
+            <span className={styles.taTipKey}>{cat.label}:</span>
             <span>{val.toFixed(1)}%</span>
           </div>
         )
@@ -261,12 +211,13 @@ function QuickSelectRow({ brushState, onSelect }: {
   onSelect: (months: number, label: string) => void
 }) {
   return (
-    <div className={styles.quickSelectRow}>
-      <span className={styles.quickSelectLabel}>Range</span>
+    <div className={styles.taRangeRow}>
+      <span className={styles.taRangeLabel}>Range</span>
       {QUICK_PERIODS.map(p => (
         <button
           key={p.label}
-          className={`${styles.qsBtn} ${brushState.period === p.label ? styles.qsBtnActive : ''}`}
+          type="button"
+          className={cx(styles.taRangeBtn, brushState.period === p.label && styles.taRangeBtnActive)}
           onClick={() => onSelect(p.months, p.label)}
         >
           {p.label}
@@ -486,333 +437,168 @@ export function TreasuryAuctionContent() {
   }, [])
 
   // ── Render ────────────────────────────────────────────────────────────────
+  // Cross-route component (RATES › US › TREASURY AUCTIONS and /treasury): its
+  // own outermost element carries acm-root (component-level root rule).
+  const brushTheme = { ...chartTheme.brush, height: BRUSH_HEIGHT, tickFormatter: brushTickFormatter }
+  // Bid-to-cover: even 1dp ticks over the brushed window (niceAxis, R5a), 0.1x headroom each side.
+  const btcWindow = chartData.slice(brush.start, brush.end + 1).map(a => a.bidToCover).filter((v): v is number => v != null)
+  const btcAxis = niceAxis(btcWindow.length ? [Math.min(...btcWindow) - 0.1, Math.max(...btcWindow) + 0.1] : [], { dp: 1 })
   return (
-    <>
-        <div className={styles.pageHeader}>
-          <div className={styles.headerRow}>
-            <div className={styles.pageTitle}>Treasury Auction Monitor</div>
-            <button
-              className={styles.refreshBtn}
-              onClick={handleRefresh}
-              disabled={refreshing}
-            >
-              {refreshing ? 'Syncing\u2026' : refreshMsg ?? 'Refresh Data'}
-            </button>
-          </div>
-          <div className={styles.pageSub}>
-            Auction results from TreasuryDirect — bid-to-cover ratios across security types
-          </div>
-        </div>
-
-        {/* ── Term selector ────────────────────────────────────────────────── */}
-        <div className={styles.explorerHeader}>
-          <div className={styles.sectorSelectWrap}>
-            <div className={styles.sectionTitle}>Auction Results</div>
-            <select
-              className={styles.sectorSelect}
-              value={selectedTerm}
-              onChange={e => setSelectedTerm(e.target.value)}
-            >
-              {SECURITY_TERMS.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* ── Loading / error / chart ──────────────────────────────────────── */}
-        {loading && (
-          <div className={styles.statusBlock}>Loading auction data…</div>
+    <div className={cx('acm-root', styles.taRoot)}>
+      <AcmPageHeader
+        title="Treasury Auction Monitor"
+        subtitle="Auction results from TreasuryDirect — bid-to-cover ratios across security types"
+        actions={(
+          <button type="button" className={styles.taRefreshBtn} onClick={handleRefresh} disabled={refreshing}>
+            {refreshing ? 'Syncing…' : refreshMsg ?? 'Refresh Data'}
+          </button>
         )}
+      />
 
-        {error && (
-          <div className={`${styles.statusBlock} ${styles.statusError}`}>
-            Error: {error}
-          </div>
+      <AcmPanel
+        title="AUCTION RESULTS"
+        actions={(
+          <select className={styles.taSelect} value={selectedTerm} onChange={e => setSelectedTerm(e.target.value)} aria-label="Security">
+            {SECURITY_TERMS.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
         )}
-
+      >
+        {loading && <div className={styles.taStatus}>Loading auction data…</div>}
+        {error && <div className={cx(styles.taStatus, styles.taStatusError)}>Error: {error}</div>}
         {!loading && !error && auctions.length === 0 && (
-          <div className={styles.statusBlock}>
-            No auction data available. The server may still be syncing — check back shortly.
-          </div>
+          <div className={styles.taStatus}>No auction data available. The server may still be syncing — check back shortly.</div>
         )}
 
         {!loading && !error && auctions.length > 0 && (
-          <div className={styles.section}>
-            {/* Stats bar */}
+          <>
+            {/* Stats: all levels → plain primary text, no tone (rule 6) */}
             {stats && (
-              <div className={styles.statsBar}>
-                <div className={styles.statItem}>
-                  <span className={styles.statLabel}>Latest</span>
-                  <span className={styles.statValue}>{stats.latest.toFixed(2)}x</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statLabel}>Date</span>
-                  <span className={styles.statValue}>{fmtFullDate(stats.latestDate)}</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statLabel}>Avg (All)</span>
-                  <span className={styles.statValue}>{stats.average.toFixed(2)}x</span>
-                </div>
-                <div className={styles.statItem}>
-                  <span className={styles.statLabel}>Avg (6)</span>
-                  <span className={styles.statValue}>{stats.avg6mo.toFixed(2)}x</span>
-                </div>
-                {stats.latestYield != null && (
-                  <div className={styles.statItem}>
-                    <span className={styles.statLabel}>High Yield</span>
-                    <span className={styles.statValue}>{stats.latestYield.toFixed(3)}%</span>
-                  </div>
-                )}
-                <div className={styles.statItem}>
-                  <span className={styles.statLabel}>Auctions</span>
-                  <span className={styles.statValue}>{stats.count}</span>
-                </div>
-              </div>
+              <AcmStatStrip className={styles.taStats}>
+                <AcmStatTile label="Latest" value={`${stats.latest.toFixed(2)}x`} />
+                <AcmStatTile label="Date" value={fmtFullDate(stats.latestDate)} />
+                <AcmStatTile label="Avg (All)" value={`${stats.average.toFixed(2)}x`} />
+                <AcmStatTile label="Avg (6)" value={`${stats.avg6mo.toFixed(2)}x`} />
+                {stats.latestYield != null && <AcmStatTile label="High Yield" value={`${stats.latestYield.toFixed(3)}%`} />}
+                <AcmStatTile label="Auctions" value={stats.count} />
+              </AcmStatStrip>
             )}
 
-            {/* Bid-to-Cover chart */}
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitle}>Bid-to-Cover Ratio</div>
-            </div>
-            <div className={styles.chartWrap}>
+            <AcmChartFrame
+              title="BID-TO-COVER RATIO"
+              legend={[
+                { label: 'Bid-to-cover', color: BTC_COLOR },
+                ...(stats ? [{ label: `Average (${stats.average.toFixed(2)})`, color: String(referenceLines.level.stroke), dashed: true }] : []),
+              ]}
+              height={CHART_HEIGHT}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={chartData}
-                  margin={{ top: 16, right: 24, bottom: 0, left: 8 }}
-                >
-                  <CartesianGrid
-                    stroke="rgba(255,255,255,0.04)"
-                    strokeDasharray="3 3"
-                  />
-                  <XAxis
-                    dataKey="auctionDate"
-                    tick={TICK}
-                    tickFormatter={fmtDate}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                  />
-                  <YAxis
-                    tick={TICK}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                    domain={['auto', 'auto']}
-                    tickFormatter={(v: number) => v.toFixed(1)}
-                  />
-                  <Tooltip
-                    content={<BtcTooltip />}
-                    {...TOOLTIP_STYLE}
-                  />
+                <ComposedChart data={chartData} margin={{ top: 16, right: 24, bottom: 0, left: 8 }}>
+                  <CartesianGrid {...chartTheme.grid} />
+                  <XAxis dataKey="auctionDate" {...chartTheme.xAxis} tickFormatter={fmtDate} />
+                  <YAxis {...chartTheme.yAxis} domain={btcAxis.domain} ticks={btcAxis.ticks} tickFormatter={(v: number) => v.toFixed(1)} />
+                  <Tooltip content={<BtcTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
                   {stats && (
                     <ReferenceLine
                       y={stats.average}
-                      stroke="rgba(255,255,255,0.18)"
-                      strokeDasharray="4 4"
-                      label={{
-                        value: `Avg ${stats.average.toFixed(2)}`,
-                        position: 'right',
-                        fill: '#4e6070',
-                        fontSize: 10,
-                        fontFamily: 'var(--font-mono)',
-                      }}
+                      {...referenceLines.level}
+                      label={{ value: `Avg ${stats.average.toFixed(2)}`, position: 'right', ...referenceLabelStyle }}
                     />
                   )}
-                  <Scatter
-                    dataKey="bidToCover"
-                    fill={ACCENT}
-                    r={2.5}
-                    isAnimationActive={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="bidToCover"
-                    stroke={ACCENT}
-                    strokeWidth={1.2}
-                    dot={false}
-                    connectNulls={false}
-                    isAnimationActive={false}
-                  />
-                  <Brush
-                    dataKey="auctionDate"
-                    startIndex={brush.start}
-                    endIndex={brush.end}
-                    onChange={handleBrushChange}
-                    tickFormatter={brushTickFormatter}
-                    {...BRUSH_STYLE}
-                  />
+                  <Scatter dataKey="bidToCover" fill={BTC_COLOR} r={2.5} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="bidToCover" stroke={BTC_COLOR} strokeWidth={1.2} dot={false} connectNulls={false} isAnimationActive={false} />
+                  <Brush dataKey="auctionDate" startIndex={brush.start} endIndex={brush.end} onChange={handleBrushChange} {...brushTheme} />
                 </ComposedChart>
               </ResponsiveContainer>
-            </div>
+            </AcmChartFrame>
 
-            {/* Offering Amount chart */}
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionTitle}>Offering Amount ($B)</div>
-            </div>
-            <div className={styles.chartWrap}>
+            <AcmChartFrame title="OFFERING AMOUNT ($B)" legend={[{ label: 'Offering amount', color: OFFERING_COLOR }]} height={CHART_HEIGHT}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 16, right: 24, bottom: 0, left: 8 }}
-                >
-                  <CartesianGrid
-                    stroke="rgba(255,255,255,0.04)"
-                    strokeDasharray="3 3"
-                  />
-                  <XAxis
-                    dataKey="auctionDate"
-                    tick={TICK}
-                    tickFormatter={fmtDate}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                  />
-                  <YAxis
-                    tick={TICK}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                    domain={[0, 'auto']}
-                    tickFormatter={(v: number) => `$${v}B`}
-                  />
-                  <Tooltip
-                    content={<OfferingTooltip />}
-                    {...TOOLTIP_STYLE}
-                  />
-                  <Bar
-                    dataKey="offeringAmountB"
-                    fill="rgba(245, 158, 11, 0.70)"
-                    radius={[2, 2, 0, 0]}
-                    isAnimationActive={false}
-                  />
-                  <Brush
-                    dataKey="auctionDate"
-                    startIndex={brush.start}
-                    endIndex={brush.end}
-                    onChange={handleBrushChange}
-                    tickFormatter={brushTickFormatter}
-                    {...BRUSH_STYLE}
-                  />
+                <BarChart data={chartData} margin={{ top: 16, right: 24, bottom: 0, left: 8 }}>
+                  <CartesianGrid {...chartTheme.grid} />
+                  <XAxis dataKey="auctionDate" {...chartTheme.xAxis} tickFormatter={fmtDate} />
+                  <YAxis {...chartTheme.yAxis} domain={[0, 'auto']} tickFormatter={(v: number) => `$${v}B`} />
+                  <Tooltip content={<OfferingTooltip />} cursor={barTooltipCursor} isAnimationActive={false} />
+                  <Bar dataKey="offeringAmountB" fill={OFFERING_COLOR} fillOpacity={0.7} isAnimationActive={false} />
+                  <Brush dataKey="auctionDate" startIndex={brush.start} endIndex={brush.end} onChange={handleBrushChange} {...brushTheme} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </AcmChartFrame>
 
-            {/* Quick-select row */}
             <QuickSelectRow brushState={brush} onSelect={handleQuickSelect} />
-          </div>
+          </>
         )}
-        {/* ── Investor Class Allocation ────────────────────────────────── */}
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <div className={styles.sectionTitle}>Investor Class Allocation</div>
-            <select
-              className={styles.sectorSelect}
-              value={icTerm}
-              onChange={e => setIcTerm(e.target.value)}
+      </AcmPanel>
+
+      {/* ── Investor Class Allocation ────────────────────────────────── */}
+      <AcmPanel
+        title="INVESTOR CLASS ALLOCATION"
+        actions={(
+          <select className={styles.taSelect} value={icTerm} onChange={e => setIcTerm(e.target.value)} aria-label="Investor class tenor">
+            {IC_TERM_OPTIONS.map(t => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+        )}
+      >
+        {icLoading && <div className={styles.taStatus}>Loading investor class data…</div>}
+        {icError && <div className={cx(styles.taStatus, styles.taStatusError)}>Error: {icError}</div>}
+        {!icLoading && !icError && icChartData.length === 0 && (
+          <div className={styles.taStatus}>No investor class data available for this tenor.</div>
+        )}
+
+        {!icLoading && !icError && icChartData.length > 0 && (
+          <>
+            <AcmChartFrame
+              title="ALLOTMENT SHARE BY INVESTOR CLASS (%)"
+              subtitle="Solid: 4-auction moving average · dashed: each auction"
+              legend={IC_CATEGORIES.map(cat => ({ label: cat.label, color: cat.color }))}
+              height={CHART_HEIGHT}
             >
-              {IC_TERM_OPTIONS.map(t => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
-          </div>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={icChartData} margin={{ top: 8, right: 24, bottom: 0, left: 8 }}>
+                  <CartesianGrid {...chartTheme.grid} />
+                  <XAxis dataKey="issueDate" {...chartTheme.xAxis} tickFormatter={fmtDate} />
+                  <YAxis {...chartTheme.yAxis} domain={[0, 'auto']} tickFormatter={(v: number) => `${v}%`} />
+                  <Tooltip content={<ICTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+                  {/* Raw series — dashed, thin, low opacity */}
+                  {IC_CATEGORIES.map(cat => (
+                    <Line
+                      key={`${cat.key}Raw`}
+                      type="monotone"
+                      dataKey={`${cat.key}Raw`}
+                      stroke={cat.color}
+                      strokeWidth={1}
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.4}
+                      dot={false}
+                      isAnimationActive={false}
+                      legendType="none"
+                    />
+                  ))}
+                  {/* 4-auction moving average — solid */}
+                  {IC_CATEGORIES.map(cat => (
+                    <Line
+                      key={`${cat.key}MA`}
+                      type="monotone"
+                      dataKey={`${cat.key}MA`}
+                      stroke={cat.color}
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                  <Brush dataKey="issueDate" startIndex={icBrush.start} endIndex={icBrush.end} onChange={handleIcBrushChange} {...brushTheme} />
+                </LineChart>
+              </ResponsiveContainer>
+            </AcmChartFrame>
 
-          {icLoading && (
-            <div className={styles.statusBlock}>Loading investor class data…</div>
-          )}
-
-          {icError && (
-            <div className={`${styles.statusBlock} ${styles.statusError}`}>
-              Error: {icError}
-            </div>
-          )}
-
-          {!icLoading && !icError && icChartData.length === 0 && (
-            <div className={styles.statusBlock}>
-              No investor class data available for this tenor.
-            </div>
-          )}
-
-          {!icLoading && !icError && icChartData.length > 0 && (
-            <>
-              <div className={styles.chartWrap}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart
-                    data={icChartData}
-                    margin={{ top: 8, right: 24, bottom: 0, left: 8 }}
-                  >
-                    <CartesianGrid
-                      stroke="rgba(255,255,255,0.04)"
-                      strokeDasharray="3 3"
-                    />
-                    <XAxis
-                      dataKey="issueDate"
-                      tick={TICK}
-                      tickFormatter={fmtDate}
-                      tickLine={false}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                    />
-                    <YAxis
-                      tick={TICK}
-                      tickLine={false}
-                      axisLine={{ stroke: 'rgba(255,255,255,0.08)' }}
-                      domain={[0, 'auto']}
-                      tickFormatter={(v: number) => `${v}%`}
-                    />
-                    <Tooltip
-                      content={<ICTooltip />}
-                      {...TOOLTIP_STYLE}
-                    />
-                    <Legend
-                      verticalAlign="top"
-                      align="center"
-                      wrapperStyle={{ fontSize: '13px', paddingBottom: 8 }}
-                      formatter={(value: string) => {
-                        const cat = IC_CATEGORIES.find(c => `${c.key}MA` === value)
-                        return cat ? cat.label : value
-                      }}
-                    />
-                    {/* Raw series — dotted, thin, low opacity */}
-                    {IC_CATEGORIES.map(cat => (
-                      <Line
-                        key={`${cat.key}Raw`}
-                        type="monotone"
-                        dataKey={`${cat.key}Raw`}
-                        stroke={cat.color}
-                        strokeWidth={1}
-                        strokeDasharray="4 4"
-                        strokeOpacity={0.4}
-                        dot={false}
-                        isAnimationActive={false}
-                        legendType="none"
-                      />
-                    ))}
-                    {/* 4-auction moving average — solid */}
-                    {IC_CATEGORIES.map(cat => (
-                      <Line
-                        key={`${cat.key}MA`}
-                        type="monotone"
-                        dataKey={`${cat.key}MA`}
-                        stroke={cat.color}
-                        strokeWidth={2}
-                        dot={false}
-                        isAnimationActive={false}
-                      />
-                    ))}
-                    <Brush
-                      dataKey="issueDate"
-                      startIndex={icBrush.start}
-                      endIndex={icBrush.end}
-                      onChange={handleIcBrushChange}
-                      tickFormatter={brushTickFormatter}
-                      {...BRUSH_STYLE}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Quick-select */}
-              <QuickSelectRow brushState={icBrush} onSelect={handleIcQuickSelect} />
-            </>
-          )}
-        </div>
-    </>
+            <QuickSelectRow brushState={icBrush} onSelect={handleIcQuickSelect} />
+          </>
+        )}
+      </AcmPanel>
+    </div>
   )
 }
 

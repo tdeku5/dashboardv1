@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -17,7 +17,34 @@ import {
 } from 'recharts'
 import { NavDropdown } from '../components/NavDropdown'
 import { CountrySelector, type CountryCode } from '../components/CountrySelector'
-import { AssetSubRibbon } from '../components/AssetSubRibbon'
+import { AcmChartFrame, AcmCollapsible, AcmDataTable, AcmNavTier, AcmPanel, fmtSignedFixed, niceAxis, roundForDisplay, signColor, useBrushWindow, type AcmColumn, type SignTone } from '../components/acm'
+import { chartTheme, referenceLabelStyle, referenceLines, tooltipSurfaceStyle } from '../components/acm/chartTheme'
+import { toneClass } from '../components/acm/tones'
+import { fmtMonthYearTick, policyMoveTone, rangeToggle, rateChangeClass, rateChangeTone, regimeColor, regimeLegend, renderDeltaLabel, ustChangeClass, ustLevelClass, UstTile } from './ratesShared'
+// rateChangeTone moved to ./ratesShared at R5a; re-exported for existing importers.
+export { policyMoveTone, rateChangeTone } from './ratesShared'
+import {
+  CALENDAR_SPREAD_COLORS,
+  CB_SCENARIO_COLORS,
+  CURVE_COMPARE_COLORS,
+  CREDIT_SPREAD_COLORS,
+  YIELD_ATTRIBUTION_COLORS,
+  REGIME_OVERLAY_LINE,
+  UST_FAMILY_COLORS,
+  STIR_PACK_BACKGROUNDS,
+  STIR_PACK_COLORS,
+  SUMMARY_POPUP_LINE,
+  FUNDAMENTAL_MODEL_COLORS,
+  GDPNOW_COMPONENT_COLORS,
+  GDPNOW_GDP_LINE,
+  LABOR_COLORS,
+  LABOR_SCENARIO_COLORS,
+  ffYearBandColor,
+  MONEY_MARKET_COLORS,
+  RESERVE_DEMAND_COLORS,
+  gdpnowQuarterColor,
+  type PackName,
+} from '../constants/identityColors'
 import { FredRefreshButton } from '../components/FredRefreshButton'
 import { UKFundamentalModelPanel } from '../components/UKFundamentalModelPanel'
 import { EUFundamentalModelPanel } from '../components/EUFundamentalModelPanel'
@@ -32,7 +59,7 @@ import { CountryTermStructure, COUNTRY_TERM_STRUCTURE_CONFIGS } from './CountryT
 import { useFuturesCurve, type FuturesCurvePoint } from '../hooks/useFuturesCurve'
 import { useFuturesStrip, type StripContract } from '../hooks/useFuturesStrip'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
-import { buildSpreadChartData, buildCreditRegimeData, REGIME_COLORS, type SpreadChartPoint } from '../lib/curveRegime'
+import { buildSpreadChartData, buildCreditRegimeData, type SpreadChartPoint } from '../lib/curveRegime'
 import { getCellColor } from '../lib/cellColor'
 import { HIST_LOOKBACKS, histLookbackChange } from '../lib/historicalChanges'
 import styles from './STIRDashboardPage.module.css'
@@ -212,7 +239,8 @@ interface StripSummaryBox {
   label: string
   value: string
   sub: string
-  tone: 'teal' | 'gold' | 'green' | 'red' | 'neutral'
+  /** Rates colour rule for hike/cut and rate spreads (increase = negative); 'plain' = primary text, 'neutral' = secondary. */
+  tone: SignTone | 'plain' | 'neutral'
   hoverKey?: 'mtg' | 'term6m' | 'term12m'
 }
 
@@ -350,44 +378,12 @@ const MONTH_CODE_TO_INDEX: Record<string, number> = {
   Z: 11,
 }
 
-const YEAR_BAND_COLORS: Record<number, string> = {
-  2026: 'rgba(200, 210, 220, 0.08)',
-  2027: 'rgba(239, 83, 80, 0.12)',
-  2028: 'rgba(78, 201, 176, 0.12)',
-  2029: 'rgba(59, 130, 246, 0.18)',
-  2030: 'rgba(255, 215, 0, 0.12)',
-}
-
-const YEAR_CYCLE = [
-  'rgba(200, 210, 220, 0.08)',
-  'rgba(239, 83, 80, 0.12)',
-  'rgba(78, 201, 176, 0.12)',
-  'rgba(59, 130, 246, 0.18)',
-  'rgba(255, 215, 0, 0.12)',
-]
-
-type PackName = 'Whites' | 'Reds' | 'Greens' | 'Blues' | 'Golds'
 const PACK_NAMES: PackName[] = ['Whites', 'Reds', 'Greens', 'Blues', 'Golds']
-const PACK_COLORS: Record<PackName, string> = {
-  Whites: '#e5e7eb',
-  Reds: '#ef4444',
-  Greens: '#22c55e',
-  Blues: '#3b82f6',
-  Golds: '#facc15',
-}
 const SCENARIO_BPS: number[] = [-150, -125, -100, -75, -50, -25, 0, 25, 50, 75, 100, 125, 150]
 
-const PACK_BACKGROUNDS: Record<PackName, string> = {
-  Whites: 'rgba(229, 231, 235, 0.04)',
-  Reds: 'rgba(239, 68, 68, 0.07)',
-  Greens: 'rgba(34, 197, 94, 0.07)',
-  Blues: 'rgba(59, 130, 246, 0.07)',
-  Golds: 'rgba(250, 204, 21, 0.07)',
-}
-
 const INTEGER_FORMAT = new Intl.NumberFormat('en-US')
-const FVM_TICK = { fontSize: 10, fontFamily: 'var(--font-mono)', fill: '#94A3B8' }
-const LABOR_SCENARIO_COLORS = ['#EF5350', '#fbbf24', '#22d3ee', '#4ade80'] as const
+/** Fallback line colour for a GDPNow quarter label gdpnowQuarterColor can't parse. */
+const FVM_UNKNOWN_QUARTER = 'var(--acm-text-secondary)'
 const UST_TENORS = [
   { key: 'DGS3MO', label: '3M' },
   { key: 'DGS1', label: '1Y' },
@@ -423,11 +419,11 @@ const CREDIT_SPREADS = [
   { key: 'TRASH', label: 'Trash' },
 ] as const
 const CREDIT_SERIES_CONFIG = [
-  { key: 'BAMLC0A1CAAA', label: 'AAA', color: '#4ade80' },
-  { key: 'BAMLC0A4CBBB', label: 'BBB', color: '#60a5fa' },
-  { key: 'BAMLH0A0HYM2', label: 'HY', color: '#fbbf24' },
-  { key: 'BAMLH0A3HYC', label: 'CCC', color: '#ef5350' },
-  { key: 'TRASH', label: 'Trash', color: '#a78bfa' },
+  { key: 'BAMLC0A1CAAA', label: 'AAA', color: CREDIT_SPREAD_COLORS.AAA },
+  { key: 'BAMLC0A4CBBB', label: 'BBB', color: CREDIT_SPREAD_COLORS.BBB },
+  { key: 'BAMLH0A0HYM2', label: 'HY', color: CREDIT_SPREAD_COLORS.HY },
+  { key: 'BAMLH0A3HYC', label: 'CCC', color: CREDIT_SPREAD_COLORS.CCC },
+  { key: 'TRASH', label: 'Trash', color: CREDIT_SPREAD_COLORS.TRASH },
 ] as const
 const YC_TENORS = [
   { key: 'DGS1MO', label: '1M', years: 1 / 12 },
@@ -474,26 +470,26 @@ function fmtRate(v: number): string {
   return v.toFixed(3)
 }
 
+// Signed formatters: a value that rounds to zero at its displayed precision
+// prints as an unsigned zero (fmtSignedFixed), and its tone is decided on the
+// same rounded value — never "-0.0" in green.
 function fmtSignedPct(v: number | null, digits = 2): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(digits)}`
+  return fmtSignedFixed(v, digits)
 }
 
 function fmtBps(v: number): string {
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 function fmtSignedDecimal(v: number): string {
-  if (Math.abs(v) < 0.05) return '0.0'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 function toneFromBps(v: number): 'cut' | 'hike' | 'flat' {
-  if (v > 0.01) return 'hike'
-  if (v < -0.01) return 'cut'
+  const shown = roundForDisplay(v, 1) // matches summaryFromBps's 1dp "Flat"
+  if (shown > 0) return 'hike'
+  if (shown < 0) return 'cut'
   return 'flat'
 }
 
@@ -519,22 +515,19 @@ function contractTicker(symbol: string): string {
 
 function fmtSignedPrice(v: number | null): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(3)}`
+  return fmtSignedFixed(v, 3)
 }
 
 function fmtBpsValue(v: number | null): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}bp`
+  return fmtSignedFixed(v, 1, 'bp')
 }
 
 // Bare numeric bps formatter — used in table cells where the column header
 // already conveys units, so the "bp" suffix would be redundant.
 function fmtBpsNumber(v: number | null): string {
   if (v == null) return '—'
-  const sign = v >= 0 ? '+' : ''
-  return `${sign}${v.toFixed(1)}`
+  return fmtSignedFixed(v, 1)
 }
 
 // Convert a futures price change to its implied-rate change, formatted bare.
@@ -544,25 +537,16 @@ function fmtBpsFromPrice(priceChange: number | null): string {
   return fmtBpsNumber(priceChange * -100)
 }
 
+// Colours: GDPNOW_COMPONENT_COLORS (identity registry), keyed by `key`.
 const CONTRIB_COMPONENTS = [
-  { key: 'pce', label: 'PCE', color: '#42a5f5' },
-  { key: 'equipment', label: 'Equipment', color: '#66bb6a' },
-  { key: 'intell_prop', label: 'Intell. Prop.', color: '#ab47bc' },
-  { key: 'nonres_struct', label: 'Nonres. Struct.', color: '#ffa726' },
-  { key: 'resid_invest', label: 'Resid. Invest.', color: '#ef5350' },
-  { key: 'govt', label: 'Govt.', color: '#26c6da' },
-  { key: 'net_exports', label: 'Net Exports', color: '#ffee58' },
-] as const
-
-function getQuarterColor(idx: number): string {
-  const colors = [
-    '#90CAF9', '#F48FB1', '#CE93D8', '#80CBC4', '#FFE082',
-    '#81C784', '#FFCC80', '#9FA8DA', '#ef9a9a', '#4FC3F7',
-    '#A1887F', '#B39DDB', '#FF8A65', '#4DD0E1', '#AED581',
-    '#DCE775', '#FFB74D', '#4DB6AC', '#81D4FA', '#C5E1A5',
-  ]
-  return colors[idx % colors.length]
-}
+  { key: 'pce', label: 'PCE' },
+  { key: 'equipment', label: 'Equipment' },
+  { key: 'intell_prop', label: 'Intell. Prop.' },
+  { key: 'nonres_struct', label: 'Nonres. Struct.' },
+  { key: 'resid_invest', label: 'Resid. Invest.' },
+  { key: 'govt', label: 'Govt.' },
+  { key: 'net_exports', label: 'Net Exports' },
+] as const satisfies ReadonlyArray<{ key: keyof typeof GDPNOW_COMPONENT_COLORS; label: string }>
 
 function monthsForward(contract: StripContract, now = new Date()): number {
   const currentMonthIndex = now.getMonth()
@@ -571,20 +555,106 @@ function monthsForward(contract: StripContract, now = new Date()): number {
   return ((contract.year - now.getFullYear()) * 12) + (contractMonthIndex - currentMonthIndex)
 }
 
-function heatStyle(value: number | null, maxAbs: number): CSSProperties {
-  if (value == null) return { color: '#728197' }
-  if (Math.abs(value) < 1e-9 || maxAbs <= 0) return { color: '#728197' }
-
-  const opacity = Math.max(0.6, Math.min(1, Math.abs(value) / maxAbs))
-  const intensity = Math.abs(value) / maxAbs
-  const bgAlpha = 0.05 + intensity * 0.2
-  if (value > 0) return { color: `rgba(78, 201, 176, ${opacity})`, background: `rgba(78, 201, 176, ${bgAlpha.toFixed(3)})` }
-  return { color: `rgba(239, 83, 80, ${opacity})`, background: `rgba(239, 83, 80, ${bgAlpha.toFixed(3)})` }
+// Rates colour rule (R2b approval; design notes colour rule 6): every yield,
+// rate or spread change is VALENCE in the bond-price view — increase =
+// negative (red), decrease = positive (green); hike = red, cut = green.
+// Futures prices follow price: price up (rate down) = positive.
+/**
+ * Futures price change → tone, decided on the displayed value: prices show at
+ * 3dp (FF) or as bps of rate at 1dp (strip) — the same 0.001 precision — so a
+ * change that rounds to zero there is untoned.
+ */
+export function stripMoveTone(priceChange: number | null): SignTone | undefined {
+  if (priceChange == null) return undefined
+  const shown = roundForDisplay(priceChange, 3)
+  if (shown === 0) return undefined
+  return shown > 0 ? 'positive' : 'negative'
 }
+
+
+
+// Named heatmap #3 — strip implied-rate Δ columns and FF price-change cells, valence heat scale. Same
+// normalisation as the old magnitude-scaled fill (|Δ| / the column's max |Δ|),
+// bucketed into quarters: (0, 25%] → step 1, (25, 50%] → 2, (50, 75%] → 3,
+// (75, 100%] → 4. Text stays primary; null / zero → no fill, muted text.
+const STRIP_HEAT_THRESHOLDS = [0.25, 0.5, 0.75] as const
+function stripHeatClass(priceChange: number | null, colMaxAbs: number): string | undefined {
+  const tone = stripMoveTone(priceChange)
+  if (!tone || colMaxAbs <= 0) return styles.muted
+  const intensity = Math.abs(priceChange as number) / colMaxAbs
+  const step = 1 + STRIP_HEAT_THRESHOLDS.filter(t => intensity > t).length
+  return styles[`stripHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
+}
+
+
+// Named heatmap #4 — CREDIT SPREADS table Δ cells (R3b): the valence heat scale
+// with the strip's quartile-of-column-max buckets; widening (spread up) →
+// heat-negative, tightening → heat-positive; text primary, no tone; opaque panel
+// base. Changes display at 0dp, so one that rounds to zero gets no fill.
+function creditHeatClass(change: number | null, colMaxAbs: number): string | undefined {
+  const tone = rateChangeTone(change, 0)
+  if (!tone || colMaxAbs <= 0) return change == null ? styles.muted : undefined
+  const intensity = Math.abs(change as number) / colMaxAbs
+  const step = 1 + STRIP_HEAT_THRESHOLDS.filter(t => intensity > t).length
+  return styles[`creditHeat${tone === 'positive' ? 'Positive' : 'Negative'}${step}`]
+}
+
+// ── UST CURVE (R2d) ─────────────────────────────────────────────────────────
+
+const ATTR_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
+const CREDIT_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', '10y', 'all'] as const
+const MM_CHART_RANGES = ['3m', '6m', '1y', '2y', '5y', 'all'] as const
+const RDE_CHART_RANGES = ['1y', '2y', '5y', '10y', 'all'] as const
+const MM_CHART_HEIGHT = 220
+/**
+ * Whole-bp y axis for the MONEY MARKETS spread charts (R4 change 2): the
+ * smallest step in MM_TICK_STEPS that covers the plotted values (and 0, for a
+ * threshold chart) in at most 5 intervals. Tick VALUES are integers, so the
+ * 0dp labels can never repeat; the data itself is not touched.
+ */
+const MM_TICK_STEPS = [1, 2, 5, 10, 15, 20, 25, 50, 100, 200, 500] as const
+export function mmBpAxis(values: ReadonlyArray<number>, includeZero: boolean): { domain: [number, number]; ticks: number[] } {
+  let lo = values.length ? Math.min(...values) : 0
+  let hi = values.length ? Math.max(...values) : 0
+  if (includeZero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0) }
+  if (lo === hi) { lo -= 1; hi += 1 }
+  for (const step of MM_TICK_STEPS) {
+    const a = Math.floor(lo / step) * step
+    const b = Math.ceil(hi / step) * step
+    if ((b - a) / step <= 5) {
+      const ticks: number[] = []
+      for (let t = a; t <= b; t += step) ticks.push(t === 0 ? 0 : t)
+      return { domain: [a, b], ticks }
+    }
+  }
+  const step = 10 ** Math.ceil(Math.log10((hi - lo) / 5))
+  const a = Math.floor(lo / step) * step
+  const b = Math.ceil(hi / step) * step
+  const ticks: number[] = []
+  for (let t = a; t <= b; t += step) ticks.push(t)
+  return { domain: [a, b], ticks }
+}
+
+/** SCARCITY WARNING threshold: an alert, not a rate move (R4 change 1). */
+const MM_SCARCITY_COLOR = signColor('acm-alert-strong')
+/** MONEY MARKETS spread charts (R3b); colours: MONEY_MARKET_COLORS (identity registry), keyed by `key`. */
+const MM_SPREAD_CHARTS = [
+  { key: 'sofrIorb', title: 'SOFR − IORB', subtitle: 'Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere', scarcity: true },
+  { key: 'effrIorb', title: 'EFFR − IORB', subtitle: 'Historically a positive spread has been an indicator of reserve scarcity', scarcity: true },
+  { key: 'sofrEffr', title: 'SOFR − EFFR', subtitle: 'FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos', scarcity: false },
+] as const
+
+
 
 // First inflection point on the curve — the contract where the cycle direction
 // reverses. Falls back to the last contract if the curve never reverses, or to
 // the only/last contract for very short curves.
+/** A panel's padded y range snapped to even 1dp ticks (niceAxis, R5b); 'auto' ranges pass through. */
+function fvmNice(range: readonly [number | string, number | string], dp = 1): { domain: [number, number] | [string, string]; ticks?: number[] } {
+  if (typeof range[0] === 'number' && typeof range[1] === 'number') return niceAxis([range[0], range[1]], { dp })
+  return { domain: ['auto', 'auto'] }
+}
+
 function findTerminalContract(contracts: StripContract[]): StripContract | null {
   if (contracts.length === 0) return null
   if (contracts.length < 3) return contracts[contracts.length - 1]
@@ -614,26 +684,10 @@ function findTerminalContract(contracts: StripContract[]): StripContract | null 
   return contracts[contracts.length - 1]
 }
 
-function summaryToneStyle(tone: StripSummaryBox['tone']): CSSProperties {
-  switch (tone) {
-    case 'gold':
-      return { color: '#FFD700' }
-    case 'green':
-      return { color: '#4EC9B0' }
-    case 'red':
-      return { color: '#EF5350' }
-    case 'neutral':
-      return { color: '#94A3B8' }
-    case 'teal':
-    default:
-      return { color: '#4EC9B0' }
-  }
-}
-
-function getYearBandColor(year: number, years: number[]): string {
-  if (YEAR_BAND_COLORS[year]) return YEAR_BAND_COLORS[year]
-  const idx = years.indexOf(year)
-  return YEAR_CYCLE[(idx >= 0 ? idx : 0) % YEAR_CYCLE.length]
+function summaryToneClass(tone: StripSummaryBox['tone']): string | undefined {
+  if (tone === 'neutral') return styles.summaryBoxValueNeutral
+  if (tone === 'plain') return undefined
+  return toneClass(tone)
 }
 
 function fmtShortMonthYear(d: string): string {
@@ -828,47 +882,29 @@ function sortCurve(points: FuturesCurvePoint[]): FuturesCurvePoint[] {
   return [...points].sort((a, b) => a.expiryDate.localeCompare(b.expiryDate))
 }
 
-function renderDeltaLabel(props: any) {
-  const { x, y, width, height, value } = props
-  if (value == null) return null
-  const numeric = Number(value)
-  return (
-    <text
-      x={x + width / 2}
-      y={numeric >= 0 ? y - 8 : y + height + 14}
-      textAnchor="middle"
-      fill="#94A3B8"
-      fontSize={12}
-      fontFamily="var(--font-mono)"
-      fontWeight={700}
-    >
-      {fmtBps(numeric)}
-    </text>
-  )
-}
 
 function CurveTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   const row = payload[0]?.payload as CurveRow | undefined
   if (!row) return null
   return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipTitle}>{label}</div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Latest</span>
-        <span className={styles.tooltipValue}>
+    <div className={styles.curveTip} style={tooltipSurfaceStyle}>
+      <div className={styles.curveTipTitle}>{label}</div>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Latest</span>
+        <span>
           {row.latestPrice != null ? row.latestPrice.toFixed(3) : '—'} | {row.latestRate != null ? `${fmtRate(row.latestRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Benchmark</span>
-        <span className={styles.tooltipValue}>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Benchmark</span>
+        <span>
           {row.benchmarkPrice != null ? row.benchmarkPrice.toFixed(3) : '—'} | {row.benchmarkRate != null ? `${fmtRate(row.benchmarkRate)}%` : '—'}
         </span>
       </div>
-      <div className={styles.tooltipRow}>
-        <span className={styles.tooltipKey}>Delta</span>
-        <span className={styles.tooltipValue}>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
+      <div className={styles.curveTipRow}>
+        <span className={styles.curveTipKey}>Delta</span>
+        <span>{row.deltaBps != null ? `${fmtBps(row.deltaBps)} bps` : '—'}</span>
       </div>
     </div>
   )
@@ -944,7 +980,7 @@ export function STIRDashboardPage() {
 
   // SR3 contract-history modal state
   const [modalContract, setModalContract] = useState<StripContract | null>(null)
-  const [modalContractColor, setModalContractColor] = useState<string>('#e5e7eb')
+  const [modalContractColor, setModalContractColor] = useState<string>(STIR_PACK_COLORS.Whites)
   const [modalMetric, setModalMetric] = useState<'rate' | 'price'>('rate')
   const [modalRange, setModalRange] = useState<'1M' | '3M' | '6M' | '1Y' | 'ALL'>('1Y')
   const [modalShowScenarios, setModalShowScenarios] = useState(true)
@@ -1036,7 +1072,6 @@ export function STIRDashboardPage() {
   const [clfGrowthRate, setClfGrowthRate] = useState(0.05)
   const [hoveredBox, setHoveredBox] = useState<'mtg' | 'term6m' | 'term12m' | null>(null)
   const [lookbackDaysInput, setLookbackDaysInput] = useState('1')
-  const [showMatrix, setShowMatrix] = useState(true)
 
   const productConfig = PRODUCT_CONFIG[product]
   const lookbackDays = Math.max(0, Number.parseInt(lookbackDaysInput, 10) || 0)
@@ -1155,14 +1190,15 @@ export function STIRDashboardPage() {
     })
   }, [curve.currentCurve, curve.lookbackCurve, product, country])
 
-  const curveDomain = useMemo<[number, number]>(() => {
+  // Forward-curve y axis: the ±0.15 padded range snapped to even 2dp ticks (niceAxis, R5a).
+  const curveAxis = useMemo(() => {
     const rates = curveData.flatMap((row) => [row.latestRate, row.benchmarkRate])
       .filter((value): value is number => value != null)
-    if (rates.length === 0) return [0, 5]
-    const min = Math.min(...rates)
-    const max = Math.max(...rates)
-    return [min - 0.15, max + 0.15]
+    if (rates.length === 0) return niceAxis([0, 5], { dp: 2 })
+    return niceAxis([Math.min(...rates) - 0.15, Math.max(...rates) + 0.15], { dp: 2 })
   }, [curveData])
+  // Change-vs-benchmark bars: whole-bp ticks with 0 in range.
+  const curveDeltaAxis = useMemo(() => niceAxis(curveData.map((row) => row.deltaBps).filter((v): v is number => v != null), { dp: 0, includeZero: true }), [curveData])
 
   const summaryRows = useMemo<SummaryRow[]>(() => {
     // Use meeting-based summary when FedWatch meetings are available
@@ -1216,6 +1252,28 @@ export function STIRDashboardPage() {
     })
   }, [fedwatch.meetings, fedwatch.currentEFFR, curve.currentCurve])
 
+  const summaryColumns = useMemo<AcmColumn<SummaryRow>[]>(() => {
+    const signTone = (v: number): SignTone | undefined => rateChangeTone(v)
+    // rates colour rule: a priced hike is a rate increase → negative; cut → positive
+    const summaryTone = (t: SummaryRow['tone']): SignTone | undefined => (t === 'flat' ? undefined : policyMoveTone(t))
+    const cols: AcmColumn<SummaryRow>[] = [
+      { key: 'meeting', header: 'Meeting', kind: 'label', value: (r) => r.label },
+      { key: 'rate', header: <>Implied<br />Rate</>, kind: 'num', value: (r) => fmtRate(r.impliedRate) },
+      { key: 'step', header: <>Bps<br />(Step)</>, kind: 'num', value: (r) => fmtBps(r.stepBps), tone: (r) => signTone(r.stepBps) },
+      { key: 'total', header: <>Bps<br />(Total)</>, kind: 'num', value: (r) => fmtBps(r.totalBps), tone: (r) => signTone(r.totalBps) },
+      { key: 'movesStep', header: <>Implied # Cuts/Hikes<br />(Step)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.stepBps / 25), tone: (r) => signTone(r.stepBps / 25) },
+    ]
+    // Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec
+    if (!(country === 'US' && product === 'fedfunds')) {
+      cols.push({ key: 'movesTotal', header: <>Implied # Cuts/Hikes<br />(Total)</>, kind: 'num', value: (r) => fmtSignedDecimal(r.totalBps / 25), tone: (r) => signTone(r.totalBps / 25) })
+    }
+    cols.push(
+      { key: 'sumStep', header: <>Summary<br />(Step)</>, kind: 'label', value: (r) => r.stepSummary, tone: (r) => summaryTone(r.tone) },
+      { key: 'sumTotal', header: <>Summary<br />(Total)</>, kind: 'label', value: (r) => r.totalSummary, tone: (r) => signTone(r.totalBps) },
+    )
+    return cols
+  }, [country, product])
+
   const overnightRow = useMemo<SummaryRow>(() => ({
     key: 'cash',
     label: 'Overnight Cash',
@@ -1260,16 +1318,25 @@ export function STIRDashboardPage() {
     return Array.from(groups.entries())
   }, [stripContracts])
 
-  const stripYears = useMemo(() => stripYearGroups.map(([year]) => year), [stripYearGroups])
-
   const stripPacks = useMemo(() => {
     return PACK_NAMES
       .map((name, idx) => ({
         name,
-        color: PACK_COLORS[name],
+        color: STIR_PACK_COLORS[name],
         contracts: stripContracts.slice(idx * 4, idx * 4 + 4),
       }))
       .filter((p) => p.contracts.length > 0)
+  }, [stripContracts])
+
+  // Per-column max |price change| — the heatmap normaliser (stripHeatClass).
+  const stripMaxAbs = useMemo(() => {
+    const maxAbs = { pxChg1d: 0, pxChg5d: 0, pxChg1m: 0 }
+    for (const contract of stripContracts) {
+      maxAbs.pxChg1d = Math.max(maxAbs.pxChg1d, Math.abs(contract.pxChg1d ?? 0))
+      maxAbs.pxChg5d = Math.max(maxAbs.pxChg5d, Math.abs(contract.pxChg5d ?? 0))
+      maxAbs.pxChg1m = Math.max(maxAbs.pxChg1m, Math.abs(contract.pxChg1m ?? 0))
+    }
+    return maxAbs
   }, [stripContracts])
 
   const spreadColumns = useMemo(() => {
@@ -1325,22 +1392,6 @@ export function STIRDashboardPage() {
     })
   }, [stripContracts, spreadCurve.lookbackCurve])
 
-  const stripMaxAbs = useMemo(() => {
-    const maxAbs = {
-      pxChg1d: 0,
-      pxChg5d: 0,
-      pxChg1m: 0,
-    }
-
-    for (const contract of stripContracts) {
-      maxAbs.pxChg1d = Math.max(maxAbs.pxChg1d, Math.abs(contract.pxChg1d ?? 0))
-      maxAbs.pxChg5d = Math.max(maxAbs.pxChg5d, Math.abs(contract.pxChg5d ?? 0))
-      maxAbs.pxChg1m = Math.max(maxAbs.pxChg1m, Math.abs(contract.pxChg1m ?? 0))
-    }
-
-    return maxAbs
-  }, [stripContracts])
-
   const stripSummary = useMemo(() => {
     const isStirPack = useStirStyling
 
@@ -1372,10 +1423,10 @@ export function STIRDashboardPage() {
         tone = 'neutral'
       } else if (nextMoveBps > 0) {
         value = 'CUT'
-        tone = 'green'
+        tone = policyMoveTone('cut')
       } else {
         value = 'HIKE'
-        tone = 'red'
+        tone = policyMoveTone('hike')
       }
       boxes.push({
         label: 'NEXT MOVE',
@@ -1390,27 +1441,28 @@ export function STIRDashboardPage() {
         label: 'TERMINAL',
         value: terminal ? `${fmtRate(terminal.impliedRate)}%` : '—',
         sub: terminal ? `${contractTicker(terminal.symbol)}  M+${monthsForward(terminal)}` : '—',
-        tone: 'teal',
+        tone: 'plain',
       },
       {
         label: isStirPack ? 'Terminal - OCR' : 'MTG>TERM',
         value: terminal ? fmtBpsValue((terminal.impliedRate - fedwatch.currentEFFR) * 100) : '—',
         sub: isStirPack ? '' : 'terminal vs overnight cash',
-        tone: !terminal ? 'neutral' : (terminal.impliedRate - fedwatch.currentEFFR) * 100 >= 0 ? 'green' : 'red',
+        tone: !terminal ? 'neutral'
+          : rateChangeTone((terminal.impliedRate - fedwatch.currentEFFR) * 100) ?? 'plain',
         hoverKey: 'mtg',
       },
       {
         label: isStirPack ? '+6m - Terminal' : 'TERM>+6M',
         value: terminal && contract6m ? fmtBpsValue((contract6m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract6m ? contractTicker(contract6m.symbol) : '—',
-        tone: 'gold',
+        tone: 'plain',
         hoverKey: 'term6m',
       },
       {
         label: isStirPack ? '+12m - Terminal' : 'TERM>+12M',
         value: terminal && contract12m ? fmtBpsValue((contract12m.impliedRate - terminal.impliedRate) * 100) : '—',
         sub: contract12m ? contractTicker(contract12m.symbol) : '—',
-        tone: 'gold',
+        tone: 'plain',
         hoverKey: 'term12m',
       },
     )
@@ -2023,14 +2075,17 @@ export function STIRDashboardPage() {
     return series.length > 0 ? series[idx].date : '—'
   }, [ustData, ycLookback])
 
-  const ycYDomain = useMemo((): [number, number] => {
+  // Curve y axis: the 15% padded range, snapped to even 2dp ticks (niceAxis).
+  const ycYAxis = useMemo(() => {
     const vals = ycCurveData.flatMap((d) => [d.latest, d.offset]).filter((v): v is number => v != null)
-    if (vals.length === 0) return [0, 5]
+    if (vals.length === 0) return niceAxis([0, 5], { dp: 2 })
     const min = Math.min(...vals)
     const max = Math.max(...vals)
     const pad = (max - min) * 0.15 || 0.2
-    return [min - pad, max + pad]
+    return niceAxis([min - pad, max + pad], { dp: 2 })
   }, [ycCurveData])
+  // Change-vs-offset bars: whole-bp ticks, 0 in range (no '-1,-1,-0' labels).
+  const deltaYAxis = useMemo(() => niceAxis(ycCurveData.map(d => d.delta).filter((v): v is number => v != null), { dp: 0, includeZero: true }), [ycCurveData])
 
   const currentYields = useMemo(() => {
     return UST_TENORS.map((tenor) => {
@@ -2494,23 +2549,24 @@ export function STIRDashboardPage() {
     })
   }, [ustData])
 
-  const creditColumnShading = useMemo(() => {
-    return Array.from({ length: 6 }, (_, col) => {
-      const absVals = creditSpreadDashboard.map((r) => r.changes[col]).filter((v): v is number => v != null).map(Math.abs)
-      const max = absVals.length > 0 ? Math.max(...absVals) : 0
-      return max
-    })
+  // CREDIT SPREADS dashboard table. "Last" is a LEVEL → plain text (rule 6:
+  // levels get no colour). The Δ columns are named heatmap #4 (creditHeatClass):
+  // valence heat fill per column, primary text, no tone.
+  const creditDashboardColumns = useMemo<AcmColumn<(typeof creditSpreadDashboard)[number]>[]>(() => {
+    const colMaxAbs = [0, 1, 2, 3, 4, 5].map(idx => Math.max(0, ...creditSpreadDashboard.map(r => Math.abs(r.changes[idx] ?? 0))))
+    return [
+      { key: 'label', header: 'Spread', kind: 'label', value: (r) => r.label },
+      { key: 'last', header: 'Last (bp)', kind: 'num', value: (r) => r.current, format: (v) => v.toFixed(0) },
+      ...['1D Δ', '1W Δ', '1M Δ', '3MO Δ', '6MO Δ', 'YTD Δ'].map((header, idx) => ({
+        key: `chg${idx}`,
+        header,
+        kind: 'num' as const,
+        value: (r: (typeof creditSpreadDashboard)[number]) => r.changes[idx],
+        format: (v: number) => fmtSignedFixed(v, 0),
+        cellClassName: (r: (typeof creditSpreadDashboard)[number]) => creditHeatClass(r.changes[idx], colMaxAbs[idx]),
+      })),
+    ]
   }, [creditSpreadDashboard])
-
-  function getCreditCellBg(value: number | null, colIdx: number): string {
-    if (value == null || value === 0) return 'transparent'
-    const max = creditColumnShading[colIdx]
-    if (!max) return 'transparent'
-    const alpha = 0.05 + (Math.abs(value) / max) * 0.2
-    return value > 0
-      ? `rgba(239, 83, 80, ${alpha.toFixed(3)})`
-      : `rgba(78, 201, 176, ${alpha.toFixed(3)})`
-  }
 
   const creditOverviewChartData = useMemo(() => {
     const cccSeries = ustData['BAMLH0A3HYC'] || []
@@ -2606,6 +2662,12 @@ export function STIRDashboardPage() {
   // US and EU Credit tabs (the US-only multi-series overview is rendered above).
   const isEuCredit = country === 'EU'
   const creditLevelData = isEuCredit ? euCreditChartData : creditChartData
+  // HY OAS level chart: even 1dp ticks over the brushed window (niceAxis + useBrushWindow, R5a).
+  const creditOasBrush = useBrushWindow(creditLevelData.length)
+  const creditOasAxis = useMemo(() => niceAxis(
+    creditLevelData.slice(creditOasBrush.start, creditOasBrush.end + 1).map((p) => p.oas).filter((v): v is number => typeof v === 'number'),
+    { dp: 1 },
+  ), [creditLevelData, creditOasBrush.start, creditOasBrush.end])
   const creditRocData = isEuCredit ? euCreditChartData : creditRocChartData
   const creditTabLoading = isEuCredit ? euCreditLoading : ustLoading
   const creditOasLabel = isEuCredit ? 'EU HY OAS' : 'US HY OAS'
@@ -2694,8 +2756,20 @@ export function STIRDashboardPage() {
     })
   }, [beSelection, breakevensData, beChartRange, beRegimeLookback])
 
+  // FED FUNDS overlay toggle — header action on the CPI/PCE YoY and LABOR U-3 charts.
+  const fedFundsToggle = (
+    <button
+      type="button"
+      className={`${styles.toggleButton} ${showFedFunds ? styles.toggleButtonActive : ''}`}
+      aria-pressed={showFedFunds}
+      onClick={() => setShowFedFunds((v) => !v)}
+    >
+      FED FUNDS
+    </button>
+  )
+
   return (
-    <div className={styles.shell}>
+    <div className={`acm-root ${styles.shell}`}>
       <header className={styles.topBar}>
         <div className={styles.barLeft}>
           <NavDropdown />
@@ -2711,21 +2785,7 @@ export function STIRDashboardPage() {
 
       <main className={styles.body}>
         {/* ═══ Asset Class Selector ═══ */}
-        <div className={styles.assetClassBar}>
-          {ASSET_CLASSES.map((ac, idx) => (
-            <button
-              key={ac.key}
-              className={`${styles.assetClassBtn} ${assetClass === ac.key ? styles.assetClassBtnActive : ''}`}
-              onClick={() => setAssetClass(ac.key)}
-              style={{
-                border: `1px solid ${assetClass === ac.key ? '#60a5fa' : 'rgba(255, 255, 255, 0.15)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {ac.label}
-            </button>
-          ))}
-        </div>
+        <AcmNavTier tier="asset-class" label="Asset class" items={ASSET_CLASSES} value={assetClass} onChange={setAssetClass} />
 
         {/* ═══ Country Selector — visible for rates, equities, fx ═══ */}
         {(assetClass === 'rates' || assetClass === 'equities' || assetClass === 'fx') && (
@@ -2741,7 +2801,9 @@ export function STIRDashboardPage() {
         {/* ═══ Macro View ═══ */}
         {assetClass === 'macro' && (
           <>
-            <AssetSubRibbon
+            <AcmNavTier
+              tier="country"
+              label="Macro section"
               items={MACRO_SECTIONS}
               value={macroSection}
               onChange={setMacroSection}
@@ -2757,7 +2819,9 @@ export function STIRDashboardPage() {
         {assetClass === 'equities' && (
           country === 'US' ? (
             <>
-              <AssetSubRibbon
+              <AcmNavTier
+                tier="section"
+                label="Equity section"
                 items={EQUITY_SECTIONS}
                 value={equitySection}
                 onChange={setEquitySection}
@@ -2769,7 +2833,9 @@ export function STIRDashboardPage() {
             </>
           ) : country === 'Global' ? (
             <>
-              <AssetSubRibbon
+              <AcmNavTier
+                tier="section"
+                label="Global equity section"
                 items={GLOBAL_EQUITY_SECTIONS}
                 value={globalEquitySection}
                 onChange={setGlobalEquitySection}
@@ -2799,7 +2865,9 @@ export function STIRDashboardPage() {
         {/* ═══ Commodities View ═══ */}
         {assetClass === 'commodities' && (
           <>
-            <AssetSubRibbon
+            <AcmNavTier
+              tier="country"
+              label="Commodity category"
               items={COMMODITY_CATEGORIES}
               value={commodityCategory}
               onChange={setCommodityCategory}
@@ -2807,7 +2875,9 @@ export function STIRDashboardPage() {
             {commodityCategory === 'energy' ? (
               <>
                 <EnergyReturnsSection />
-                <AssetSubRibbon
+                <AcmNavTier
+                  tier="section"
+                  label="Energy product"
                   items={ENERGY_PRODUCTS}
                   value={energyProduct}
                   onChange={setEnergyProduct}
@@ -2830,33 +2900,15 @@ export function STIRDashboardPage() {
         {country === 'Global' && <GlobalRatesPage />}
 
         {country !== 'Global' && <>
-        <div className={styles.viewTabs}>
-          {viewTabs.map((tab, idx) => (
-            <button
-              key={tab.key}
-              className={`${styles.viewTab} ${activeView === tab.key ? styles.viewTabActive : ''}`}
-              onClick={() => setActiveView(tab.key)}
-              style={{
-                border: `1px solid ${activeView === tab.key ? '#f87171' : 'rgba(255, 255, 255, 0.12)'}`,
-                ...(idx > 0 ? { borderLeft: 'none' } : {}),
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <AcmNavTier tier="section" label="Section" items={viewTabs} value={activeView} onChange={setActiveView} />
 
         {(activeView === 'strips' || activeView === 'pricing') && country === 'US' && (
           <div className={styles.toggleGroup}>
-            {(Object.entries(PRODUCT_CONFIG) as [ProductKey, typeof PRODUCT_CONFIG[ProductKey]][]).map(([key, config], idx) => (
+            {(Object.entries(PRODUCT_CONFIG) as [ProductKey, typeof PRODUCT_CONFIG[ProductKey]][]).map(([key, config]) => (
               <button
                 key={key}
                 className={`${styles.toggleButton} ${product === key ? styles.toggleButtonActive : ''}`}
                 onClick={() => setProduct(key)}
-                style={{
-                  border: `1px solid ${product === key ? '#4EC9B0' : 'rgba(255, 255, 255, 0.12)'}`,
-                  ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                }}
               >
                 {config.label}
               </button>
@@ -2876,7 +2928,7 @@ export function STIRDashboardPage() {
                   <>
                     {overnightLatest.value.toFixed(2)}%
                     {stale && (
-                      <span className={styles.curveNote} style={{ marginLeft: 8, display: 'inline-block' }}>
+                      <span className={`${styles.curveNote} ${styles.ffrBandNote}`}>
                         Last updated: {overnightLatest.date}
                       </span>
                     )}
@@ -2889,81 +2941,77 @@ export function STIRDashboardPage() {
         )}
         {activeView === 'pricing' && (
           <>
-            <div className={styles.ustYcHeader}>
+            <div className={styles.viewHead}>
               <div>
-                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>
+                <div className={styles.viewHeadTitle}>
                   {country}: {activeMarket.title}
                 </div>
-                <div className={styles.ustYcDates}>
+                <div className={styles.viewHeadDates}>
                   {'\u25CF'} LATEST: {curve.currentDate || '—'} &nbsp;&nbsp; {'\u25CF'} BENCHMARK: {curve.lookbackDate || '—'} ({headerTiming.days} DAYS, {headerTiming.weeks} WEEKS)
                 </div>
               </div>
-              <div className={styles.ustYcControls}>
-                <label className={styles.ustLookbackWrap}>
-                  <span className={styles.ustLookbackLabel}>t −</span>
+              <div className={styles.viewHeadControls}>
+                <label className={styles.tLookback}>
+                  <span>t −</span>
                   <input
-                    className={styles.laborInput}
+                    className={styles.tLookbackInput}
                     type="number"
                     min="0"
                     step="1"
                     value={lookbackDaysInput}
                     onChange={(e) => setLookbackDaysInput(e.target.value)}
-                    style={{ width: '40px' }}
                   />
                 </label>
               </div>
             </div>
 
             {error && (
-              <section className={styles.section}>
-                <div className={styles.error}>{error}</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateError}>{error}</div>
+              </AcmPanel>
             )}
 
             {!error && loading && (
-              <section className={styles.section}>
-                <div className={styles.loading}>Loading futures dashboard…</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>Loading futures dashboard…</div>
+              </AcmPanel>
             )}
 
             {!error && !loading && (
               <>
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
-                    <div className={styles.panelTitle}>
-                      {country}: {activeMarket.title}
-                    </div>
-                    {curve.trimmedStaleSymbols.length > 0 && (
-                      <div className={styles.curveNote}>
-                        Curve trimmed: dropped {curve.trimmedStaleSymbols.length}
-                        {' '}stale contract{curve.trimmedStaleSymbols.length === 1 ? '' : 's'}
-                        {' '}({curve.trimmedStaleSymbols.join(', ')})
-                        {curve.lastGoodContract && ` · last good contract = ${curve.lastGoodContract}`}
-                      </div>
-                    )}
-                    <ResponsiveContainer width="100%" height={320}>
+                {curve.trimmedStaleSymbols.length > 0 && (
+                  <div className={styles.curveNote}>
+                    Curve trimmed: dropped {curve.trimmedStaleSymbols.length}
+                    {' '}stale contract{curve.trimmedStaleSymbols.length === 1 ? '' : 's'}
+                    {' '}({curve.trimmedStaleSymbols.join(', ')})
+                    {curve.lastGoodContract && ` · last good contract = ${curve.lastGoodContract}`}
+                  </div>
+                )}
+                <AcmChartFrame
+                  title={`${country}: ${activeMarket.title}`}
+                  legend={[
+                    { label: 'Latest', color: CURVE_COMPARE_COLORS.forwardLatest },
+                    { label: 'Benchmark', color: CURVE_COMPARE_COLORS.benchmark, dashed: true },
+                  ]}
+                  height={320}
+                >
+                    <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="ticker" stroke="#728197" tick={false} tickLine={false} />
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="ticker" {...chartTheme.xAxis} tick={false} tickLine={false} />
                         <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                          domain={curveDomain}
-                          allowDataOverflow
-                          label={{
-                            value: '%',
-                            position: 'top',
-                            offset: 10,
-                            style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
-                          }}
+                          domain={curveAxis.domain}
+                          ticks={curveAxis.ticks}
+                          label={{ ...chartTheme.axisLabel, value: '%', position: 'top', offset: 10 }}
                         />
-                        <Tooltip content={<CurveTooltip />} />
+                        <Tooltip content={<CurveTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
                         <Line
                           type="monotone"
                           dataKey="latestRate"
                           name="Latest"
-                          stroke="#2196F3"
+                          stroke={CURVE_COMPARE_COLORS.forwardLatest}
                           strokeWidth={2.5}
                           dot={{ r: 3 }}
                           connectNulls
@@ -2972,7 +3020,7 @@ export function STIRDashboardPage() {
                           type="monotone"
                           dataKey="benchmarkRate"
                           name="Benchmark"
-                          stroke="#888888"
+                          stroke={CURVE_COMPARE_COLORS.benchmark}
                           strokeWidth={2}
                           strokeDasharray="4 4"
                           dot={{ r: 2.5 }}
@@ -2980,98 +3028,63 @@ export function STIRDashboardPage() {
                         />
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
+                </AcmChartFrame>
 
-                  <div className={styles.chartPanel}>
-                    <ResponsiveContainer width="100%" height={220}>
+                <AcmChartFrame
+                  title="Change vs benchmark (bps)"
+                  legend={[
+                    { label: 'Rate up', color: signColor('acm-negative') },
+                    { label: 'Rate down', color: signColor('acm-positive') },
+                  ]}
+                  height={220}
+                >
+                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={curveData} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
+                        <CartesianGrid {...chartTheme.grid} vertical={false} />
                         <XAxis
                           dataKey="ticker"
-                          stroke="#728197"
-                          tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.xAxis}
                           angle={-45}
                           textAnchor="end"
                           height={70}
                           dy={10}
                         />
                         <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
+                          domain={curveDeltaAxis.domain}
+                          ticks={curveDeltaAxis.ticks}
                           tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                          label={{
-                            value: 'bps',
-                            position: 'top',
-                            offset: 10,
-                            style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' },
-                          }}
+                          label={{ ...chartTheme.axisLabel, value: 'bps', position: 'top', offset: 10 }}
                         />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                        <Bar dataKey="deltaBps" radius={[2, 2, 0, 0]}>
+                        <ReferenceLine y={0} {...referenceLines.zero} />
+                        <Bar dataKey="deltaBps" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                           {curveData.map((row) => (
-                            <Cell key={row.ticker} fill={(row.deltaBps ?? 0) >= 0 ? '#4EC9B0' : '#EF5350'} />
+                            <Cell
+                              key={row.ticker}
+                              fill={roundForDisplay(row.deltaBps ?? 0, 1) > 0 ? signColor('acm-negative') : roundForDisplay(row.deltaBps ?? 0, 1) < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'}
+                            />
                           ))}
                           <LabelList content={renderDeltaLabel} />
                         </Bar>
                       </BarChart>
                     </ResponsiveContainer>
-                  </div>
-                </section>
+                </AcmChartFrame>
 
-                <section className={styles.section}>
-                  <div className={styles.sectionHeader}>
-                    <div className={styles.sectionTitle}>Summary Table</div>
-                  </div>
-                  <div className={styles.tableWrap}>
-                    <table className={styles.table}>
-                      <thead>
-                        <tr>
-                          <th>Meeting</th>
-                          <th>Implied<br/>Rate</th>
-                          <th>Bps<br/>(Step)</th>
-                          <th>Bps<br/>(Total)</th>
-                          <th>Implied # Cuts/Hikes<br/>(Step)</th>
-                          {/* Implied # Cuts/Hikes (Total) shown on SOFR + non-USD; hidden on Fed Funds per user spec */}
-                          {!(country === 'US' && product === 'fedfunds') && (
-                            <th>Implied # Cuts/Hikes<br/>(Total)</th>
-                          )}
-                          <th>Summary<br/>(Step)</th>
-                          <th>Summary<br/>(Total)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[overnightRow, ...summaryRows].map((row) => (
-                          <tr key={row.key}>
-                            <td>{row.label}</td>
-                            <td className={styles.mono}>{fmtRate(row.impliedRate)}</td>
-                            <td className={`${styles.mono} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.stepBps)}</td>
-                            <td className={`${styles.mono} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtBps(row.totalBps)}</td>
-                            <td className={`${styles.mono} ${styles.cellCenter} ${row.stepBps < 0 ? styles.cutText : row.stepBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.stepBps / 25)}</td>
-                            {!(country === 'US' && product === 'fedfunds') && (
-                              <td className={`${styles.mono} ${styles.cellCenter} ${row.totalBps < 0 ? styles.cutText : row.totalBps > 0 ? styles.hikeText : styles.flatText}`}>{fmtSignedDecimal(row.totalBps / 25)}</td>
-                            )}
-                            <td><span className={`${styles.badge} ${styles[row.tone]}`}>{row.stepSummary}</span></td>
-                            <td><span className={`${styles.badge} ${styles[row.totalBps < 0 ? 'cut' : row.totalBps > 0 ? 'hike' : 'flat']}`}>{row.totalSummary}</span></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
+                <AcmPanel title="Summary Table">
+                  <AcmDataTable<SummaryRow>
+                    rowKey={(row) => row.key}
+                    rows={[overnightRow, ...summaryRows]}
+                    columns={summaryColumns}
+                  />
+                </AcmPanel>
 
                 {country === 'US' && product === 'fedfunds' && fedwatch.rangeColumns.length > 0 && (
-                  <section className={styles.section}>
-                    <button className={styles.matrixToggle} onClick={() => setShowMatrix((v) => !v)}>
-                      {showMatrix ? '▼' : '▶'} Detailed Probability Matrix
-                    </button>
-                    {showMatrix && (
+                  <AcmCollapsible title="Detailed Probability Matrix" defaultOpen>
                       <div className={styles.matrixSubtitle}>
                         {Math.abs(fedwatch.proxyToPolicySpread) > 1e-9 && fedwatch.proxyToPolicySpreadSource
                           ? fedwatch.proxyToPolicySpreadSource
                           : `as of ${fedwatch.asOfDate || '—'}`}
                       </div>
-                    )}
-                    {showMatrix && (
                       <div className={styles.matrixWrap}>
                         <table className={styles.matrixTable}>
                           <thead>
@@ -3102,8 +3115,7 @@ export function STIRDashboardPage() {
                           </tbody>
                         </table>
                       </div>
-                    )}
-                  </section>
+                  </AcmCollapsible>
                 )}
               </>
             )}
@@ -3113,45 +3125,48 @@ export function STIRDashboardPage() {
         {activeView === 'strips' && (
           <>
             {stripError && (
-              <section className={styles.section}>
-                <div className={styles.error}>{stripError}</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateError}>{stripError}</div>
+              </AcmPanel>
             )}
 
             {!stripError && stripLoading && (
-              <section className={styles.section}>
-                <div className={styles.loading}>Loading strip monitor…</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>Loading strip monitor…</div>
+              </AcmPanel>
             )}
 
             {!stripError && !stripLoading && stripContracts.length === 0 && (
-              <section className={styles.section}>
-                <div className={styles.loading}>No strip data available</div>
-              </section>
+              <AcmPanel>
+                <div className={styles.stateMsg}>No strip data available</div>
+              </AcmPanel>
             )}
 
             {!stripError && !stripLoading && stripContracts.length > 0 && (
               <>
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
+                <AcmPanel>
                     <div className={styles.summaryRow}>
                       {stripSummary.boxes.map((box) => (
                         <div
                           key={box.label}
-                          className={styles.summaryBox}
+                          className={`${styles.summaryBox} ${box.hoverKey ? styles.summaryBoxHover : ''}`}
                           onMouseEnter={box.hoverKey ? () => setHoveredBox(box.hoverKey ?? null) : undefined}
                           onMouseLeave={box.hoverKey ? () => setHoveredBox(null) : undefined}
-                          style={box.hoverKey ? { position: 'relative', cursor: 'pointer' } : undefined}
                         >
                           <div className={styles.summaryBoxLabel}>{box.label}</div>
-                          <div className={box.label === 'NEXT MOVE' ? styles.nextMoveValue : styles.summaryBoxValue} style={summaryToneStyle(box.tone)}>{box.value}</div>
+                          <div className={`${box.label === 'NEXT MOVE' ? styles.nextMoveValue : styles.summaryBoxValue} ${summaryToneClass(box.tone) ?? ''}`}>{box.value}</div>
                           {box.sub ? <div className={styles.summaryBoxSub}>{box.sub}</div> : null}
                           {box.hoverKey === hoveredBox && (
-                            <div className={styles.spreadPopup}>
-                              <div className={styles.spreadPopupTitle}>
-                                {box.label} Spread History (60d)
-                              </div>
-                              <ResponsiveContainer width="100%" height={150}>
+                            <AcmChartFrame
+                              className={styles.spreadPopup}
+                              title={`${box.label} Spread History (60d)`}
+                              subtitle={(box.hoverKey === 'mtg' && terminalHistory.loading)
+                                || (box.hoverKey === 'term6m' && (terminalHistory.loading || plus6mHistory.loading))
+                                || (box.hoverKey === 'term12m' && (terminalHistory.loading || plus12mHistory.loading))
+                                ? 'Loading history…' : undefined}
+                              height={150}
+                            >
+                              <ResponsiveContainer width="100%" height="100%">
                                 <LineChart
                                   data={
                                     box.hoverKey === 'mtg'
@@ -3162,46 +3177,34 @@ export function STIRDashboardPage() {
                                   }
                                   margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
                                 >
-                                  <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                                  <CartesianGrid {...chartTheme.grid} />
                                   <XAxis
                                     dataKey="date"
-                                    tick={{ fontSize: 9, fill: '#728197', fontFamily: 'var(--font-mono)' }}
+                                    {...chartTheme.xAxis}
                                     tickFormatter={(value: string) => fmtShortMonthYear(value)}
                                     minTickGap={18}
                                   />
                                   <YAxis
-                                    tick={{ fontSize: 9, fill: '#728197', fontFamily: 'var(--font-mono)' }}
+                                    {...chartTheme.yAxis}
                                     tickFormatter={(value: number) => `${value.toFixed(1)}bp`}
-                                    width={42}
                                   />
                                   <Tooltip
-                                    contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                                    labelStyle={{ color: '#94A3B8' }}
+                                    {...chartTheme.tooltip}
                                     formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
                                     labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
                                   />
-                                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                                  <Line type="monotone" dataKey="spread" stroke="#FFD700" strokeWidth={1.5} dot={false} />
+                                  <ReferenceLine y={0} {...referenceLines.zero} />
+                                  <Line type="monotone" dataKey="spread" stroke={SUMMARY_POPUP_LINE} strokeWidth={1.5} dot={false} />
                                 </LineChart>
                               </ResponsiveContainer>
-                              {(box.hoverKey === 'mtg' && terminalHistory.loading)
-                                || (box.hoverKey === 'term6m' && (terminalHistory.loading || plus6mHistory.loading))
-                                || (box.hoverKey === 'term12m' && (terminalHistory.loading || plus12mHistory.loading)) ? (
-                                <div className={styles.summaryBoxSub}>Loading history…</div>
-                              ) : null}
-                            </div>
+                            </AcmChartFrame>
                           )}
                         </div>
                       ))}
                     </div>
-                  </div>
-                </section>
+                </AcmPanel>
 
-                <section className={styles.section}>
-                  <div className={styles.chartPanel}>
-                    <div className={styles.stripHeader}>
-                      {activeMarket.root} STRIP {stripContracts.length} contracts
-                    </div>
+                <AcmPanel title={`${activeMarket.root} STRIP ${stripContracts.length} contracts`}>
                     <div className={styles.tableWrap}>
                       <table className={styles.stripTable}>
                         <thead>
@@ -3229,13 +3232,13 @@ export function STIRDashboardPage() {
                           {useStirStyling ? (
                             stripPacks.map((pack) => (
                               <Fragment key={pack.name}>
-                                <tr className={styles.packHeaderRow} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                <tr className={styles.packHeaderRow} style={{ background: STIR_PACK_BACKGROUNDS[pack.name] }}>
                                   <td colSpan={7} className={styles.packHeaderCell} style={{ color: pack.color }}>
                                     {pack.name}
                                   </td>
                                 </tr>
                                 {pack.contracts.map((contract) => (
-                                  <tr key={contract.symbol} style={{ background: PACK_BACKGROUNDS[pack.name] }}>
+                                  <tr key={contract.symbol} style={{ background: STIR_PACK_BACKGROUNDS[pack.name] }}>
                                     <td
                                       style={{ color: pack.color }}
                                       className={styles.contractClickable}
@@ -3246,16 +3249,15 @@ export function STIRDashboardPage() {
                                         setModalRange('1Y')
                                       }}
                                     >{contractTicker(contract.symbol)}</td>
-                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td className={styles.stripPrimary}>{contract.lastPrice.toFixed(3)}</td>
                                     <td style={{ color: pack.color }}>{contract.impliedRate.toFixed(3)}</td>
                                     {(() => {
                                       const ocrBps = (contract.impliedRate - fedwatch.currentEFFR) * 100
-                                      const cls = ocrBps > 0 ? styles.ocrPositive : ocrBps < 0 ? styles.ocrNegative : ''
-                                      return <td className={cls}>{fmtBpsNumber(ocrBps)}</td>
+                                      return <td className={`${styles.stripStrong} ${rateChangeClass(ocrBps) ?? ''}`}>{fmtBpsNumber(ocrBps)}</td>
                                     })()}
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtBpsFromPrice(contract.pxChg1d)}</td>
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtBpsFromPrice(contract.pxChg5d)}</td>
-                                    <td className={styles.changeCell} style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtBpsFromPrice(contract.pxChg1m)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg1d, stripMaxAbs.pxChg1d) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg1d)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg5d, stripMaxAbs.pxChg5d) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg5d)}</td>
+                                    <td data-strip-move className={`${styles.changeCell} ${stripHeatClass(contract.pxChg1m, stripMaxAbs.pxChg1m) ?? ''}`}>{fmtBpsFromPrice(contract.pxChg1m)}</td>
                                   </tr>
                                 ))}
                               </Fragment>
@@ -3263,20 +3265,20 @@ export function STIRDashboardPage() {
                           ) : (
                             stripYearGroups.map(([year, contracts]) => (
                               <Fragment key={year}>
-                                <tr className={styles.yearRow} style={{ background: getYearBandColor(year, stripYears) }}>
+                                <tr className={styles.yearRow} style={{ background: ffYearBandColor(year) }}>
                                   <td colSpan={6} className={styles.yearRowLabel}>{year}</td>
                                 </tr>
                                 {contracts.map((contract) => (
                                   <tr
                                     key={contract.symbol}
-                                    style={{ background: getYearBandColor(contract.year, stripYears) }}
+                                    style={{ background: ffYearBandColor(contract.year) }}
                                   >
                                     <td>{contractTicker(contract.symbol)}</td>
-                                    <td style={{ color: '#e2e8f0' }}>{contract.lastPrice.toFixed(3)}</td>
+                                    <td className={styles.stripPrimary}>{contract.lastPrice.toFixed(3)}</td>
                                     <td>{contract.impliedRate.toFixed(3)}</td>
-                                    <td style={heatStyle(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
-                                    <td style={heatStyle(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
-                                    <td style={heatStyle(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg1d, stripMaxAbs.pxChg1d)}>{fmtSignedPrice(contract.pxChg1d)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg5d, stripMaxAbs.pxChg5d)}>{fmtSignedPrice(contract.pxChg5d)}</td>
+                                    <td data-strip-move className={stripHeatClass(contract.pxChg1m, stripMaxAbs.pxChg1m)}>{fmtSignedPrice(contract.pxChg1m)}</td>
                                   </tr>
                                 ))}
                               </Fragment>
@@ -3285,8 +3287,7 @@ export function STIRDashboardPage() {
                         </tbody>
                       </table>
                     </div>
-                  </div>
-                </section>
+                </AcmPanel>
 
               </>
             )}
@@ -3309,150 +3310,135 @@ export function STIRDashboardPage() {
         )}
 
         {activeView === 'ust' && (
-          <section className={styles.section}>
-            {/* ═══ Yield Curve Chart ═══ */}
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustYcHeader}>
-                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>US TREASURY YIELD CURVE</div>
-                <div className={styles.ustYcControls}>
-                  <label className={styles.ustLookbackWrap}>
-                    <span className={styles.ustLookbackLabel}>t −</span>
-                    <input
-                      className={styles.laborInput}
-                      type="number"
-                      min="0"
-                      value={ycLookback}
-                      onChange={(e) => setYcLookback(Math.max(0, parseInt(e.target.value) || 1))}
-                      style={{ width: '40px' }}
-                    />
-                  </label>
-                  <button
-                    onClick={() => setYcCompressed((v) => !v)}
-                    style={{
-                      background: ycCompressed ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
-                      border: `1px solid ${ycCompressed ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-                      color: ycCompressed ? '#60a5fa' : '#728197',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '0.65rem',
-                      fontWeight: 600,
-                      padding: '3px 10px',
-                      cursor: 'pointer',
-                      borderRadius: '2px',
-                    }}
-                  >
-                    COMPRESSED
-                  </button>
-                </div>
-              </div>
-              <div className={styles.ustYcDates}>
-                {'\u25CF'} LATEST: {ycLatestDate} &nbsp;&nbsp; {'\u25CF'} OFFSET: {ycOffsetDate} ({ycLookback} {ycLookback === 1 ? 'day' : 'days'})
-              </div>
-              {ustLoading ? (
-                <div className={styles.loading}>Loading…</div>
-              ) : (
-                <>
-                  <ResponsiveContainer width="100%" height={450}>
+          <div className={styles.ustStack}>
+            {/* ═══ Yield curve + change vs offset ═══ */}
+            {ustLoading ? (
+              <AcmPanel title="US TREASURY YIELD CURVE">
+                <div className={styles.stateMsg}>Loading…</div>
+              </AcmPanel>
+            ) : (
+              <>
+                <AcmChartFrame
+                  title="US TREASURY YIELD CURVE"
+                  subtitle={`● LATEST: ${ycLatestDate}   ● OFFSET: ${ycOffsetDate} (${ycLookback} ${ycLookback === 1 ? 'day' : 'days'})`}
+                  legend={[
+                    { label: 'Latest', color: CURVE_COMPARE_COLORS.yieldLatest },
+                    { label: 'Offset', color: CURVE_COMPARE_COLORS.benchmark, dashed: true },
+                  ]}
+                  actions={(
+                    <>
+                      <label className={styles.ustLookback}>
+                        <span>t −</span>
+                        <input
+                          className={`${styles.laborInput} ${styles.inputNarrow}`}
+                          type="number"
+                          min="0"
+                          value={ycLookback}
+                          onChange={(e) => setYcLookback(Math.max(0, parseInt(e.target.value) || 1))}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className={`${styles.toggleButton} ${ycCompressed ? styles.toggleButtonActive : ''}`}
+                        aria-pressed={ycCompressed}
+                        onClick={() => setYcCompressed((v) => !v)}
+                      >
+                        COMPRESSED
+                      </button>
+                    </>
+                  )}
+                  height={450}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={ycCurveData.map((d, idx) => ({ ...d, xVal: ycCompressed ? d.years : idx }))} margin={{ top: 16, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                      <CartesianGrid {...chartTheme.grid} />
                       <XAxis
                         dataKey={ycCompressed ? 'years' : 'label'}
                         type={ycCompressed ? 'number' : 'category'}
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        {...chartTheme.xAxis}
                         {...(ycCompressed ? { domain: [0, 30] as [number, number], ticks: [1 / 12, 0.25, 0.5, 1, 2, 5, 7, 10, 20, 30], tickFormatter: (v: number) => (v < 1 ? `${Math.round(v * 12)}M` : `${v}Y`) } : {})}
                       />
                       <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        {...chartTheme.yAxis}
                         tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                        domain={ycYDomain}
-                        allowDataOverflow
+                        domain={ycYAxis.domain}
+                        ticks={ycYAxis.ticks}
                       />
                       <Tooltip
-                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
+                        {...chartTheme.tooltip}
                         formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(3)}%` : '—', name ?? '']}
                         labelFormatter={(label: unknown) => {
                           const point = ycCurveData.find((d) => (ycCompressed ? d.years === label : d.label === label))
                           return point?.label || String(label)
                         }}
                       />
-                      <Line type="monotone" dataKey="latest" name="Latest" stroke="#60a5fa" strokeWidth={2.5} dot={{ r: 3, fill: '#60a5fa' }} connectNulls />
-                      <Line type="monotone" dataKey="offset" name="Offset" stroke="#888888" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: '#888888' }} connectNulls />
+                      <Line type="monotone" dataKey="latest" name="Latest" stroke={CURVE_COMPARE_COLORS.yieldLatest} strokeWidth={2.5} dot={{ r: 3, fill: CURVE_COMPARE_COLORS.yieldLatest }} connectNulls />
+                      <Line type="monotone" dataKey="offset" name="Offset" stroke={CURVE_COMPARE_COLORS.benchmark} strokeWidth={2} strokeDasharray="4 4" dot={{ r: 2.5, fill: CURVE_COMPARE_COLORS.benchmark }} connectNulls />
                     </LineChart>
                   </ResponsiveContainer>
-                  <ResponsiveContainer width="100%" height={200}>
+                </AcmChartFrame>
+
+                <AcmChartFrame
+                  title="Change vs offset (bps)"
+                  legend={[
+                    { label: 'Yield up', color: signColor('acm-negative') },
+                    { label: 'Yield down', color: signColor('acm-positive') },
+                  ]}
+                  height={200}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={ycCurveData} margin={{ top: 16, right: 24, left: 8, bottom: 8 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="label" stroke="#728197" tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} />
+                      <CartesianGrid {...chartTheme.grid} vertical={false} />
+                      <XAxis dataKey="label" {...chartTheme.xAxis} />
                       <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                        {...chartTheme.yAxis}
+                        domain={deltaYAxis.domain}
+                        ticks={deltaYAxis.ticks}
                         tickFormatter={(v: number) => `${v.toFixed(0)}`}
-                        label={{ value: 'bps', position: 'top', offset: 10, style: { fill: '#94A3B8', fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-mono)' } }}
+                        label={{ ...chartTheme.axisLabel, value: 'bps', position: 'top', offset: 10 }}
                       />
-                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                      <Bar dataKey="delta" radius={[2, 2, 0, 0]}>
+                      <ReferenceLine y={0} {...referenceLines.zero} />
+                      <Bar dataKey="delta" radius={[2, 2, 0, 0]} isAnimationActive={false}>
                         {ycCurveData.map((d, idx) => (
-                          <Cell key={idx} fill={(d.delta ?? 0) >= 0 ? '#4EC9B0' : '#EF5350'} />
+                          <Cell key={idx} fill={(d.delta ?? 0) > 0 ? signColor('acm-negative') : (d.delta ?? 0) < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'} />
                         ))}
-                        <LabelList
-                          dataKey="delta"
-                          content={((props: { x?: number; y?: number; width?: number; height?: number; value?: number | null }) => {
-                            const { x = 0, y = 0, width = 0, height = 0, value } = props
-                            if (value == null) return null
-                            const numeric = Number(value)
-                            return (
-                              <text
-                                x={x + width / 2}
-                                y={numeric >= 0 ? y - 8 : y + height + 14}
-                                textAnchor="middle"
-                                fill="#94A3B8"
-                                fontSize={11}
-                                fontFamily="var(--font-mono)"
-                                fontWeight={700}
-                              >
-                                {numeric > 0 ? '+' : ''}{numeric.toFixed(1)}
-                              </text>
-                            )
-                          }) as never}
-                        />
+                        <LabelList dataKey="delta" content={renderDeltaLabel} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
-                </>
-              )}
-            </div>
+                </AcmChartFrame>
+              </>
+            )}
 
-            {/* ═══ Historical Yield Changes + BE/Real (side-by-side) ═══ */}
-            <div className={styles.histChangesRow}>
-              <div className={styles.ustDashboard}>
-                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>NOMINAL YIELDS</div>
-                <div className={styles.ustYcDates}>
-                  {'●'} AS OF: {historicalChanges.latestDate || '—'}
-                </div>
+            {/* ═══ Historical yield changes + BE/Real (side by side) — the cellColor grid ═══ */}
+            <div className={styles.ustPair}>
+              <AcmPanel title="NOMINAL YIELDS">
+                <div className={styles.ustAsOf}>● AS OF: {historicalChanges.latestDate || '—'}</div>
                 {ustLoading ? (
-                  <div className={styles.loading}>Loading Treasury data…</div>
+                  <div className={styles.stateMsg}>Loading Treasury data…</div>
                 ) : ustError ? (
-                  <div className={styles.error}>{ustError}</div>
+                  <div className={styles.stateError}>{ustError}</div>
                 ) : (
-                  <div className={styles.histChangesGrid}>
-                    <div className={styles.histChangesHeaderCell}></div>
+                  <div className={`${styles.chgGrid} ${styles.chgGridNominal}`}>
+                    <div className={styles.chgHead}></div>
                     {HIST_LOOKBACKS.map(lb => (
-                      <div key={lb.label} className={styles.histChangesHeaderCell}>{lb.label}</div>
+                      <div key={lb.label} className={styles.chgHead}>{lb.label}</div>
                     ))}
                     {historicalChanges.rows.map(row => (
                       <Fragment key={row.rowLabel}>
-                        <div className={styles.histChangesRowLabel}>{row.rowLabel}</div>
+                        <div className={styles.chgRowLabel}>{row.rowLabel}</div>
                         {row.cells.map(cell => {
-                          const bg = getCellColor(cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          // a change that prints as 0.0 gets no fill (displayed-value rule)
+                          const bg = getCellColor(cell.bps != null && roundForDisplay(cell.bps, 1) === 0 ? 0 : cell.bps, historicalChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
                           return (
                             <div
                               key={`${row.rowLabel}-${cell.lookback}`}
-                              className={styles.histChangesCell}
+                              className={styles.chgCell}
+                              data-cell-color
                               style={bg ? { background: bg } : undefined}
                             >
                               {cell.bps != null && Number.isFinite(cell.bps)
-                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                ? `${fmtSignedFixed(cell.bps, 1)} bps`
                                 : '—'}
                             </div>
                           )
@@ -3461,693 +3447,356 @@ export function STIRDashboardPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </AcmPanel>
 
-              <div className={styles.ustDashboard}>
-                <div className={styles.ustSectionLabel} style={{ color: '#60a5fa', padding: 0 }}>BREAKEVENS &amp; REAL RATES</div>
-                <div className={styles.ustYcDates}>
-                  {'●'} AS OF: {beRealChanges.latestDate || '—'}
-                </div>
+              <AcmPanel title="BREAKEVENS & REAL RATES">
+                <div className={styles.ustAsOf}>● AS OF: {beRealChanges.latestDate || '—'}</div>
                 {ustLoading ? (
-                  <div className={styles.loading}>Loading Treasury data…</div>
+                  <div className={styles.stateMsg}>Loading Treasury data…</div>
                 ) : ustError ? (
-                  <div className={styles.error}>{ustError}</div>
+                  <div className={styles.stateError}>{ustError}</div>
                 ) : (
-                  <div className={styles.beRealGrid}>
-                    <div className={styles.histChangesHeaderCell}></div>
+                  <div className={`${styles.chgGrid} ${styles.chgGridBeReal}`}>
+                    <div className={styles.chgHead}></div>
                     {HIST_LOOKBACKS.map(lb => (
-                      <div key={lb.label} className={styles.histChangesHeaderCell}>{lb.label}</div>
+                      <div key={lb.label} className={styles.chgHead}>{lb.label}</div>
                     ))}
                     {beRealChanges.rows.map((row, idx) => (
                       <Fragment key={row.rowLabel}>
-                        <div className={styles.histChangesRowLabel}>{row.rowLabel}</div>
+                        <div className={styles.chgRowLabel}>{row.rowLabel}</div>
                         {row.cells.map(cell => {
-                          const bg = getCellColor(cell.bps, beRealChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
+                          const bg = getCellColor(cell.bps != null && roundForDisplay(cell.bps, 1) === 0 ? 0 : cell.bps, beRealChanges.colMaxAbs[cell.lookback] ?? 0, 'red-blue')
                           return (
                             <div
                               key={`${row.rowLabel}-${cell.lookback}`}
-                              className={styles.histChangesCell}
+                              className={styles.chgCell}
+                              data-cell-color
                               style={bg ? { background: bg } : undefined}
                             >
                               {cell.bps != null && Number.isFinite(cell.bps)
-                                ? `${cell.bps >= 0 ? '+' : ''}${cell.bps.toFixed(1)} bps`
+                                ? `${fmtSignedFixed(cell.bps, 1)} bps`
                                 : '—'}
                             </div>
                           )
                         })}
                         {BE_REAL_ROWS[idx]?.addSeparatorAfter && (
-                          <div className={styles.beRealSeparator} />
+                          <div className={styles.chgSeparator} />
                         )}
                       </Fragment>
                     ))}
                   </div>
                 )}
-              </div>
+              </AcmPanel>
             </div>
 
-            {/* ═══ Nominal Yields Dashboard ═══ */}
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustSectionLabel}>Nominal Yields</div>
+            {/* ═══ Nominal yields, spreads, butterflies ═══ */}
+            <AcmPanel title="Nominal yields">
               {ustLoading ? (
-                <div className={styles.loading}>Loading Treasury data…</div>
+                <div className={styles.stateMsg}>Loading Treasury data…</div>
               ) : ustError ? (
-                <div className={styles.error}>{ustError}</div>
+                <div className={styles.stateError}>{ustError}</div>
               ) : (
                 <>
-                  <div className={styles.ustYieldRow}>
+                  <div className={`${styles.ustTiles} ${styles.ustTiles7}`}>
                     {currentYields.map((tenor) => (
-                      <div
+                      <UstTile
                         key={tenor.key}
-                        className={`${styles.ustYieldBox} ${ustSelection?.type === 'yield' && ustSelection.key === tenor.key ? styles.ustBoxSelected : ''}`}
-                        onClick={() => setUstSelection({ type: 'yield', key: tenor.key, label: tenor.label })}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className={styles.ustYieldLabel}>{tenor.label}</div>
-                        <div className={styles.ustYieldValue}>
-                          {tenor.current != null ? tenor.current.toFixed(2) : '—'}%
-                        </div>
-                        <div
-                          className={styles.ustYieldChange}
-                          style={{
-                            color: tenor.change != null
-                              ? tenor.change > 0 ? '#4EC9B0' : tenor.change < 0 ? '#EF5350' : '#728197'
-                              : '#728197',
-                          }}
-                        >
-                          {tenor.change != null ? `${tenor.change > 0 ? '+' : ''}${(tenor.change * 100).toFixed(1)}bp` : '—'}
-                        </div>
-                      </div>
+                        family={UST_FAMILY_COLORS.nominal}
+                        label={tenor.label}
+                        value={`${tenor.current != null ? tenor.current.toFixed(2) : '—'}%`}
+                        valueIsFamily
+                        change={tenor.change != null ? fmtSignedFixed(tenor.change * 100, 1, 'bp') : '—'}
+                        changeClass={ustChangeClass(tenor.change == null ? null : tenor.change * 100)}
+                        selected={ustSelection?.type === 'yield' && ustSelection.key === tenor.key}
+                        onSelect={() => setUstSelection({ type: 'yield', key: tenor.key, label: tenor.label })}
+                      />
                     ))}
                   </div>
-                  <div className={styles.ustSectionLabel}>Nominal Spreads</div>
-                  <div className={styles.ustSpreadRow}>
+                  <div className={styles.ustSubLabel}>Nominal Spreads</div>
+                  <div className={`${styles.ustTiles} ${styles.ustTiles4}`}>
                     {currentSpreads.map((spread) => (
-                      <div
+                      <UstTile
                         key={spread.label}
-                        className={`${styles.ustSpreadBox} ${ustSelection?.type === 'spread' && ustSelection.label === spread.label ? styles.ustBoxSelected : ''}`}
-                        onClick={() => setUstSelection({ type: 'spread', label: spread.label, longKey: spread.long, shortKey: spread.short })}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className={styles.ustSpreadLabel}>{spread.label}</div>
-                        <div
-                          className={styles.ustSpreadValue}
-                          style={{
-                            color: spread.current != null
-                              ? spread.current > 0 ? '#4EC9B0' : spread.current < 0 ? '#EF5350' : '#e2e8f0'
-                              : '#728197',
-                          }}
-                        >
-                          {spread.current != null ? `${spread.current > 0 ? '+' : ''}${spread.current.toFixed(1)}bp` : '—'}
-                        </div>
-                        <div
-                          className={styles.ustSpreadChange}
-                          style={{
-                            color: spread.change != null
-                              ? spread.change > 0 ? '#4EC9B0' : spread.change < 0 ? '#EF5350' : '#728197'
-                              : '#728197',
-                          }}
-                        >
-                          {spread.change != null ? `${spread.change > 0 ? '+' : ''}${spread.change.toFixed(1)}bp` : '—'}
-                        </div>
-                      </div>
+                        family={UST_FAMILY_COLORS.nominal}
+                        label={spread.label}
+                        value={spread.current != null ? fmtSignedFixed(spread.current, 1, 'bp') : '—'}
+                        valueClass={ustLevelClass(spread.current)}
+                        change={spread.change != null ? fmtSignedFixed(spread.change, 1, 'bp') : '—'}
+                        changeClass={ustChangeClass(spread.change)}
+                        selected={ustSelection?.type === 'spread' && ustSelection.label === spread.label}
+                        onSelect={() => setUstSelection({ type: 'spread', label: spread.label, longKey: spread.long, shortKey: spread.short })}
+                      />
                     ))}
                   </div>
 
-                  <div className={styles.ustSectionLabel}>Butterflies</div>
-                  <div className={styles.butterflyRow}>
+                  <div className={styles.ustSubLabel}>Butterflies</div>
+                  <div className={`${styles.ustTiles} ${styles.ustTiles3}`}>
                     {currentButterflies.map((fly) => (
-                      <div
+                      <UstTile
                         key={fly.label}
-                        className={`${styles.ustSpreadBox} ${ustSelection?.type === 'butterfly' && ustSelection.label === fly.label ? styles.ustBoxSelected : ''}`}
-                        onClick={() => setUstSelection({ type: 'butterfly', label: fly.label, lowKey: fly.low, middleKey: fly.middle, highKey: fly.high })}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <div className={styles.ustSpreadLabel} style={{ color: '#60a5fa' }}>{fly.label}</div>
-                        <div className={styles.ustSpreadValue} style={{
-                          color: fly.current != null
-                            ? fly.current > 0 ? '#4EC9B0' : fly.current < 0 ? '#EF5350' : '#e2e8f0'
-                            : '#728197',
-                        }}>
-                          {fly.current != null ? `${fly.current > 0 ? '+' : ''}${fly.current.toFixed(1)}bp` : '—'}
-                        </div>
-                        <div className={styles.ustSpreadChange} style={{
-                          color: fly.change != null
-                            ? fly.change > 0 ? '#4EC9B0' : fly.change < 0 ? '#EF5350' : '#728197'
-                            : '#728197',
-                        }}>
-                          {fly.change != null ? `${fly.change > 0 ? '+' : ''}${fly.change.toFixed(1)}bp` : '—'}
-                        </div>
-                      </div>
+                        family={UST_FAMILY_COLORS.nominal}
+                        label={fly.label}
+                        value={fly.current != null ? fmtSignedFixed(fly.current, 1, 'bp') : '—'}
+                        valueClass={ustLevelClass(fly.current)}
+                        change={fly.change != null ? fmtSignedFixed(fly.change, 1, 'bp') : '—'}
+                        changeClass={ustChangeClass(fly.change)}
+                        selected={ustSelection?.type === 'butterfly' && ustSelection.label === fly.label}
+                        onSelect={() => setUstSelection({ type: 'butterfly', label: fly.label, lowKey: fly.low, middleKey: fly.middle, highKey: fly.high })}
+                      />
                     ))}
                   </div>
 
-                  <div className={styles.ustChartTitle}>
-                    {ustSelection?.type === 'yield'
+                  <AcmChartFrame
+                    title={ustSelection?.type === 'yield'
                       ? `${ustSelection.label} Treasury Yield`
                       : ustSelection?.type === 'butterfly'
                         ? `${ustSelection.label} butterfly`
                         : `${ustSelection?.label} yield curve regimes`}
-                  </div>
-
-                    <div className={styles.ustChartControls}>
-                      <div className={styles.ustRangeBar}>
-                      {['3m', '6m', '1y', '5y', '10y', 'all'].map((range, idx) => (
-                        <button
-                          key={range}
-                          className={`${styles.fvmRangeBtn} ${ustChartRange === range ? styles.fvmRangeBtnActive : ''}`}
-                          onClick={() => setUstChartRange(range)}
-                          style={{
-                            border: `1px solid ${ustChartRange === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-                            ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                            fontSize: '0.75rem',
-                            padding: '4px 10px',
-                          }}
-                        >
-                          {range.toUpperCase()}
-                        </button>
-                      ))}
-                      </div>
-                    {ustSelection?.type === 'spread' && (
-                      <label className={styles.ustLookbackWrap}>
-                        <span className={styles.ustLookbackLabel}>Lookback (days):</span>
-                        <input
-                          className={styles.laborInput}
-                          type="number"
-                          min="1"
-                          value={regimeLookback}
-                          onChange={(e) => setRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
-                          style={{ width: '50px' }}
-                        />
-                      </label>
+                    legend={ustSelection?.type === 'spread'
+                      ? regimeLegend(ustSelection.label)
+                      : [{ label: ustSelection?.label ?? '', color: UST_FAMILY_COLORS.nominal }]}
+                    actions={(
+                      <>
+                        {rangeToggle(ustChartRange, setUstChartRange)}
+                        {ustSelection?.type === 'spread' && (
+                          <label className={styles.ustLookback}>
+                            <span>Lookback (days):</span>
+                            <input
+                              className={styles.laborInput}
+                              type="number"
+                              min="1"
+                              value={regimeLookback}
+                              onChange={(e) => setRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
+                            />
+                          </label>
+                        )}
+                      </>
                     )}
-                  </div>
-
-                  {ustSelection?.type === 'spread' && (
-                    <div className={styles.ustRegimeLegend}>
-                      {Object.entries(REGIME_COLORS).map(([name, color]) => (
-                        <span key={name} className={styles.ustRegimeLegendItem}>
-                          <span className={styles.ustRegimeSwatch} style={{ background: color }} />
-                          {name}
-                        </span>
-                      ))}
-                      <span className={styles.ustRegimeLegendItem}>
-                        <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-                        {ustSelection.label}
-                      </span>
-                    </div>
-                  )}
-
-                  {ustSelection?.type === 'butterfly' ? (
-                    <ResponsiveContainer width="100%" height={420}>
-                      <LineChart data={butterflyChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="date"
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(date: string) => {
-                            const d = new Date(date)
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                            return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                          }}
-                          interval="preserveStartEnd"
-                          minTickGap={60}
-                        />
-                        <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                        />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
-                        <Tooltip
-                          contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                          formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
-                        />
-                        <Line type="monotone" dataKey="value" stroke="#60a5fa" strokeWidth={2} dot={false} />
-                        <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                      </LineChart>
+                    height={420}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      {ustSelection?.type === 'butterfly' ? (
+                        <LineChart data={butterflyChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                          <CartesianGrid {...chartTheme.grid} />
+                          <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                          <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
+                          <ReferenceLine y={0} {...referenceLines.zero} />
+                          <Tooltip {...chartTheme.tooltip} formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')} />
+                          <Line type="monotone" dataKey="value" stroke={UST_FAMILY_COLORS.nominal} strokeWidth={2} dot={false} />
+                          <Brush dataKey="date" {...chartTheme.brush} />
+                        </LineChart>
+                      ) : ustSelection?.type === 'yield' ? (
+                        <LineChart data={ustChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                          <CartesianGrid {...chartTheme.grid} />
+                          <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                          <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(2)}%`} domain={['auto', 'auto']} />
+                          <Tooltip {...chartTheme.tooltip} formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')} />
+                          <Line type="monotone" dataKey="value" stroke={UST_FAMILY_COLORS.nominal} strokeWidth={2} dot={false} />
+                          <Brush dataKey="date" {...chartTheme.brush} />
+                        </LineChart>
+                      ) : (
+                        <ComposedChart data={ustSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                          <CartesianGrid {...chartTheme.grid} />
+                          <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                          <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
+                          <Tooltip {...chartTheme.tooltip} cursor={chartTheme.barTooltipCursor} formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')} />
+                          <Bar dataKey="spread" barSize={3}>
+                            {ustSpreadChartData.map((point, idx) => (
+                              <Cell key={idx} fill={regimeColor(point.regime)} />
+                            ))}
+                          </Bar>
+                          <Line type="monotone" dataKey="spread" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
+                          <Brush dataKey="date" {...chartTheme.brush} />
+                        </ComposedChart>
+                      )}
                     </ResponsiveContainer>
-                  ) : ustSelection?.type === 'yield' ? (
-                    <ResponsiveContainer width="100%" height={420}>
-                      <LineChart data={ustChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="date"
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(date: string) => {
-                            const d = new Date(date)
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                            return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                          }}
-                          interval="preserveStartEnd"
-                          minTickGap={60}
-                        />
-                        <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                          domain={['auto', 'auto']}
-                        />
-                        <Tooltip
-                          contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                          labelStyle={{ color: '#94A3B8' }}
-                          formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                        />
-                        <Line type="monotone" dataKey="value" stroke="#60a5fa" strokeWidth={2} dot={false} />
-                        <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={420}>
-                      <ComposedChart data={ustSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis
-                          dataKey="date"
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(date: string) => {
-                            const d = new Date(date)
-                            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                            return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                          }}
-                          interval="preserveStartEnd"
-                          minTickGap={60}
-                        />
-                        <YAxis
-                          stroke="#728197"
-                          tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                          tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                        />
-                        <Tooltip
-                          contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                          labelStyle={{ color: '#94A3B8' }}
-                          formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
-                        />
-                        <Bar dataKey="spread" barSize={3}>
-                          {ustSpreadChartData.map((point, idx) => (
-                            <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
-                          ))}
-                        </Bar>
-                        <Line type="monotone" dataKey="spread" stroke="#ffffff" strokeWidth={1.5} dot={false} />
-                        <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  )}
+                  </AcmChartFrame>
                 </>
               )}
-            </div>
+            </AcmPanel>
 
             {!ustLoading && !ustError && (
-              <div className={styles.ustDashboard}>
-                <div className={styles.ustSectionLabel} style={{ color: '#4ade80' }}>REAL YIELDS &amp; SPREADS</div>
-                <div className={styles.realYieldRow}>
-                  <div
-                    className={`${styles.ustYieldBox} ${realSelection.type === 'realYield' && realSelection.key === '5y' ? styles.ustBoxSelectedGreen : ''}`}
-                    onClick={() => setRealSelection({ type: 'realYield', key: '5y', label: '5Y Real' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustYieldLabel} style={{ color: '#4ade80' }}>5Y REAL</div>
-                    <div className={styles.ustYieldValue} style={{ color: '#4ade80' }}>
-                      {realYields.real5y.current != null ? `${realYields.real5y.current.toFixed(2)}%` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustYieldChange}
-                      style={{
-                        color: realYields.real5y.change != null
-                          ? realYields.real5y.change > 0 ? '#4EC9B0' : realYields.real5y.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {realYields.real5y.change != null ? `${realYields.real5y.change > 0 ? '+' : ''}${(realYields.real5y.change * 100).toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`${styles.ustYieldBox} ${realSelection.type === 'realYield' && realSelection.key === '10y' ? styles.ustBoxSelectedGreen : ''}`}
-                    onClick={() => setRealSelection({ type: 'realYield', key: '10y', label: '10Y Real' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustYieldLabel} style={{ color: '#4ade80' }}>10Y REAL</div>
-                    <div className={styles.ustYieldValue} style={{ color: '#4ade80' }}>
-                      {realYields.real10y.current != null ? `${realYields.real10y.current.toFixed(2)}%` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustYieldChange}
-                      style={{
-                        color: realYields.real10y.change != null
-                          ? realYields.real10y.change > 0 ? '#4EC9B0' : realYields.real10y.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {realYields.real10y.change != null ? `${realYields.real10y.change > 0 ? '+' : ''}${(realYields.real10y.change * 100).toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`${styles.ustSpreadBox} ${realSelection.type === 'realSpread' ? styles.ustBoxSelectedGreen : ''}`}
-                    onClick={() => setRealSelection({ type: 'realSpread', label: '5s10s real' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustSpreadLabel} style={{ color: '#4ade80' }}>5s10s real</div>
-                    <div
-                      className={styles.ustSpreadValue}
-                      style={{
-                        color: realYields.realSpread.current != null
-                          ? realYields.realSpread.current > 0 ? '#4EC9B0' : realYields.realSpread.current < 0 ? '#EF5350' : '#e2e8f0'
-                          : '#728197',
-                      }}
-                    >
-                      {realYields.realSpread.current != null ? `${realYields.realSpread.current > 0 ? '+' : ''}${realYields.realSpread.current.toFixed(1)}bp` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustSpreadChange}
-                      style={{
-                        color: realYields.realSpread.change != null
-                          ? realYields.realSpread.change > 0 ? '#4EC9B0' : realYields.realSpread.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {realYields.realSpread.change != null ? `${realYields.realSpread.change > 0 ? '+' : ''}${realYields.realSpread.change.toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
+              <AcmPanel title="REAL YIELDS & SPREADS">
+                <div className={`${styles.ustTiles} ${styles.ustTiles3}`}>
+                  <UstTile
+                    family={UST_FAMILY_COLORS.real}
+                    label="5Y REAL"
+                    value={realYields.real5y.current != null ? `${realYields.real5y.current.toFixed(2)}%` : '—'}
+                    valueIsFamily
+                    change={realYields.real5y.change != null ? fmtSignedFixed(realYields.real5y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(realYields.real5y.change == null ? null : realYields.real5y.change * 100)}
+                    selected={realSelection.type === 'realYield' && realSelection.key === '5y'}
+                    onSelect={() => setRealSelection({ type: 'realYield', key: '5y', label: '5Y Real' })}
+                  />
+                  <UstTile
+                    family={UST_FAMILY_COLORS.real}
+                    label="10Y REAL"
+                    value={realYields.real10y.current != null ? `${realYields.real10y.current.toFixed(2)}%` : '—'}
+                    valueIsFamily
+                    change={realYields.real10y.change != null ? fmtSignedFixed(realYields.real10y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(realYields.real10y.change == null ? null : realYields.real10y.change * 100)}
+                    selected={realSelection.type === 'realYield' && realSelection.key === '10y'}
+                    onSelect={() => setRealSelection({ type: 'realYield', key: '10y', label: '10Y Real' })}
+                  />
+                  <UstTile
+                    family={UST_FAMILY_COLORS.real}
+                    label="5s10s real"
+                    value={realYields.realSpread.current != null ? fmtSignedFixed(realYields.realSpread.current, 1, 'bp') : '—'}
+                    valueClass={ustLevelClass(realYields.realSpread.current)}
+                    change={realYields.realSpread.change != null ? fmtSignedFixed(realYields.realSpread.change, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(realYields.realSpread.change)}
+                    selected={realSelection.type === 'realSpread'}
+                    onSelect={() => setRealSelection({ type: 'realSpread', label: '5s10s real' })}
+                  />
                 </div>
 
-                <div className={styles.ustChartTitle}>
-                  {realSelection.type === 'realYield'
+                <AcmChartFrame
+                  title={realSelection.type === 'realYield'
                     ? `${realSelection.label} YIELD`
                     : `${realSelection.label} yield curve regimes`}
-                </div>
-
-                <div className={styles.ustChartControls}>
-                  <div className={styles.ustRangeBar}>
-                    {['3m', '6m', '1y', '5y', '10y', 'all'].map((range, idx) => (
-                      <button
-                        key={range}
-                        className={`${styles.fvmRangeBtn} ${realChartRange === range ? styles.fvmRangeBtnActive : ''}`}
-                        onClick={() => setRealChartRange(range)}
-                        style={{
-                          border: `1px solid ${realChartRange === range ? '#4ade80' : 'rgba(255, 255, 255, 0.12)'}`,
-                          ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                        }}
-                      >
-                        {range.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                  {realSelection.type === 'realSpread' && (
-                    <label className={styles.ustLookbackWrap}>
-                      <span className={styles.ustLookbackLabel}>Lookback (days):</span>
-                      <input
-                        className={styles.laborInput}
-                        type="number"
-                        min="1"
-                        value={realRegimeLookback}
-                        onChange={(e) => setRealRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
-                        style={{ width: '50px' }}
-                      />
-                    </label>
+                  legend={realSelection.type === 'realSpread'
+                    ? regimeLegend(realSelection.label)
+                    : [{ label: realSelection.label, color: UST_FAMILY_COLORS.real }]}
+                  actions={(
+                    <>
+                      {rangeToggle(realChartRange, setRealChartRange)}
+                      {realSelection.type === 'realSpread' && (
+                        <label className={styles.ustLookback}>
+                          <span>Lookback (days):</span>
+                          <input
+                            className={styles.laborInput}
+                            type="number"
+                            min="1"
+                            value={realRegimeLookback}
+                            onChange={(e) => setRealRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
+                          />
+                        </label>
+                      )}
+                    </>
                   )}
-                </div>
-
-                {realSelection.type === 'realSpread' && (
-                  <div className={styles.ustRegimeLegend}>
-                    {Object.entries(REGIME_COLORS).map(([name, color]) => (
-                      <span key={name} className={styles.ustRegimeLegendItem}>
-                        <span className={styles.ustRegimeSwatch} style={{ background: color }} />
-                        {name}
-                      </span>
-                    ))}
-                    <span className={styles.ustRegimeLegendItem}>
-                      <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-                      {realSelection.label}
-                    </span>
-                  </div>
-                )}
-
-                {realSelection.type === 'realYield' ? (
-                  <ResponsiveContainer width="100%" height={420}>
-                    <LineChart data={realChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(date: string) => {
-                          const d = new Date(date)
-                          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                          return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                        }}
-                        interval="preserveStartEnd"
-                        minTickGap={60}
-                      />
-                      <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                        domain={['auto', 'auto']}
-                      />
-                      <Tooltip
-                        contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                        labelStyle={{ color: '#94A3B8' }}
-                        formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      />
-                      <Line type="monotone" dataKey="value" stroke="#4ade80" strokeWidth={2} dot={false} />
-                      <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </LineChart>
+                  height={420}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    {realSelection.type === 'realYield' ? (
+                      <LineChart data={realChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(2)}%`} domain={['auto', 'auto']} />
+                        <Tooltip {...chartTheme.tooltip} formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')} />
+                        <Line type="monotone" dataKey="value" stroke={UST_FAMILY_COLORS.real} strokeWidth={2} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </LineChart>
+                    ) : (
+                      <ComposedChart data={realSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
+                        <Tooltip {...chartTheme.tooltip} cursor={chartTheme.barTooltipCursor} formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')} />
+                        <Bar dataKey="spread" barSize={3}>
+                          {realSpreadChartData.map((point, idx) => (
+                            <Cell key={idx} fill={regimeColor(point.regime)} />
+                          ))}
+                        </Bar>
+                        <Line type="monotone" dataKey="spread" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </ComposedChart>
+                    )}
                   </ResponsiveContainer>
-                ) : (
-                  <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={realSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(date: string) => {
-                          const d = new Date(date)
-                          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                          return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                        }}
-                        interval="preserveStartEnd"
-                        minTickGap={60}
-                      />
-                      <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                      />
-                      <Tooltip
-                        contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                        labelStyle={{ color: '#94A3B8' }}
-                        formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(1)}bp` : '—')}
-                      />
-                      <Bar dataKey="spread" barSize={3}>
-                        {realSpreadChartData.map((point, idx) => (
-                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
-                        ))}
-                      </Bar>
-                      <Line type="monotone" dataKey="spread" stroke="#ffffff" strokeWidth={1.5} dot={false} />
-                      <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+                </AcmChartFrame>
+              </AcmPanel>
             )}
 
             {!ustLoading && !ustError && (
-              <div className={styles.ustDashboard}>
-                <div className={styles.ustSectionLabel} style={{ color: '#fbbf24' }}>INFLATION BREAKEVENS</div>
-
-                <div className={styles.realYieldRow}>
-                  <div
-                    className={`${styles.ustYieldBox} ${beSelection.type === 'beYield' && beSelection.key === '5y' ? styles.ustBoxSelectedYellow : ''}`}
-                    onClick={() => setBeSelection({ type: 'beYield', key: '5y', label: '5Y BE' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustYieldLabel} style={{ color: '#fbbf24' }}>5Y BE</div>
-                    <div className={styles.ustYieldValue} style={{ color: '#fbbf24' }}>
-                      {breakevens.be5y.current != null ? `${breakevens.be5y.current.toFixed(2)}%` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustYieldChange}
-                      style={{
-                        color: breakevens.be5y.change != null
-                          ? breakevens.be5y.change > 0 ? '#4EC9B0' : breakevens.be5y.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {breakevens.be5y.change != null ? `${breakevens.be5y.change > 0 ? '+' : ''}${(breakevens.be5y.change * 100).toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`${styles.ustYieldBox} ${beSelection.type === 'beYield' && beSelection.key === '10y' ? styles.ustBoxSelectedYellow : ''}`}
-                    onClick={() => setBeSelection({ type: 'beYield', key: '10y', label: '10Y BE' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustYieldLabel} style={{ color: '#fbbf24' }}>10Y BE</div>
-                    <div className={styles.ustYieldValue} style={{ color: '#fbbf24' }}>
-                      {breakevens.be10y.current != null ? `${breakevens.be10y.current.toFixed(2)}%` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustYieldChange}
-                      style={{
-                        color: breakevens.be10y.change != null
-                          ? breakevens.be10y.change > 0 ? '#4EC9B0' : breakevens.be10y.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {breakevens.be10y.change != null ? `${breakevens.be10y.change > 0 ? '+' : ''}${(breakevens.be10y.change * 100).toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
-
-                  <div
-                    className={`${styles.ustSpreadBox} ${beSelection.type === 'beSpread' ? styles.ustBoxSelectedYellow : ''}`}
-                    onClick={() => setBeSelection({ type: 'beSpread', label: '5s10s BE' })}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <div className={styles.ustSpreadLabel} style={{ color: '#fbbf24' }}>5s10s BE</div>
-                    <div
-                      className={styles.ustSpreadValue}
-                      style={{
-                        color: breakevens.beSpread.current != null
-                          ? breakevens.beSpread.current > 0 ? '#4EC9B0' : breakevens.beSpread.current < 0 ? '#EF5350' : '#e2e8f0'
-                          : '#728197',
-                      }}
-                    >
-                      {breakevens.beSpread.current != null ? `${breakevens.beSpread.current > 0 ? '+' : ''}${breakevens.beSpread.current.toFixed(1)}bp` : '—'}
-                    </div>
-                    <div
-                      className={styles.ustSpreadChange}
-                      style={{
-                        color: breakevens.beSpread.change != null
-                          ? breakevens.beSpread.change > 0 ? '#4EC9B0' : breakevens.beSpread.change < 0 ? '#EF5350' : '#728197'
-                          : '#728197',
-                      }}
-                    >
-                      {breakevens.beSpread.change != null ? `${breakevens.beSpread.change > 0 ? '+' : ''}${breakevens.beSpread.change.toFixed(1)}bp` : '—'}
-                    </div>
-                  </div>
+              <AcmPanel title="INFLATION BREAKEVENS">
+                <div className={`${styles.ustTiles} ${styles.ustTiles3}`}>
+                  <UstTile
+                    family={UST_FAMILY_COLORS.breakeven}
+                    label="5Y BE"
+                    value={breakevens.be5y.current != null ? `${breakevens.be5y.current.toFixed(2)}%` : '—'}
+                    valueIsFamily
+                    change={breakevens.be5y.change != null ? fmtSignedFixed(breakevens.be5y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(breakevens.be5y.change == null ? null : breakevens.be5y.change * 100)}
+                    selected={beSelection.type === 'beYield' && beSelection.key === '5y'}
+                    onSelect={() => setBeSelection({ type: 'beYield', key: '5y', label: '5Y BE' })}
+                  />
+                  <UstTile
+                    family={UST_FAMILY_COLORS.breakeven}
+                    label="10Y BE"
+                    value={breakevens.be10y.current != null ? `${breakevens.be10y.current.toFixed(2)}%` : '—'}
+                    valueIsFamily
+                    change={breakevens.be10y.change != null ? fmtSignedFixed(breakevens.be10y.change * 100, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(breakevens.be10y.change == null ? null : breakevens.be10y.change * 100)}
+                    selected={beSelection.type === 'beYield' && beSelection.key === '10y'}
+                    onSelect={() => setBeSelection({ type: 'beYield', key: '10y', label: '10Y BE' })}
+                  />
+                  <UstTile
+                    family={UST_FAMILY_COLORS.breakeven}
+                    label="5s10s BE"
+                    value={breakevens.beSpread.current != null ? fmtSignedFixed(breakevens.beSpread.current, 1, 'bp') : '—'}
+                    valueClass={ustLevelClass(breakevens.beSpread.current)}
+                    change={breakevens.beSpread.change != null ? fmtSignedFixed(breakevens.beSpread.change, 1, 'bp') : '—'}
+                    changeClass={ustChangeClass(breakevens.beSpread.change)}
+                    selected={beSelection.type === 'beSpread'}
+                    onSelect={() => setBeSelection({ type: 'beSpread', label: '5s10s BE' })}
+                  />
                 </div>
 
-                <div className={styles.ustChartTitle}>
-                  {beSelection.type === 'beYield'
+                <AcmChartFrame
+                  title={beSelection.type === 'beYield'
                     ? `${beSelection.label}`
                     : `${beSelection.label} yield curve regimes`}
-                </div>
-
-                <div className={styles.ustChartControls}>
-                  <div className={styles.ustRangeBar}>
-                    {['3m', '6m', '1y', '5y', '10y', 'all'].map((range, idx) => (
-                      <button
-                        key={range}
-                        className={`${styles.fvmRangeBtn} ${beChartRange === range ? styles.fvmRangeBtnActive : ''}`}
-                        onClick={() => setBeChartRange(range)}
-                        style={{
-                          border: `1px solid ${beChartRange === range ? '#fbbf24' : 'rgba(255, 255, 255, 0.12)'}`,
-                          ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                          fontSize: '0.75rem',
-                          padding: '4px 10px',
-                          ...(beChartRange === range ? { color: '#fbbf24', background: 'rgba(251, 191, 36, 0.08)' } : {}),
-                        }}
-                      >
-                        {range.toUpperCase()}
-                      </button>
-                    ))}
-                  </div>
-                  {beSelection.type === 'beSpread' && (
-                    <label className={styles.ustLookbackWrap}>
-                      <span className={styles.ustLookbackLabel}>Lookback (days):</span>
-                      <input
-                        className={styles.laborInput}
-                        type="number"
-                        min="1"
-                        value={beRegimeLookback}
-                        onChange={(e) => setBeRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
-                        style={{ width: '50px' }}
-                      />
-                    </label>
+                  legend={beSelection.type === 'beSpread'
+                    ? regimeLegend(beSelection.label)
+                    : [{ label: beSelection.label, color: UST_FAMILY_COLORS.breakeven }]}
+                  actions={(
+                    <>
+                      {rangeToggle(beChartRange, setBeChartRange)}
+                      {beSelection.type === 'beSpread' && (
+                        <label className={styles.ustLookback}>
+                          <span>Lookback (days):</span>
+                          <input
+                            className={styles.laborInput}
+                            type="number"
+                            min="1"
+                            value={beRegimeLookback}
+                            onChange={(e) => setBeRegimeLookback(Math.max(1, Number.parseInt(e.target.value, 10) || 20))}
+                          />
+                        </label>
+                      )}
+                    </>
                   )}
-                </div>
-
-                {beSelection.type === 'beSpread' && (
-                  <div className={styles.ustRegimeLegend}>
-                    {Object.entries(REGIME_COLORS).map(([name, color]) => (
-                      <span key={name} className={styles.ustRegimeLegendItem}>
-                        <span className={styles.ustRegimeSwatch} style={{ background: color }} />
-                        {name}
-                      </span>
-                    ))}
-                    <span className={styles.ustRegimeLegendItem}>
-                      <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-                      {beSelection.label}
-                    </span>
-                  </div>
-                )}
-
-                {beSelection.type === 'beYield' ? (
-                  <ResponsiveContainer width="100%" height={420}>
-                    <LineChart data={beChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(date: string) => {
-                          const d = new Date(date)
-                          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                          return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                        }}
-                        interval="preserveStartEnd"
-                        minTickGap={60}
-                      />
-                      <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-                        domain={['auto', 'auto']}
-                      />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="value" stroke="#fbbf24" strokeWidth={2} dot={false} />
-                      <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </LineChart>
+                  height={420}
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    {beSelection.type === 'beYield' ? (
+                      <LineChart data={beChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(2)}%`} domain={['auto', 'auto']} />
+                        <Tooltip {...chartTheme.tooltip} />
+                        <Line type="monotone" dataKey="value" stroke={UST_FAMILY_COLORS.breakeven} strokeWidth={2} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </LineChart>
+                    ) : (
+                      <ComposedChart data={beSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
+                        <Tooltip {...chartTheme.tooltip} cursor={chartTheme.barTooltipCursor} />
+                        <Bar dataKey="spread" barSize={3}>
+                          {beSpreadChartData.map((point, idx) => (
+                            <Cell key={idx} fill={regimeColor(point.regime)} />
+                          ))}
+                        </Bar>
+                        <Line type="monotone" dataKey="spread" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </ComposedChart>
+                    )}
                   </ResponsiveContainer>
-                ) : (
-                  <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={beSpreadChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="date"
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(date: string) => {
-                          const d = new Date(date)
-                          const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-                          return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                        }}
-                        interval="preserveStartEnd"
-                        minTickGap={60}
-                      />
-                      <YAxis
-                        stroke="#728197"
-                        tick={{ fontSize: 12, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                        tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                      />
-                      <Tooltip />
-                      <Bar dataKey="spread" barSize={3}>
-                        {beSpreadChartData.map((point, idx) => (
-                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
-                        ))}
-                      </Bar>
-                      <Line type="monotone" dataKey="spread" stroke="#ffffff" strokeWidth={1.5} dot={false} />
-                      <Brush dataKey="date" height={30} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+                </AcmChartFrame>
+              </AcmPanel>
             )}
-          </section>
+          </div>
         )}
 
         {(['gilt', 'bund', 'oat', 'btp', 'cad', 'jgb', 'agb'] as ViewTab[]).includes(activeView) && (
@@ -4155,493 +3804,302 @@ export function STIRDashboardPage() {
         )}
 
         {activeView === 'attribution' && (
-          <div>
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustYcHeader}>
-                <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: 0 }}>
-                  5Y NOMINAL YIELD — CHANGE ATTRIBUTION
-                </div>
-                <div className={styles.ustYcControls}>
-                  <label className={styles.ustLookbackWrap}>
-                    <span className={styles.ustLookbackLabel}>Window:</span>
-                    <input className={styles.laborInput} type="number" min="1" value={attrLookback} onChange={(e) => setAttrLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '50px' }} />
-                    <span className={styles.ustLookbackLabel}>d</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className={styles.ustChartControls}>
-                <div className={styles.ustRangeBar}>
-                  {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                    <button
-                      key={range}
-                      className={styles.fvmRangeBtn}
-                      onClick={() => setAttrChartRange(range)}
-                      style={{
-                        border: `1px solid ${attrChartRange === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                        ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                        fontSize: '0.75rem',
-                        padding: '4px 10px',
-                        color: attrChartRange === range ? '#e2e8f0' : '#728197',
-                        background: attrChartRange === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent',
-                      }}
-                    >
-                      {range.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles.ustRegimeLegend}>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-                  5Y Nominal Δ
-                </span>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#ef5350' }} />
-                  Breakeven Δ
-                </span>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />
-                  Real Yield Δ
-                </span>
-              </div>
-
-              {ustLoading ? (
-                <div className={styles.loading}>Loading attribution data…</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={500}>
-                  <ComposedChart data={attrChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }} stackOffset="sign">
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#728197"
-                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                      tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }}
-                      interval="preserveStartEnd"
-                      minTickGap={60}
-                    />
-                    <YAxis
-                      stroke="#728197"
-                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                      tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                      domain={['auto', 'auto']}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
-                      labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-                      formatter={(value: unknown, name: string | undefined) => {
-                        const labels: Record<string, string> = { nominalChg: '5Y Nominal Δ', beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
-                        return [typeof value === 'number' ? `${value > 0 ? '+' : ''}${value.toFixed(1)}bp` : '—', labels[name ?? ''] || (name ?? '')]
-                      }}
-                    />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                    <Bar dataKey="beChg" stackId="attr" fill="#ef5350" name="beChg" barSize={3} />
-                    <Bar dataKey="realChg" stackId="attr" fill="#60a5fa" name="realChg" barSize={3} />
-                    <Line type="monotone" dataKey="nominalChg" stroke="#ffffff" strokeWidth={1.5} dot={false} name="nominalChg" />
-                    <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
-                10Y NOMINAL YIELD — CHANGE ATTRIBUTION
-              </div>
-              <div className={styles.ustRegimeLegend}>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#ffffff', height: '2px', borderRadius: '1px' }} />
-                  10Y Nominal Δ
-                </span>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#ef5350' }} />
-                  Breakeven Δ
-                </span>
-                <span className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />
-                  Real Yield Δ
-                </span>
-              </div>
-              {ustLoading ? (
-                <div className={styles.loading}>Loading attribution data…</div>
-              ) : (
-                <ResponsiveContainer width="100%" height={500}>
-                  <ComposedChart data={attr10yChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }} stackOffset="sign">
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#728197"
-                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                      tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }}
-                      interval="preserveStartEnd"
-                      minTickGap={60}
-                    />
-                    <YAxis
-                      stroke="#728197"
-                      tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                      tickFormatter={(v: number) => `${v.toFixed(0)}bp`}
-                      domain={['auto', 'auto']}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
-                      labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-                      formatter={(value: unknown, name: string | undefined) => {
-                        const labels: Record<string, string> = { nominalChg: '10Y Nominal Δ', beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
-                        return [typeof value === 'number' ? `${value > 0 ? '+' : ''}${value.toFixed(1)}bp` : '—', labels[name ?? ''] || (name ?? '')]
-                      }}
-                    />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                    <Bar dataKey="beChg" stackId="attr" fill="#ef5350" name="beChg" barSize={3} />
-                    <Bar dataKey="realChg" stackId="attr" fill="#60a5fa" name="realChg" barSize={3} />
-                    <Line type="monotone" dataKey="nominalChg" stroke="#ffffff" strokeWidth={1.5} dot={false} name="nominalChg" />
-                    <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-            </div>
+          <div className={styles.ustStack}>
+            {([
+              { tenor: '5Y', data: attrChartData, controls: true },
+              { tenor: '10Y', data: attr10yChartData, controls: false },
+            ] as const).map(({ tenor, data, controls }) => (
+              <AcmChartFrame
+                key={tenor}
+                title={`${tenor} NOMINAL YIELD — CHANGE ATTRIBUTION`}
+                legend={[
+                  { label: `${tenor} Nominal Δ`, color: YIELD_ATTRIBUTION_COLORS.nominalDelta },
+                  { label: 'Breakeven Δ', color: YIELD_ATTRIBUTION_COLORS.breakevenDelta },
+                  { label: 'Real Yield Δ', color: YIELD_ATTRIBUTION_COLORS.realDelta },
+                ]}
+                actions={controls ? (
+                  <>
+                    <label className={styles.ustLookback}>
+                      <span>Window:</span>
+                      <input className={styles.laborInput} type="number" min="1" value={attrLookback} onChange={(e) => setAttrLookback(Math.max(1, parseInt(e.target.value) || 20))} />
+                      <span>d</span>
+                    </label>
+                    {rangeToggle(attrChartRange, setAttrChartRange, ATTR_CHART_RANGES)}
+                  </>
+                ) : undefined}
+                height={500}
+              >
+                {ustLoading ? (
+                  <div className={styles.stateMsg}>Loading attribution data…</div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={data} margin={{ top: 10, right: 24, left: 8, bottom: 16 }} stackOffset="sign">
+                      <CartesianGrid {...chartTheme.grid} />
+                      <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                      <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                      <Tooltip
+                        {...chartTheme.tooltip}
+                        cursor={chartTheme.barTooltipCursor}
+                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                        formatter={(value: unknown, name: string | undefined) => {
+                          const labels: Record<string, string> = { nominalChg: `${tenor} Nominal Δ`, beChg: 'Breakeven Δ', realChg: 'Real Yield Δ' }
+                          return [typeof value === 'number' ? fmtSignedFixed(value, 1, 'bp') : '—', labels[name ?? ''] || (name ?? '')]
+                        }}
+                      />
+                      <ReferenceLine y={0} {...referenceLines.zero} />
+                      <Bar dataKey="beChg" stackId="attr" fill={YIELD_ATTRIBUTION_COLORS.breakevenDelta} name="beChg" barSize={3} />
+                      <Bar dataKey="realChg" stackId="attr" fill={YIELD_ATTRIBUTION_COLORS.realDelta} name="realChg" barSize={3} />
+                      <Line type="monotone" dataKey="nominalChg" stroke={YIELD_ATTRIBUTION_COLORS.nominalDelta} strokeWidth={1.5} dot={false} name="nominalChg" />
+                      <Brush dataKey="date" {...chartTheme.brush} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                )}
+              </AcmChartFrame>
+            ))}
           </div>
         )}
 
         {activeView === 'credit' && (
-          <div>
+          <div className={styles.ustStack}>
             {country === 'US' && (
-            <div className={styles.ustDashboard} style={{ marginBottom: '12px' }}>
-              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
-                CREDIT SPREADS
-              </div>
+              <>
+                <AcmChartFrame
+                  title="CREDIT SPREADS"
+                  legend={CREDIT_SERIES_CONFIG.map((s) => ({
+                    label: s.label,
+                    color: s.color,
+                    hidden: !creditVisibleSeries[s.key],
+                    onClick: () => toggleCreditSeries(s.key),
+                  }))}
+                  actions={rangeToggle(creditOverviewRange, setCreditOverviewRange, CREDIT_CHART_RANGES)}
+                  height={350}
+                >
+                  {ustLoading ? (
+                    <div className={styles.stateMsg}>Loading credit data…</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={creditOverviewChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={60} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                        <Tooltip
+                          {...chartTheme.tooltip}
+                          labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                          formatter={(value: unknown, name: string | undefined) => {
+                            const cfg = CREDIT_SERIES_CONFIG.find((s) => s.key === name)
+                            return [typeof value === 'number' ? `${value.toFixed(0)}bp` : '—', cfg?.label || (name ?? '')]
+                          }}
+                        />
+                        {CREDIT_SERIES_CONFIG.map((s) => (
+                          creditVisibleSeries[s.key] ? (
+                            <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={1.5} dot={false} connectNulls name={s.key} />
+                          ) : null
+                        ))}
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </AcmChartFrame>
 
-              <div className={styles.ustRangeBar} style={{ marginBottom: '6px' }}>
-                {['3m', '6m', '1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
-                  <button
-                    key={range}
-                    className={styles.fvmRangeBtn}
-                    onClick={() => setCreditOverviewRange(range)}
-                    style={{
-                      border: `1px solid ${creditOverviewRange === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-                      ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                      fontSize: '0.75rem',
-                      padding: '4px 10px',
-                      color: creditOverviewRange === range ? '#60a5fa' : '#728197',
-                      background: creditOverviewRange === range ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
-                    }}
-                  >
-                    {range.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+                {!ustLoading && (
+                  <AcmDataTable
+                    className={styles.creditDashboard}
+                    columns={creditDashboardColumns}
+                    rows={creditSpreadDashboard}
+                    rowKey={(row) => row.label}
+                  />
+                )}
+              </>
+            )}
 
-              <div className={styles.creditLegend}>
-                {CREDIT_SERIES_CONFIG.map((s) => (
-                  <button
-                    key={s.key}
-                    className={`${styles.creditLegendItem} ${!creditVisibleSeries[s.key] ? styles.creditLegendItemOff : ''}`}
-                    onClick={() => toggleCreditSeries(s.key)}
-                  >
-                    <span className={styles.creditLegendSwatch} style={{ background: s.color }} />
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {ustLoading ? (
-                <div className={styles.loading}>Loading credit data…</div>
-              ) : (
+            <AcmPanel
+              title={creditRegimeSectionLabel}
+              actions={(
                 <>
-                  <ResponsiveContainer width="100%" height={350}>
-                    <LineChart data={creditOverviewChartData} margin={{ top: 10, right: 24, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={60} />
-                      <YAxis stroke="#728197" tick={{ fontSize: 11, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.7rem' }}
-                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-                        formatter={(value: unknown, name: string | undefined) => {
-                          const cfg = CREDIT_SERIES_CONFIG.find((s) => s.key === name)
-                          return [typeof value === 'number' ? `${value.toFixed(0)}bp` : '—', cfg?.label || (name ?? '')]
-                        }}
-                      />
-                      {CREDIT_SERIES_CONFIG.map((s) => (
-                        creditVisibleSeries[s.key] ? (
-                          <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.color} strokeWidth={1.5} dot={false} connectNulls name={s.key} />
-                        ) : null
-                      ))}
-                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </LineChart>
-                  </ResponsiveContainer>
-
-                  <table className={styles.creditTable}>
-                    <thead>
-                      <tr>
-                        <th className={styles.creditThLeft}>Spread</th>
-                        <th>Last (bp)</th>
-                        <th>1D Δ</th>
-                        <th>1W Δ</th>
-                        <th>1M Δ</th>
-                        <th>3MO Δ</th>
-                        <th>6MO Δ</th>
-                        <th>YTD Δ</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {creditSpreadDashboard.map((row) => (
-                        <tr key={row.label}>
-                          <td className={styles.creditSpreadName}>{row.label}</td>
-                          <td className={styles.creditSpreadLast}>{row.current != null ? row.current.toFixed(0) : '—'}</td>
-                          {row.changes.map((chg, idx) => (
-                            <td
-                              key={idx}
-                              style={{
-                                color: chg != null ? (chg > 0 ? '#EF5350' : chg < 0 ? '#4EC9B0' : '#728197') : '#728197',
-                                background: getCreditCellBg(chg, idx),
-                              }}
-                            >
-                              {chg != null ? `${chg > 0 ? '+' : ''}${chg.toFixed(0)}` : '—'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  {rangeToggle(creditChartRange, setCreditChartRange, CREDIT_CHART_RANGES)}
+                  <label className={styles.ustLookback}>
+                    <span>Regime:</span>
+                    <input className={styles.laborInput} type="number" min="1" value={creditRegimeLookback} onChange={(e) => setCreditRegimeLookback(Math.max(1, parseInt(e.target.value) || 20))} />
+                    <span>d</span>
+                  </label>
+                  <label className={styles.ustLookback}>
+                    <span>RoC:</span>
+                    <input className={styles.laborInput} type="number" min="1" value={creditRocLookback} onChange={(e) => setCreditRocLookback(Math.max(1, parseInt(e.target.value) || 20))} />
+                    <span>d</span>
+                  </label>
                 </>
               )}
-            </div>
-            )}
-
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 8px' }}>
-                {creditRegimeSectionLabel}
-              </div>
-            <div className={styles.creditControlsRow}>
-              <div className={styles.ustRangeBar}>
-                {['3m', '6m', '1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
-                  <button
-                    key={range}
-                    className={styles.fvmRangeBtn}
-                    onClick={() => setCreditChartRange(range)}
-                    style={{
-                      border: `1px solid ${creditChartRange === range ? '#60a5fa' : 'rgba(255, 255, 255, 0.12)'}`,
-                      ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                      fontSize: '0.75rem',
-                      padding: '4px 10px',
-                      color: creditChartRange === range ? '#60a5fa' : '#728197',
-                      background: creditChartRange === range ? 'rgba(96, 165, 250, 0.08)' : 'transparent',
-                    }}
+            >
+              {creditTabLoading ? (
+                <div className={styles.stateMsg}>Loading credit data…</div>
+              ) : (
+                <div className={styles.ustPair}>
+                  <AcmChartFrame
+                    title={creditOasLabel}
+                    subtitle={`w/ 2s10s Curve Regimes (${creditRegimeLookback}d)`}
+                    legend={regimeLegend()}
+                    height={420}
                   >
-                    {range.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <label className={styles.ustLookbackWrap}>
-                  <span className={styles.ustLookbackLabel}>Regime:</span>
-                  <input className={styles.laborInput} type="number" min="1" value={creditRegimeLookback} onChange={(e) => setCreditRegimeLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '45px' }} />
-                  <span className={styles.ustLookbackLabel}>d</span>
-                </label>
-                <label className={styles.ustLookbackWrap}>
-                  <span className={styles.ustLookbackLabel}>RoC:</span>
-                  <input className={styles.laborInput} type="number" min="1" value={creditRocLookback} onChange={(e) => setCreditRocLookback(Math.max(1, parseInt(e.target.value) || 20))} style={{ width: '45px' }} />
-                  <span className={styles.ustLookbackLabel}>d</span>
-                </label>
-              </div>
-            </div>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={creditLevelData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(1)} domain={creditOasAxis.domain} ticks={creditOasAxis.ticks} />
+                        <Tooltip
+                          {...chartTheme.tooltip}
+                          cursor={chartTheme.barTooltipCursor}
+                          labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                          formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(2)}%` : '—', name === 'oas' ? 'HY OAS' : '']}
+                        />
+                        <Bar dataKey="oas" barSize={3}>
+                          {creditLevelData.map((point, idx) => (
+                            <Cell key={idx} fill={regimeColor(point.regime)} />
+                          ))}
+                        </Bar>
+                        <Line type="monotone" dataKey="oas" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} onChange={creditOasBrush.onChange} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </AcmChartFrame>
 
-            <div className={styles.ustRegimeLegend}>
-              {Object.entries(REGIME_COLORS).map(([name, color]) => (
-                <span key={name} className={styles.ustRegimeLegendItem}>
-                  <span className={styles.ustRegimeSwatch} style={{ background: color }} />
-                  {name}
-                </span>
-              ))}
-            </div>
-
-            {creditTabLoading ? (
-              <div className={styles.loading}>Loading credit data…</div>
-            ) : (
-              <div className={styles.creditChartGrid}>
-                <div>
-                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>{creditOasLabel}</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
-                    w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
-                  </div>
-                  <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={creditLevelData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                      <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}
-                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-                        formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(2)}%` : '—', name === 'oas' ? 'HY OAS' : '']}
-                      />
-                      <Bar dataKey="oas" barSize={3}>
-                        {creditLevelData.map((point, idx) => (
-                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
-                        ))}
-                      </Bar>
-                      <Line type="monotone" dataKey="oas" stroke="#ffffff" strokeWidth={1.5} dot={false} />
-                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
+                  <AcmChartFrame
+                    title={`${creditOasLabel} — ${creditRocLookback}D RATE OF CHANGE`}
+                    subtitle={`w/ 2s10s Curve Regimes (${creditRegimeLookback}d)`}
+                    legend={regimeLegend()}
+                    height={420}
+                  >
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={creditRocData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                        <CartesianGrid {...chartTheme.grid} />
+                        <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                        <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
+                        <Tooltip
+                          {...chartTheme.tooltip}
+                          cursor={chartTheme.barTooltipCursor}
+                          labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                          formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', name === 'roc' ? `${creditRocLookback}d Δ` : '']}
+                        />
+                        <ReferenceLine y={0} {...referenceLines.zero} />
+                        <Bar dataKey="roc" barSize={3}>
+                          {creditRocData.map((point, idx) => (
+                            <Cell key={idx} fill={regimeColor(point.regime)} />
+                          ))}
+                        </Bar>
+                        <Line type="monotone" dataKey="roc" stroke={REGIME_OVERLAY_LINE} strokeWidth={1.5} dot={false} />
+                        <Brush dataKey="date" {...chartTheme.brush} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </AcmChartFrame>
                 </div>
-
-                <div>
-                  <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 2px' }}>{creditOasLabel} — {creditRocLookback}D RATE OF CHANGE</div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#728197', paddingBottom: '8px' }}>
-                    w/ 2s10s Curve Regimes ({creditRegimeLookback}d)
-                  </div>
-                  <ResponsiveContainer width="100%" height={420}>
-                    <ComposedChart data={creditRocData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
-                      <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                      <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                      <Tooltip
-                        contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }}
-                        labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
-                        formatter={(value: unknown, name: string | undefined) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', name === 'roc' ? `${creditRocLookback}d Δ` : '']}
-                      />
-                      <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                      <Bar dataKey="roc" barSize={3}>
-                        {creditRocData.map((point, idx) => (
-                          <Cell key={idx} fill={point.regime ? (REGIME_COLORS[point.regime] || '#728197') : '#728197'} />
-                        ))}
-                      </Bar>
-                      <Line type="monotone" dataKey="roc" stroke="#ffffff" strokeWidth={1.5} dot={false} />
-                      <Brush dataKey="date" height={25} stroke="#728197" fill="#0d1520" travellerWidth={8} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-            </div>
+              )}
+            </AcmPanel>
           </div>
         )}
 
         {activeView === 'money' && (
-          <div>
-            <div className={styles.ustDashboard}>
-              <div className={styles.ustSectionLabel} style={{ color: '#e2e8f0', padding: '0 0 12px' }}>
-                MONEY MARKET RATE SPREADS
-              </div>
-
+          <div className={styles.ustStack}>
+            {/* MONEY MARKETS (R3b). The four charts plot spread / elasticity LEVELS
+                over time — lines coloured by identity (registry), no sign colour.
+                R4: the SCARCITY WARNING threshold is an alert (--acm-alert-strong);
+                the RDE median uses the neutral reference-line style. */}
+            <AcmPanel title="MONEY MARKET RATE SPREADS">
               {ustLoading ? (
-                <div className={styles.loading}>Loading money market data…</div>
+                <div className={styles.stateMsg}>Loading money market data…</div>
               ) : (
-                <div className={styles.mmGrid}>
-                  {/* SOFR − IORB (top left) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − IORB</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Positive spread means banks are lending reserves in repo, reducing liquidity elsewhere</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange1(range)} style={{ border: `1px solid ${mmRange1 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange1 === range ? '#e2e8f0' : '#728197', background: mmRange1 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData1} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − IORB']} />
-                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
-                        <Line type="monotone" dataKey="sofrIorb" stroke="#4EC9B0" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                <div className={styles.ustPair}>
+                  {MM_SPREAD_CHARTS.map((c) => {
+                    const [range, setRange, data] = c.key === 'sofrIorb'
+                      ? [mmRange1, setMmRange1, mmData1] as const
+                      : c.key === 'effrIorb'
+                        ? [mmRange2, setMmRange2, mmData2] as const
+                        : [mmRange3, setMmRange3, mmData3] as const
+                    const axis = mmBpAxis(data.map((pt) => pt[c.key]).filter((v): v is number => typeof v === 'number'), c.scarcity)
+                    return (
+                      <AcmChartFrame
+                        key={c.key}
+                        title={c.title}
+                        subtitle={c.subtitle}
+                        legend={c.scarcity
+                          ? [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }, { label: 'Scarcity warning (0bp)', color: MM_SCARCITY_COLOR }]
+                          : [{ label: c.title, color: MONEY_MARKET_COLORS[c.key] }]}
+                        actions={rangeToggle(range, setRange, MM_CHART_RANGES)}
+                        height={MM_CHART_HEIGHT}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
+                            <CartesianGrid {...chartTheme.grid} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                            {/* explicit whole-bp ticks (mmBpAxis): labels never repeat; 0 always in range on threshold charts */}
+                            <YAxis {...chartTheme.yAxis} ticks={axis.ticks} domain={axis.domain} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                              formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', c.title]}
+                            />
+                            {c.scarcity ? (
+                              // extendDomain: the threshold always draws, even when the data never reaches 0bp
+                              <ReferenceLine
+                                y={0}
+                                ifOverflow="extendDomain"
+                                stroke={MM_SCARCITY_COLOR}
+                                strokeWidth={1.5}
+                                label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', ...referenceLabelStyle, fill: MM_SCARCITY_COLOR }}
+                              />
+                            ) : (
+                              <ReferenceLine y={0} {...referenceLines.zero} />
+                            )}
+                            <Line type="monotone" dataKey={c.key} stroke={MONEY_MARKET_COLORS[c.key]} strokeWidth={1.5} dot={false} connectNulls />
+                            <Brush dataKey="date" {...chartTheme.brush} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
+                    )
+                  })}
 
-                  {/* EFFR − IORB (top right) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>EFFR − IORB</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Historically a positive spread has been an indicator of reserve scarcity</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange2(range)} style={{ border: `1px solid ${mmRange2 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange2 === range ? '#e2e8f0' : '#728197', background: mmRange2 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData2} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'EFFR − IORB']} />
-                        <ReferenceLine y={0} stroke="#EF5350" strokeWidth={1.5} label={{ value: 'SCARCITY WARNING', position: 'insideTopLeft', fill: '#EF5350', fontSize: 9, fontWeight: 600 }} />
-                        <Line type="monotone" dataKey="effrIorb" stroke="#fbbf24" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* SOFR − EFFR (bottom left) */}
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>SOFR − EFFR</div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>FHLB Repo Demand: Higher spread means FHLBs deploy more cash to repos</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['3m', '6m', '1y', '2y', '5y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setMmRange3(range)} style={{ border: `1px solid ${mmRange3 === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: mmRange3 === range ? '#e2e8f0' : '#728197', background: mmRange3 === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={mmData3} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                        <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                        <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(v: number) => `${v.toFixed(0)}bp`} domain={['auto', 'auto']} />
-                        <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} formatter={(value: unknown) => [typeof value === 'number' ? `${value.toFixed(1)}bp` : '—', 'SOFR − EFFR']} />
-                        <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
-                        <Line type="monotone" dataKey="sofrEffr" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls />
-                        <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Reserve Demand Elasticity (bottom right) */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem', fontWeight: 700, color: '#e2e8f0', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>RESERVE DEMAND ELASTICITY</div>
-                      <button onClick={handleRdeRefresh} disabled={rdeSyncing} style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.12)', color: rdeSyncing ? '#4a5568' : '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: '0.55rem', padding: '2px 6px', cursor: rdeSyncing ? 'not-allowed' : 'pointer', borderRadius: '2px' }}>{rdeSyncing ? 'SYNCING...' : '↻ REFRESH'}</button>
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#728197', padding: '2px 0 8px', lineHeight: 1.4 }}>Basis point/percentage point — NY Fed estimate of reserve ampleness</div>
-                    <div style={{ marginBottom: '6px' }}>
-                      <div className={styles.ustRangeBar}>
-                        {['1y', '2y', '5y', '10y', 'all'].map((range, idx) => (
-                          <button key={range} className={styles.fvmRangeBtn} onClick={() => setRdeRange(range)} style={{ border: `1px solid ${rdeRange === range ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`, ...(idx > 0 ? { borderLeft: 'none' } : {}), fontSize: '0.65rem', padding: '2px 7px', color: rdeRange === range ? '#e2e8f0' : '#728197', background: rdeRange === range ? 'rgba(226, 232, 240, 0.08)' : 'transparent' }}>{range.toUpperCase()}</button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className={styles.ustRegimeLegend} style={{ paddingBottom: '4px' }}>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#60a5fa' }} />97.5th / 2.5th</span>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#94A3B8' }} />84th / 16th</span>
-                      <span className={styles.ustRegimeLegendItem}><span className={styles.ustRegimeSwatch} style={{ background: '#EF5350', height: '2px', borderRadius: '1px' }} />50th (median)</span>
-                    </div>
+                  <AcmChartFrame
+                    title="RESERVE DEMAND ELASTICITY"
+                    subtitle="Basis point/percentage point — NY Fed estimate of reserve ampleness"
+                    legend={[
+                      { label: '97.5th / 2.5th', color: RESERVE_DEMAND_COLORS.outer },
+                      { label: '84th / 16th', color: RESERVE_DEMAND_COLORS.inner },
+                      { label: '50th (median)', color: String(referenceLines.level.stroke), dashed: true },
+                    ]}
+                    actions={(
+                      <>
+                        {rangeToggle(rdeRange, setRdeRange, RDE_CHART_RANGES)}
+                        <button type="button" className={`${styles.toggleButton} ${styles.mmRefresh}`} onClick={handleRdeRefresh} disabled={rdeSyncing}>
+                          {rdeSyncing ? 'SYNCING...' : '↻ REFRESH'}
+                        </button>
+                      </>
+                    )}
+                    height={MM_CHART_HEIGHT}
+                  >
                     {rdeChartData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={220}>
+                      <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={rdeChartData} margin={{ top: 8, right: 16, left: 4, bottom: 4 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} tickFormatter={(date: string) => { const d = new Date(date); const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; return `${m[d.getMonth()]} '${String(d.getFullYear()).slice(2)}` }} interval="preserveStartEnd" minTickGap={50} />
-                          <YAxis stroke="#728197" tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }} domain={['auto', 'auto']} />
-                          <Tooltip contentStyle={{ background: '#0d1520', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '3px', fontFamily: 'var(--font-mono)', fontSize: '0.65rem' }} labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }} />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                          <Line type="monotone" dataKey="p97_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="97.5th" />
-                          <Line type="monotone" dataKey="p2_5" stroke="#60a5fa" strokeWidth={1} dot={false} name="2.5th" />
-                          <Line type="monotone" dataKey="p84" stroke="#94A3B8" strokeWidth={1} dot={false} name="84th" />
-                          <Line type="monotone" dataKey="p16" stroke="#94A3B8" strokeWidth={1} dot={false} name="16th" />
-                          <Line type="monotone" dataKey="median" stroke="#EF5350" strokeWidth={2} dot={false} name="Median" />
-                          <Brush dataKey="date" height={20} stroke="#728197" fill="#0d1520" travellerWidth={6} />
+                          <CartesianGrid {...chartTheme.grid} />
+                          <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={fmtMonthYearTick} interval="preserveStartEnd" minTickGap={50} />
+                          <YAxis {...chartTheme.yAxis} domain={['auto', 'auto']} />
+                          <Tooltip
+                            {...chartTheme.tooltip}
+                            labelFormatter={(label: unknown) => { if (typeof label !== 'string') return ''; return new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) }}
+                          />
+                          <ReferenceLine y={0} {...referenceLines.zero} />
+                          <Line type="monotone" dataKey="p97_5" stroke={RESERVE_DEMAND_COLORS.outer} strokeWidth={1} dot={false} name="97.5th" />
+                          <Line type="monotone" dataKey="p2_5" stroke={RESERVE_DEMAND_COLORS.outer} strokeWidth={1} dot={false} name="2.5th" />
+                          <Line type="monotone" dataKey="p84" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="84th" />
+                          <Line type="monotone" dataKey="p16" stroke={RESERVE_DEMAND_COLORS.inner} strokeWidth={1} dot={false} name="16th" />
+                          <Line type="monotone" dataKey="median" {...referenceLines.level} strokeWidth={2} dot={false} name="Median" />
+                          <Brush dataKey="date" {...chartTheme.brush} />
                         </LineChart>
                       </ResponsiveContainer>
                     ) : (
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#4a5568', textAlign: 'center', padding: '40px 0' }}>No RDE data — click REFRESH to sync from NY Fed</div>
+                      <div className={styles.stateMsg}>No RDE data — click REFRESH to sync from NY Fed</div>
                     )}
-                  </div>
+                  </AcmChartFrame>
                 </div>
               )}
-            </div>
+            </AcmPanel>
           </div>
         )}
 
@@ -4661,46 +4119,33 @@ export function STIRDashboardPage() {
 
           {(activeView === 'strips' || activeView === 'pricing') && country === 'US' && (
           <div className={styles.rightPanel}>
-            <div className={styles.fvmPanel}>
-              <div className={styles.fvmHeader}>
-                <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
-                {(fvmTab === 'cpi' || fvmTab === 'pce') && (
-                  <div className={styles.fvmMeasureToggle}>
+            <AcmPanel
+              title="FUNDAMENTAL MODEL"
+              actions={(fvmTab === 'cpi' || fvmTab === 'pce') && (
+                <div className={styles.toggleGroup}>
+                  {(['headline', 'core'] as const).map((m) => (
                     <button
-                      className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'headline' ? styles.fvmMeasureBtnActive : ''}`}
-                      onClick={() => setFvmMeasure('headline')}
-                      style={{
-                        border: `1px solid ${fvmMeasure === 'headline' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                      }}
+                      key={m}
+                      type="button"
+                      className={`${styles.toggleButton} ${fvmMeasure === m ? styles.toggleButtonActive : ''}`}
+                      onClick={() => setFvmMeasure(m)}
                     >
-                      HEADLINE
+                      {m === 'headline' ? 'HEADLINE' : 'CORE'}
                     </button>
-                    <button
-                      className={`${styles.fvmMeasureBtn} ${fvmMeasure === 'core' ? styles.fvmMeasureBtnActive : ''}`}
-                      onClick={() => setFvmMeasure('core')}
-                      style={{
-                        border: `1px solid ${fvmMeasure === 'core' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                        borderLeft: 'none',
-                      }}
-                    >
-                      CORE
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className={styles.fvmTabs}>
-                {FVM_TABS.map((tab, idx) => (
+                  ))}
+                </div>
+              )}
+            >
+              <div className={`${styles.toggleGroup} ${styles.fvmTabs}`}>
+                {FVM_TABS.map((tab) => (
                   <button
                     key={tab.key}
-                    className={`${styles.fvmTab} ${fvmTab === tab.key ? styles.fvmTabActive : ''}`}
+                    type="button"
+                    className={`${styles.toggleButton} ${fvmTab === tab.key ? styles.toggleButtonActive : ''}`}
                     onClick={() => {
                       setFvmTab(tab.key)
                       if (tab.key === 'labor') setFvmRange('2y')
                       if (tab.key === 'growth') setFvmRange('all')
-                    }}
-                    style={{
-                      border: `1px solid ${fvmTab === tab.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                      ...(idx > 0 ? { borderLeft: 'none' } : {}),
                     }}
                   >
                     {tab.label}
@@ -4719,95 +4164,74 @@ export function STIRDashboardPage() {
                         LATEST: {activeFvmModel.currentDate ? fmtShortMonthYear(activeFvmModel.currentDate) : '—'} | Index: {activeFvmModel.currentLevel ? activeFvmModel.currentLevel.toFixed(3) : '—'} | MoM: {activeFvmModel.currentMoM != null ? `${fmtSignedPct(activeFvmModel.currentMoM)}%` : '—'} | YoY: {activeFvmModel.currentYoY != null ? `${activeFvmModel.currentYoY.toFixed(2)}%` : '—'}
                       </div>
 
-                      <div className={styles.fvmRangeBar}>
-                        {FVM_RANGES.map((range, idx) => (
+                      <div className={`${styles.toggleGroup} ${styles.fvmRangeBar}`}>
+                        {FVM_RANGES.map((range) => (
                           <button
                             key={range.key}
-                            className={`${styles.fvmRangeBtn} ${fvmRange === range.key ? styles.fvmRangeBtnActive : ''}`}
+                            type="button"
+                            className={`${styles.toggleButton} ${fvmRange === range.key ? styles.toggleButtonActive : ''}`}
                             onClick={() => setFvmRange(range.key)}
-                            style={{
-                              border: `1px solid ${fvmRange === range.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                              ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                            }}
                           >
                             {range.label}
                           </button>
                         ))}
                       </div>
 
-                      <button
-                        onClick={() => setShowFedFunds((v) => !v)}
-                        style={{
-                          background: showFedFunds ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
-                          border: `1px solid ${showFedFunds ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
-                          color: showFedFunds ? '#a78bfa' : '#728197',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '0.65rem',
-                          fontWeight: 600,
-                          padding: '3px 10px',
-                          cursor: 'pointer',
-                          borderRadius: '2px',
-                          marginBottom: '6px',
-                        }}
+                      <AcmChartFrame
+                        title={`${fvmTab === 'cpi' ? 'CPI' : 'PCE'} ${fvmMeasure === 'core' ? 'Core' : 'Headline'} — YoY %`}
+                        legend={[
+                          { label: 'YoY actual', color: FUNDAMENTAL_MODEL_COLORS.headline },
+                          { label: '1M MoM', color: FUNDAMENTAL_MODEL_COLORS.pace1, dashed: true },
+                          { label: '3M MoM avg', color: FUNDAMENTAL_MODEL_COLORS.pace3, dashed: true },
+                          { label: '6M MoM avg', color: FUNDAMENTAL_MODEL_COLORS.pace6, dashed: true },
+                          { label: '2% Target', color: FUNDAMENTAL_MODEL_COLORS.inflationTarget, dashed: true },
+                          ...(showFedFunds ? [{ label: 'Fed Funds', color: FUNDAMENTAL_MODEL_COLORS.policyRate }] : []),
+                        ]}
+                        actions={fedFundsToggle}
+                        height={300}
                       >
-                        FED FUNDS
-                      </button>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={fvmYoYDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                            <CartesianGrid {...chartTheme.grid} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(fvmYoYDomain)} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
+                              labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
+                            />
+                            <ReferenceLine y={2} stroke={FUNDAMENTAL_MODEL_COLORS.inflationTarget} strokeDasharray="8 4" />
+                            <Line type="monotone" dataKey="yoy" stroke={FUNDAMENTAL_MODEL_COLORS.headline} strokeWidth={2} dot={false} connectNulls />
+                            <Line type="monotone" dataKey="pace1m" stroke={FUNDAMENTAL_MODEL_COLORS.pace1} strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="pace3m" stroke={FUNDAMENTAL_MODEL_COLORS.pace3} strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="pace6m" stroke={FUNDAMENTAL_MODEL_COLORS.pace6} strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
+                            {showFedFunds && (
+                              <Line type="monotone" dataKey="fedFunds" stroke={FUNDAMENTAL_MODEL_COLORS.policyRate} strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
+                            )}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
 
-                      <div className={styles.fvmLegend}>
-                        <span style={{ color: '#e2e8f0' }}>― YoY actual</span>
-                        <span style={{ color: '#4ade80' }}>-- 1M MoM</span>
-                        <span style={{ color: '#22d3ee' }}>-- 3M MoM avg</span>
-                        <span style={{ color: '#fbbf24' }}>-- 6M MoM avg</span>
-                        <span style={{ color: '#EF5350' }}>-- 2% Target</span>
-                        {showFedFunds && <span style={{ color: '#a78bfa' }}>― Fed Funds</span>}
-                      </div>
-
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={fvmYoYDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                          <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                          <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={fvmYoYDomain} allowDataOverflow />
-                          <Tooltip
-                            contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                            labelStyle={{ color: '#94A3B8' }}
-                            formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                            labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                          />
-                          <ReferenceLine y={2} stroke="#EF5350" strokeDasharray="8 4" />
-                          <Line type="monotone" dataKey="yoy" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
-                          <Line type="monotone" dataKey="pace1m" stroke="#4ade80" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                          <Line type="monotone" dataKey="pace3m" stroke="#22d3ee" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                          <Line type="monotone" dataKey="pace6m" stroke="#fbbf24" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                          {showFedFunds && (
-                            <Line type="monotone" dataKey="fedFunds" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
-                          )}
-                        </LineChart>
-                      </ResponsiveContainer>
-
-                      <div className={styles.fvmSectionLabel}>MoM % — Historical month-over-month changes</div>
-
-                      <ResponsiveContainer width="100%" height={250}>
-                        <LineChart data={fvmFilteredMomData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                          <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={fvmMomDomain} allowDataOverflow />
-                          <Tooltip
-                            contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                            labelStyle={{ color: '#94A3B8' }}
-                            formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                            labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                          <Line
-                            type="monotone"
-                            dataKey="mom"
-                            stroke="#4EC9B0"
-                            strokeWidth={1.5}
-                            dot={false}
-                            connectNulls
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                      <AcmChartFrame
+                        title="MoM % — Historical month-over-month changes"
+                        legend={[{ label: 'MoM %', color: FUNDAMENTAL_MODEL_COLORS.mom }]}
+                        height={250}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={fvmFilteredMomData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                            <CartesianGrid {...chartTheme.grid} vertical={false} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(fvmMomDomain)} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
+                              labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
+                            />
+                            <ReferenceLine y={0} {...referenceLines.zero} />
+                            <Line type="monotone" dataKey="mom" stroke={FUNDAMENTAL_MODEL_COLORS.mom} strokeWidth={1.5} dot={false} connectNulls />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
                     </>
                   )
                 ) : fvmTab === 'labor' ? (
@@ -4855,145 +4279,105 @@ export function STIRDashboardPage() {
                         ))}
                       </div>
 
-                      <div className={styles.fvmRangeBar}>
-                        {FVM_RANGES.map((range, idx) => (
+                      <div className={`${styles.toggleGroup} ${styles.fvmRangeBar}`}>
+                        {FVM_RANGES.map((range) => (
                           <button
                             key={range.key}
-                            className={`${styles.fvmRangeBtn} ${fvmRange === range.key ? styles.fvmRangeBtnActive : ''}`}
+                            type="button"
+                            className={`${styles.toggleButton} ${fvmRange === range.key ? styles.toggleButtonActive : ''}`}
                             onClick={() => setFvmRange(range.key)}
-                            style={{
-                              border: `1px solid ${fvmRange === range.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                              ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                            }}
                           >
                             {range.label}
                           </button>
                         ))}
                       </div>
 
-                      <button
-                        onClick={() => setShowFedFunds((v) => !v)}
-                        style={{
-                          background: showFedFunds ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
-                          border: `1px solid ${showFedFunds ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
-                          color: showFedFunds ? '#a78bfa' : '#728197',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '0.65rem',
-                          fontWeight: 600,
-                          padding: '3px 10px',
-                          cursor: 'pointer',
-                          borderRadius: '2px',
-                          marginBottom: '6px',
-                        }}
+                      <AcmChartFrame
+                        title="U-3 unemployment rate — payroll scenarios"
+                        legend={[
+                          { label: 'U-3 actual', color: LABOR_COLORS.u3 },
+                          ...payrollScenarios.map((s, i) => ({ label: `${s}k`, color: LABOR_SCENARIO_COLORS[i], dashed: true })),
+                          ...(showFedFunds ? [{ label: 'Fed Funds', color: FUNDAMENTAL_MODEL_COLORS.policyRate }] : []),
+                        ]}
+                        actions={fedFundsToggle}
+                        height={350}
                       >
-                        FED FUNDS
-                      </button>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={laborChartDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                            <CartesianGrid {...chartTheme.grid} vertical={false} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(laborDomain)} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
+                              labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
+                            />
+                            <ReferenceLine x={laborProjection.latestDate} {...referenceLines.level} />
+                            <Line type="monotone" dataKey="historical" stroke={LABOR_COLORS.u3} strokeWidth={2} dot={false} connectNulls />
+                            <Line type="monotone" dataKey="scenario0" stroke={LABOR_SCENARIO_COLORS[0]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="scenario1" stroke={LABOR_SCENARIO_COLORS[1]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="scenario2" stroke={LABOR_SCENARIO_COLORS[2]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="scenario3" stroke={LABOR_SCENARIO_COLORS[3]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                            {showFedFunds && (
+                              <Line type="monotone" dataKey="fedFunds" stroke={FUNDAMENTAL_MODEL_COLORS.policyRate} strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
+                            )}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
 
-                      <div className={styles.fvmLegend}>
-                        <span style={{ color: '#e2e8f0' }}>― U-3 actual</span>
-                        <span style={{ color: '#EF5350' }}>-- {payrollScenarios[0]}k</span>
-                        <span style={{ color: '#fbbf24' }}>-- {payrollScenarios[1]}k</span>
-                        <span style={{ color: '#22d3ee' }}>-- {payrollScenarios[2]}k</span>
-                        <span style={{ color: '#4ade80' }}>-- {payrollScenarios[3]}k</span>
-                        {showFedFunds && <span style={{ color: '#a78bfa' }}>― Fed Funds</span>}
-                      </div>
+                      <AcmChartFrame
+                        title="YoY % — Total Nonfarm Payroll Growth"
+                        legend={[{ label: 'Payroll YoY %', color: LABOR_COLORS.payrollYoY }]}
+                        height={200}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={filteredPayrollYoY} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                            <CartesianGrid {...chartTheme.grid} vertical={false} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} {...fvmNice(payrollYoYDomain)} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
+                              labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
+                            />
+                            <ReferenceLine y={0} {...referenceLines.zero} />
+                            <Line type="monotone" dataKey="yoy" stroke={LABOR_COLORS.payrollYoY} strokeWidth={1.5} dot={false} connectNulls />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
 
-                      <ResponsiveContainer width="100%" height={350}>
-                        <LineChart data={laborChartDataWithFF} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                          <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={laborDomain} allowDataOverflow />
-                          <Tooltip
-                            contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                            labelStyle={{ color: '#94A3B8' }}
-                            formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                            labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                          />
-                          <ReferenceLine
-                            x={laborProjection.latestDate}
-                            stroke="rgba(255,255,255,0.3)"
-                            strokeDasharray="4 4"
-                          />
-                          <Line type="monotone" dataKey="historical" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
-                          <Line type="monotone" dataKey="scenario0" stroke={LABOR_SCENARIO_COLORS[0]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
-                          <Line type="monotone" dataKey="scenario1" stroke={LABOR_SCENARIO_COLORS[1]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
-                          <Line type="monotone" dataKey="scenario2" stroke={LABOR_SCENARIO_COLORS[2]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
-                          <Line type="monotone" dataKey="scenario3" stroke={LABOR_SCENARIO_COLORS[3]} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
-                          {showFedFunds && (
-                            <Line type="monotone" dataKey="fedFunds" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="Fed Funds" />
-                          )}
-                        </LineChart>
-                      </ResponsiveContainer>
-
-                      <div className={styles.fvmSectionLabel}>YoY % — Total Nonfarm Payroll Growth</div>
-
-                      <ResponsiveContainer width="100%" height={200}>
-                        <LineChart data={filteredPayrollYoY} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                          <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={payrollYoYDomain} allowDataOverflow />
-                          <Tooltip
-                            contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                            labelStyle={{ color: '#94A3B8' }}
-                            formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                            labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                          <Line
-                            type="monotone"
-                            dataKey="yoy"
-                            stroke="#a78bfa"
-                            strokeWidth={1.5}
-                            dot={false}
-                            connectNulls
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-
-                      <div className={styles.fvmSectionLabel}>MoM Δ — Total Nonfarm Payroll Growth (Thousands)</div>
-                      <div className={styles.fvmLegend}>
-                        <span style={{ color: '#4EC9B0' }}>■ MoM Δ (k)</span>
-                        <span style={{ color: '#4ade80' }}>-- 3mo MA</span>
-                        <span style={{ color: '#fbbf24' }}>-- 6mo MA</span>
-                      </div>
-
-                      <ResponsiveContainer width="100%" height={200}>
-                        <ComposedChart data={filteredPayrollMoM} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
-                          <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => v.toFixed(0)} width={42} domain={payrollMoMDomain} allowDataOverflow />
-                          <Tooltip
-                            contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                            labelStyle={{ color: '#94A3B8' }}
-                            formatter={(value: unknown) => (typeof value === 'number' ? value.toFixed(0) : '—')}
-                            labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                          <Bar dataKey="mom" radius={[1, 1, 0, 0]}>
-                            {filteredPayrollMoM.map((point, idx) => (
-                              <Cell key={idx} fill={(point.mom ?? 0) >= 0 ? '#4EC9B0' : '#EF5350'} />
-                            ))}
-                          </Bar>
-                          <Line
-                            type="monotone"
-                            dataKey="ma3"
-                            stroke="#4ade80"
-                            strokeWidth={1.5}
-                            strokeDasharray="4 4"
-                            dot={false}
-                            connectNulls
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="ma6"
-                            stroke="#fbbf24"
-                            strokeWidth={1.5}
-                            strokeDasharray="4 4"
-                            dot={false}
-                            connectNulls
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
+                      <AcmChartFrame
+                        title="MoM Δ — Total Nonfarm Payroll Growth (Thousands)"
+                        legend={[
+                          { label: 'MoM Δ (k) gain', color: signColor('acm-positive') },
+                          { label: 'MoM Δ (k) loss', color: signColor('acm-negative') },
+                          { label: '3mo MA', color: LABOR_COLORS.ma3, dashed: true },
+                          { label: '6mo MA', color: LABOR_COLORS.ma6, dashed: true },
+                        ]}
+                        height={200}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ComposedChart data={filteredPayrollMoM} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+                            <CartesianGrid {...chartTheme.grid} vertical={false} />
+                            <XAxis dataKey="date" {...chartTheme.xAxis} tickFormatter={(v: string) => fmtShortMonthYear(v)} minTickGap={24} />
+                            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => v.toFixed(0)} width={42} {...fvmNice(payrollMoMDomain, 0)} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              cursor={chartTheme.barTooltipCursor}
+                              formatter={(value: unknown) => (typeof value === 'number' ? value.toFixed(0) : '—')}
+                              labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
+                            />
+                            <ReferenceLine y={0} {...referenceLines.zero} />
+                            <Bar dataKey="mom" radius={[1, 1, 0, 0]}>
+                              {filteredPayrollMoM.map((point, idx) => (
+                                <Cell key={idx} fill={(point.mom ?? 0) >= 0 ? signColor('acm-positive') : signColor('acm-negative')} />
+                              ))}
+                            </Bar>
+                            <Line type="monotone" dataKey="ma3" stroke={LABOR_COLORS.ma3} strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+                            <Line type="monotone" dataKey="ma6" stroke={LABOR_COLORS.ma6} strokeWidth={1.5} strokeDasharray="4 4" dot={false} connectNulls />
+                          </ComposedChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
                     </>
                   )
                 ) : fvmTab === 'growth' ? (
@@ -5005,138 +4389,103 @@ export function STIRDashboardPage() {
                     <div className={styles.comingSoon}>No GDPNow data available</div>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div className={styles.fvmSectionLabel}>GDPNow — Atlanta Fed Nowcast</div>
-                        <button
-                          onClick={handleGdpnowRefresh}
-                          disabled={gdpnowSyncing}
-                          style={{
-                            background: 'transparent',
-                            border: '1px solid rgba(255, 255, 255, 0.12)',
-                            color: gdpnowSyncing ? '#4a5568' : '#94A3B8',
-                            fontFamily: 'var(--font-mono)',
-                            fontSize: '0.6rem',
-                            padding: '3px 8px',
-                            cursor: gdpnowSyncing ? 'not-allowed' : 'pointer',
-                            borderRadius: '2px',
-                          }}
-                        >
-                          {gdpnowSyncing ? 'SYNCING...' : '↻ REFRESH'}
-                        </button>
-                      </div>
-
                       <div className={styles.fvmStatsLine}>
                         {gdpnowLatest
                           ? `LATEST: ${gdpnowLatest.quarter} | ${gdpnowLatest.value.toFixed(1)}% | Updated: ${gdpnowLatest.forecastDate}`
                           : 'LATEST: —'}
                       </div>
 
-                      <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                      <div className={`${styles.toggleGroup} ${styles.fvmRangeBar}`}>
                         {['6m', '1y', '2y', '5y', 'all'].map((r) => (
                           <button
                             key={r}
+                            type="button"
+                            className={`${styles.toggleButton} ${gdpnowRange === r ? styles.toggleButtonActive : ''}`}
                             onClick={() => setGdpnowRange(r)}
-                            style={{
-                              background: gdpnowRange === r ? 'rgba(255,215,0,0.15)' : 'transparent',
-                              border: `1px solid ${gdpnowRange === r ? '#e2e8f0' : 'rgba(255,255,255,0.12)'}`,
-                              color: gdpnowRange === r ? '#e2e8f0' : '#94A3B8',
-                              borderRadius: '3px',
-                              padding: '2px 8px',
-                              fontSize: '0.65rem',
-                              fontFamily: 'var(--font-mono)',
-                              cursor: 'pointer',
-                              textTransform: 'uppercase',
-                            }}
                           >
                             {r}
                           </button>
                         ))}
                       </div>
 
-                      <div className={styles.fvmLegend}>
-                        {gdpnowChartData.quarters.slice(-6).map((quarter) => {
-                          const globalIdx = gdpnowChartData.quarters.indexOf(quarter)
-                          return (
-                            <span key={quarter} style={{ color: getQuarterColor(globalIdx) }}>
-                              ― {quarter}
-                            </span>
-                          )
-                        })}
-                      </div>
-
-                      <ResponsiveContainer width="100%" height={400}>
-                        <LineChart data={gdpnowChartData.merged} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
-                          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                          <XAxis
-                            dataKey="date"
-                            stroke="#728197"
-                            tick={FVM_TICK}
-                            tickFormatter={(date: string) => {
-                              const d = new Date(date)
-                              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-                              return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
-                            }}
-                            interval="preserveStartEnd"
-                            minTickGap={50}
-                          />
-                          <YAxis
-                            stroke="#728197"
-                            tick={FVM_TICK}
-                            tickFormatter={(value: number) => `${value.toFixed(1)}%`}
-                            domain={['auto', 'auto']}
-                          />
-                          <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" />
-                          <Tooltip
-                            contentStyle={{
-                              background: '#0d1520',
-                              border: '1px solid rgba(255,255,255,0.12)',
-                              borderRadius: '3px',
-                              fontFamily: 'var(--font-mono)',
-                              fontSize: '0.7rem',
-                            }}
-                            labelFormatter={(label: unknown) => {
-                              if (typeof label !== 'string') return ''
-                              const date = label
-                              const d = new Date(date)
-                              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                            }}
-                            formatter={(value: unknown, name: string | undefined) => [
-                              typeof value === 'number' ? `${value.toFixed(1)}%` : '—',
-                              name ?? '',
-                            ]}
-                          />
-                          {gdpnowChartData.quarters.map((quarter, idx) => (
-                            <Line
-                              key={quarter}
-                              type="stepAfter"
-                              dataKey={quarter}
-                              stroke={getQuarterColor(idx)}
-                              strokeWidth={1.5}
-                              dot={false}
-                              connectNulls={false}
+                      <AcmChartFrame
+                        title="GDPNow — Atlanta Fed Nowcast"
+                        legend={gdpnowChartData.quarters.slice(-6).map((quarter) => ({ label: quarter, color: gdpnowQuarterColor(quarter) ?? FVM_UNKNOWN_QUARTER }))}
+                        actions={(
+                          <button
+                            type="button"
+                            className={styles.fvmRefresh}
+                            onClick={handleGdpnowRefresh}
+                            disabled={gdpnowSyncing}
+                          >
+                            {gdpnowSyncing ? 'SYNCING...' : '↻ REFRESH'}
+                          </button>
+                        )}
+                        height={400}
+                      >
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={gdpnowChartData.merged} margin={{ top: 10, right: 16, left: 8, bottom: 16 }}>
+                            <CartesianGrid {...chartTheme.grid} />
+                            <XAxis
+                              dataKey="date"
+                              {...chartTheme.xAxis}
+                              tickFormatter={(date: string) => {
+                                const d = new Date(date)
+                                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                                return `${months[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`
+                              }}
+                              interval="preserveStartEnd"
+                              minTickGap={50}
                             />
-                          ))}
-                        </LineChart>
-                      </ResponsiveContainer>
+                            <YAxis
+                              {...chartTheme.yAxis}
+                              tickFormatter={(value: number) => `${value.toFixed(1)}%`}
+                              domain={['auto', 'auto']}
+                            />
+                            <ReferenceLine y={0} {...referenceLines.zero} />
+                            <Tooltip
+                              {...chartTheme.tooltip}
+                              labelFormatter={(label: unknown) => {
+                                if (typeof label !== 'string') return ''
+                                const date = label
+                                const d = new Date(date)
+                                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              }}
+                              formatter={(value: unknown, name: string | undefined) => [
+                                typeof value === 'number' ? `${value.toFixed(1)}%` : '—',
+                                name ?? '',
+                              ]}
+                            />
+                            {gdpnowChartData.quarters.map((quarter) => (
+                              <Line
+                                key={quarter}
+                                type="stepAfter"
+                                dataKey={quarter}
+                                stroke={gdpnowQuarterColor(quarter) ?? FVM_UNKNOWN_QUARTER}
+                                strokeWidth={1.5}
+                                dot={false}
+                                connectNulls={false}
+                              />
+                            ))}
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </AcmChartFrame>
 
                       {contribChartData.length > 0 && (
-                        <>
-                          <div className={styles.fvmSectionLabel} style={{ marginTop: '16px' }}>GDPNOW SUBCOMPONENT CONTRIBUTIONS</div>
-
-                          <div className={styles.fvmLegend}>
-                            {CONTRIB_COMPONENTS.map((c) => (
-                              <span key={c.key} style={{ color: c.color }}>{'\u25A0'} {c.label}</span>
-                            ))}
-                            <span style={{ color: '#ffffff' }}>― GDP</span>
-                          </div>
-
-                          <ResponsiveContainer width="100%" height={350}>
+                        <AcmChartFrame
+                          title="GDPNow subcomponent contributions"
+                          legend={[
+                            ...CONTRIB_COMPONENTS.map((c) => ({ label: c.label, color: GDPNOW_COMPONENT_COLORS[c.key] })),
+                            { label: 'GDP', color: GDPNOW_GDP_LINE },
+                          ]}
+                          height={350}
+                        >
+                          <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart data={contribChartData} margin={{ top: 10, right: 16, left: 8, bottom: 16 }} stackOffset="sign">
-                              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                              <CartesianGrid {...chartTheme.grid} />
                               <XAxis
                                 dataKey="date"
-                                stroke="#728197"
-                                tick={{ fontSize: 9, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                                {...chartTheme.xAxis}
                                 tickFormatter={(date: string) => {
                                   const d = new Date(date)
                                   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -5146,18 +4495,12 @@ export function STIRDashboardPage() {
                                 minTickGap={40}
                               />
                               <YAxis
-                                stroke="#728197"
-                                tick={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                                {...chartTheme.yAxis}
                                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
                               />
                               <Tooltip
-                                contentStyle={{
-                                  background: '#0d1520',
-                                  border: '1px solid rgba(255,255,255,0.12)',
-                                  borderRadius: '3px',
-                                  fontFamily: 'var(--font-mono)',
-                                  fontSize: '0.65rem',
-                                }}
+                                {...chartTheme.tooltip}
+                                cursor={chartTheme.barTooltipCursor}
                                 formatter={(value: unknown, name: string | undefined) => [
                                   typeof value === 'number' ? `${value.toFixed(2)}pp` : '—',
                                   name ?? '',
@@ -5168,23 +4511,23 @@ export function STIRDashboardPage() {
                                   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                                 }}
                               />
-                              <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" />
+                              <ReferenceLine y={0} {...referenceLines.zero} />
 
                               {CONTRIB_COMPONENTS.map((c) => (
-                                <Bar key={c.key} dataKey={c.key} stackId="contrib" fill={c.color} name={c.label} />
+                                <Bar key={c.key} dataKey={c.key} stackId="contrib" fill={GDPNOW_COMPONENT_COLORS[c.key]} name={c.label} />
                               ))}
 
                               <Line
                                 type="stepAfter"
                                 dataKey="gdp"
-                                stroke="#ffffff"
+                                stroke={GDPNOW_GDP_LINE}
                                 strokeWidth={2}
                                 dot={false}
                                 name="GDP"
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
-                        </>
+                        </AcmChartFrame>
                       )}
                     </>
                   )
@@ -5194,7 +4537,7 @@ export function STIRDashboardPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </AcmPanel>
           </div>
           )}
 
@@ -5229,10 +4572,10 @@ export function STIRDashboardPage() {
           )}
         </div>
         {activeView === 'strips' && useStirStyling && stripContracts.length > 0 && (
-          <section className={styles.spreadsDashboardFullWidth}>
-            <div className={styles.spreadsDashboardHeader}>
-              <div className={styles.spreadsHeader}>{activeMarket.root} CALENDAR SPREADS</div>
-              <div className={styles.spreadLookbackControl}>
+          <section className={styles.calSpreads}>
+            <div className={styles.calSpreadsHeader}>
+              <div className={styles.calSpreadsTitle}>{activeMarket.root} CALENDAR SPREADS</div>
+              <div className={styles.calLookback}>
                 <label htmlFor="spreadLookback">t −</label>
                 <input
                   id="spreadLookback"
@@ -5241,61 +4584,58 @@ export function STIRDashboardPage() {
                   max="252"
                   value={spreadLookbackDays}
                   onChange={(e) => setSpreadLookbackDays(Math.max(0, parseInt(e.target.value) || 0))}
-                  className={styles.spreadLookbackInput}
+                  className={styles.calLookbackInput}
                 />
               </div>
             </div>
-            <div className={styles.spreadsDateLabels}>
+            <div className={styles.calDateLabels}>
               <span>{'●'} LATEST: {spreadCurve.currentDate || '—'}</span>
               {spreadLookbackDays > 0 && spreadCurve.lookbackDate && (
-                <span style={{ marginLeft: 16 }}>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
+                <span>{'●'} BENCHMARK: {spreadCurve.lookbackDate} (t − {spreadLookbackDays})</span>
               )}
             </div>
             <div
-              className={styles.spreadsGrid}
+              className={styles.calGrid}
               style={{ gridTemplateColumns: `repeat(${Math.max(1, spreadColumns.filter((c) => c.data.length > 0).length)}, 1fr)` }}
             >
               {spreadColumns.filter((c) => c.data.length > 0).map((col) => (
-                <div key={col.stride} className={styles.spreadColumn}>
-                  <div className={styles.spreadColumnTitle}>{col.stride}m Spreads</div>
-                  <div className={styles.spreadChartContainer}>
+                <div key={col.stride} className={styles.calColumn}>
+                  <AcmChartFrame title={`${col.stride}m Spreads`} height={500} className={styles.calFrame}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={col.data} margin={{ top: 12, right: 12, left: 8, bottom: 50 }}>
-                        <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                        <CartesianGrid {...chartTheme.grid} />
                         <XAxis
                           dataKey="label"
-                          tick={{ fontSize: 10, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.xAxis}
                           tickMargin={8}
                           angle={-30}
                           textAnchor="end"
                           height={50}
                           interval={0}
-                          stroke="#728197"
                         />
                         <YAxis
-                          tick={{ fontSize: 11, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                          {...chartTheme.yAxis}
                           tickMargin={6}
                           tickFormatter={(v: number) => v.toFixed(1)}
-                          label={{ value: 'bps', angle: -90, position: 'insideLeft', fill: '#cbd5e1', fontSize: 10 }}
-                          domain={['auto', 'auto']}
-                          stroke="#728197"
+                          label={{ ...chartTheme.axisLabel, value: 'bps', angle: -90, position: 'insideLeft' }}
+                          {...niceAxis(col.data.flatMap((d) => [d.spreadBps, d.lookbackBps]).filter((v): v is number => typeof v === 'number'), { dp: 1 })}
                         />
-                        <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                        <ReferenceLine y={0} {...referenceLines.zero} />
                         <Tooltip
-                          contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                          {...chartTheme.tooltip}
                           formatter={(v: number | undefined, name: string | undefined) => [
                             v == null ? '—' : `${v.toFixed(2)}bp`,
                             name === 'lookbackBps' ? `t − ${spreadLookbackDays}` : 'Current',
                           ]}
                         />
-                        <Line type="linear" dataKey="spreadBps" stroke="#22d3ee" strokeWidth={1.5} dot={{ r: 3, fill: '#22d3ee' }} isAnimationActive={false} name="Current" />
+                        <Line type="linear" dataKey="spreadBps" stroke={CALENDAR_SPREAD_COLORS.current} strokeWidth={1.5} dot={{ r: 3, fill: CALENDAR_SPREAD_COLORS.current }} isAnimationActive={false} name="Current" />
                         {spreadLookbackDays > 0 && (
-                          <Line type="linear" dataKey="lookbackBps" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2, fill: '#94a3b8' }} isAnimationActive={false} connectNulls={false} name={`t − ${spreadLookbackDays}`} />
+                          <Line type="linear" dataKey="lookbackBps" stroke={CALENDAR_SPREAD_COLORS.lookback} strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 2, fill: CALENDAR_SPREAD_COLORS.lookback }} isAnimationActive={false} connectNulls={false} name={`t − ${spreadLookbackDays}`} />
                         )}
                       </LineChart>
                     </ResponsiveContainer>
-                  </div>
-                  <table className={styles.spreadTable}>
+                  </AcmChartFrame>
+                  <table className={styles.calTable}>
                     <thead>
                       <tr>
                         <th>Spread</th>
@@ -5307,20 +4647,20 @@ export function STIRDashboardPage() {
                     </thead>
                     <tbody>
                       {col.data.map((s) => {
-                        const valClass = s.spreadBps > 0 ? styles.ocrPositive : s.spreadBps < 0 ? styles.ocrNegative : ''
-                        const chClass = (v: number | null) =>
-                          v == null ? '' : v > 0 ? styles.changeNegative : v < 0 ? styles.changePositive : ''
-                        const fmt = (v: number | null) => v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}`
+                        // Rule 6: the spread VALUE is a level → plain primary text; its Δ columns
+                        // are changes → increase = negative (red), decrease = positive.
+                        const chClass = (v: number | null) => rateChangeClass(v) ?? ''
+                        const fmt = (v: number | null) => v == null ? '—' : fmtSignedFixed(v, 1)
                         return (
                           <tr key={s.label}>
                             <td
                               className={styles.spreadLabelClickable}
                               onClick={() => setOpenSpread({ label: s.label, frontSymbol: s.frontSymbol, backSymbol: s.backSymbol })}
                             >{s.label}</td>
-                            <td className={valClass}>{fmt(s.spreadBps)}</td>
-                            <td className={chClass(s.change1d)}>{fmt(s.change1d)}</td>
-                            <td className={chClass(s.change5d)}>{fmt(s.change5d)}</td>
-                            <td className={chClass(s.change1m)}>{fmt(s.change1m)}</td>
+                            <td className={styles.stripStrong}>{fmt(s.spreadBps)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change1d)}`}>{fmt(s.change1d)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change5d)}`}>{fmt(s.change5d)}</td>
+                            <td className={`${styles.stripStrong} ${chClass(s.change1m)}`}>{fmt(s.change1m)}</td>
                           </tr>
                         )
                       })}
@@ -5338,20 +4678,20 @@ export function STIRDashboardPage() {
         <div className={styles.modalBackdrop} onClick={() => setOpenSpread(null)}>
           <div className={styles.modalContent} onClick={(e) => e.stopPropagation()}>
             <button className={styles.modalClose} onClick={() => setOpenSpread(null)} aria-label="Close">×</button>
-            <h2 className={styles.modalTitle} style={{ color: '#22d3ee' }}>{openSpread.label}</h2>
+            <h2 className={styles.modalTitle} style={{ color: CALENDAR_SPREAD_COLORS.current }}>{openSpread.label}</h2>
             <p className={styles.modalSubtitle}>{activeMarket.title} · {openSpread.frontSymbol} − {openSpread.backSymbol}</p>
             <div className={styles.modalChartContainer}>
               {(spreadFrontHistory.loading || spreadBackHistory.loading) ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+                <div className={styles.modalState}>Loading…</div>
               ) : spreadModalChartData.length === 0 ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+                <div className={styles.modalState}>No history available</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={spreadModalChartData} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <CartesianGrid {...chartTheme.grid} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.xAxis}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
                         return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
@@ -5359,26 +4699,23 @@ export function STIRDashboardPage() {
                       interval="preserveStartEnd"
                       minTickGap={60}
                       tickMargin={8}
-                      stroke="#728197"
                     />
                     <YAxis
-                      tick={{ fontSize: 13, fill: '#cbd5e1', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.yAxis}
                       tickFormatter={(v: number) => `${v.toFixed(1)}bp`}
                       tickMargin={6}
                       domain={['auto', 'auto']}
-                      stroke="#728197"
                     />
-                    <ReferenceLine y={0} stroke="#94A3B8" strokeDasharray="3 3" strokeWidth={1} />
+                    <ReferenceLine y={0} {...referenceLines.zero} />
                     <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      {...chartTheme.tooltip}
                       formatter={(v: number | undefined) => v == null ? '' : `${v.toFixed(2)}bp`}
                     />
-                    <Line type="monotone" dataKey="spread" stroke="#22d3ee" strokeWidth={1.8} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="spread" stroke={CALENDAR_SPREAD_COLORS.current} strokeWidth={1.8} dot={false} isAnimationActive={false} />
                     <Brush
                       dataKey="date"
+                      {...chartTheme.brush}
                       height={28}
-                      stroke="#60a5fa"
-                      fill="#0d1520"
                       travellerWidth={10}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
@@ -5409,39 +4746,37 @@ export function STIRDashboardPage() {
                 <button className={modalMetric === 'price' ? styles.activeToggle : ''} onClick={() => setModalMetric('price')}>PRICE</button>
               </div>
               <div className={styles.modalToggleGroup}>
-                <button className={modalShowScenarios ? styles.activeToggleGreen : ''} onClick={() => setModalShowScenarios((v) => !v)}>
+                <button className={modalShowScenarios ? styles.activeToggle : ''} onClick={() => setModalShowScenarios((v) => !v)}>
                   CB LEVELS: {modalShowScenarios ? 'ON' : 'OFF'}
                 </button>
               </div>
             </div>
             <div className={styles.modalChartContainer}>
               {modalHistory.loading ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading…</div>
+                <div className={styles.modalState}>Loading…</div>
               ) : modalChartData.length === 0 ? (
-                <div className={styles.loading} style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No history available</div>
+                <div className={styles.modalState}>No history available</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={modalChartData} margin={{ top: 12, right: 110, left: 8, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+                    <CartesianGrid {...chartTheme.grid} />
                     <XAxis
                       dataKey="date"
-                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.xAxis}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)
                         return d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
                       }}
                       interval="preserveStartEnd"
                       minTickGap={60}
-                      stroke="#728197"
                     />
                     <YAxis
-                      tick={{ fontSize: 13, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
+                      {...chartTheme.yAxis}
                       tickFormatter={(v: number) => modalMetric === 'rate' ? `${v.toFixed(2)}%` : v.toFixed(2)}
                       domain={modalYDomain}
-                      stroke="#728197"
                     />
                     <Tooltip
-                      contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: '13px' }}
+                      {...chartTheme.tooltip}
                       formatter={(v: number | undefined) => v == null ? '' : modalMetric === 'rate' ? `${v.toFixed(3)}%` : v.toFixed(3)}
                     />
                     {modalShowScenarios && fedwatch.currentEFFR > 0 && SCENARIO_BPS.map((changeBps) => {
@@ -5453,15 +4788,14 @@ export function STIRDashboardPage() {
                         <ReferenceLine
                           key={changeBps}
                           y={yValue}
-                          stroke={isCurrent ? '#94a3b8' : '#a855f7'}
+                          stroke={isCurrent ? CB_SCENARIO_COLORS.current : CB_SCENARIO_COLORS.levels}
                           strokeDasharray={isCurrent ? '4 4' : undefined}
                           strokeWidth={1}
                           label={{
                             value: labelText,
                             position: 'right',
-                            fill: isCurrent ? '#94a3b8' : '#a855f7',
-                            fontSize: 11,
-                            fontFamily: 'var(--font-mono)',
+                            ...referenceLabelStyle,
+                            fill: isCurrent ? CB_SCENARIO_COLORS.current : CB_SCENARIO_COLORS.levels,
                           }}
                         />
                       )
@@ -5469,9 +4803,8 @@ export function STIRDashboardPage() {
                     <Line type="monotone" dataKey="value" stroke={modalContractColor} strokeWidth={1.8} dot={false} isAnimationActive={false} />
                     <Brush
                       dataKey="date"
+                      {...chartTheme.brush}
                       height={28}
-                      stroke="#60a5fa"
-                      fill="#0d1520"
                       travellerWidth={10}
                       tickFormatter={(value: string) => {
                         const d = new Date(value)

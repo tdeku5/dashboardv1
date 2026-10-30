@@ -28,6 +28,12 @@ export interface AcmColumn<Row> {
    * of a blend). Not a sign colour — always --acm-bar-fill. null → no bar.
    */
   bar?: (row: Row) => number | null
+  /**
+   * Extra class on the cell. Reserved for the NAMED heatmap components
+   * (design notes rule 3; enforced by assetClassModels.heatmaps.test.ts):
+   * the class supplies the heat fill, and the column then sets no `tone`.
+   */
+  cellClassName?: (row: Row) => string | undefined
 }
 
 interface Props<Row> {
@@ -76,6 +82,7 @@ export function AcmDataTable<Row>({ columns, rows, rowKey, stickyHeader, caption
                       styles.td,
                       c.kind === 'num' ? cx(styles.num, 'acm-num') : styles.label,
                       alertClass(c.alert?.(row)),
+                      c.cellClassName?.(row),
                     )}
                   >
                     {bar != null && Number.isFinite(bar) && (

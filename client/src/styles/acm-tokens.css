@@ -86,16 +86,28 @@
   --acm-bar-fill: var(--acm-accent-active);
 
   /* ── Sign families (Decision 2; seeds from the phase-1-resume prompt) ──────
-   * Valence + direction colour value TEXT only, except inside the named
-   * heatmap components, which use --acm-heat-* fills (see below).
+   * Sign colours mark value TEXT only, except inside the named heatmap
+   * components, which use --acm-heat-* fills (see below).
    * Alert colours a background tint / badge / outline — never value text.
    * Status colours notes and banners — never data cells.
+   * Red / green direction rule (bond-price convention): yield / rate / spread
+   * UP, hike, futures price DOWN → red; yield / rate / spread DOWN, cut,
+   * futures price UP → green. --acm-dir-up / --acm-dir-down name that pair
+   * (aliases of --acm-negative / --acm-positive). Returns / P&L: up green,
+   * down red. No direction meaning uses blue / orange.
+   * Exceptions (do not "fix"):
+   *   1. Heatmap BACKGROUNDS for yield / rate changes stay red / blue
+   *      (--acm-heat-rate-*); text on them stays primary for contrast (user decision; red/green measured 1.86–3.98:1).
+   *   2. The VOL implied-vol premium (MOVE − realized) stays orange / blue
+   *      (--acm-vol-premium-up / -down) — a vol spread, not a yield spread.
    */
   --acm-positive:  #4CC38A;         /* valence: up is good (returns, P&L) */
   --acm-negative:  #E16D6D;         /* valence: down is bad. Seed #E06C6C (--hp-negative)
                                        is 4.499:1 on overlay; one +1/channel step → 4.553 */
-  --acm-dir-up:    #F0954A;         /* direction: yield/rate/spread up, hike */
-  --acm-dir-down:  #7CC4F2;         /* direction: yield/rate/spread down, cut */
+  --acm-dir-up:    var(--acm-negative); /* direction: yield / rate / spread UP, hike, futures price DOWN → red */
+  --acm-dir-down:  var(--acm-positive); /* direction: yield / rate / spread DOWN, cut, futures price UP → green */
+  --acm-vol-premium-up:   #F0954A;  /* exception 2: VOL implied-vol premium (MOVE − realized) */
+  --acm-vol-premium-down: #7CC4F2;  /* stays orange / blue — a vol spread, not a yield spread */
   --acm-alert-mild:   #E8C547;      /* |z| > 2, IV rank/pctile intensity */
   --acm-alert-strong: #F05BA0;      /* |z| > 3, scarcity breach */
   --acm-status-warning: #E8C547;    /* stale / data-quality notes */
@@ -108,24 +120,24 @@
   --acm-status-warning-tint: color-mix(in srgb, var(--acm-status-warning) 8%, transparent);
 
   /* ── Heatmap fills — the one exception to "sign colours text only" ────────
-   * Used ONLY by the named heatmap grids: the cellColor grid (direction) and
-   * ReturnsHeatmap (valence). No other component fills backgrounds with sign
-   * colours, and heatmap cells never also carry an alert treatment.
+   * Used ONLY by the named heatmap grids: ReturnsHeatmap, the STIR strip
+   * move cells (implied-rate Δ columns + FF price-change cells) and the
+   * CREDIT SPREADS Δ cells on the VALENCE scale, and the cellColor grid on
+   * red / blue. Rates colour rule
+   * (R2b approval): a yield / rate / spread increase is --acm-heat-negative-*,
+   * a decrease --acm-heat-positive-* (bond-price view; returns keep up =
+   * positive) — EXCEPT the cellColor grid, which is red / blue on its own
+   * symmetric scale: --acm-heat-rate-up-* (red) for an increase,
+   * --acm-heat-rate-down-* (blue, its own base) for a decrease, both at
+   * 12/23/35/46% so an equal rise and fall shade identically.
+   * No other component fills backgrounds with sign colours, and heatmap
+   * cells never also carry an alert treatment.
    * Neutral (zero) = no fill: the surface shows through.
    * Step 4 = the largest whole % at which primary text clears 4.5:1 over BOTH
    * sides on bg + panel (same cap both sides so equal magnitudes read equal);
    * steps 1–3 = 1/4, 2/4, 3/4 of it, rounded. Cell text is always primary.
    */
   --acm-heat-neutral: transparent;
-
-  --acm-heat-dir-up-1:   color-mix(in srgb, var(--acm-dir-up) 12%, transparent);
-  --acm-heat-dir-up-2:   color-mix(in srgb, var(--acm-dir-up) 23%, transparent);
-  --acm-heat-dir-up-3:   color-mix(in srgb, var(--acm-dir-up) 35%, transparent);
-  --acm-heat-dir-up-4:   color-mix(in srgb, var(--acm-dir-up) 46%, transparent);
-  --acm-heat-dir-down-1: color-mix(in srgb, var(--acm-dir-down) 12%, transparent);
-  --acm-heat-dir-down-2: color-mix(in srgb, var(--acm-dir-down) 23%, transparent);
-  --acm-heat-dir-down-3: color-mix(in srgb, var(--acm-dir-down) 35%, transparent);
-  --acm-heat-dir-down-4: color-mix(in srgb, var(--acm-dir-down) 46%, transparent);
 
   --acm-heat-positive-1: color-mix(in srgb, var(--acm-positive) 13%, transparent);
   --acm-heat-positive-2: color-mix(in srgb, var(--acm-positive) 26%, transparent);
@@ -135,6 +147,21 @@
   --acm-heat-negative-2: color-mix(in srgb, var(--acm-negative) 26%, transparent);
   --acm-heat-negative-3: color-mix(in srgb, var(--acm-negative) 38%, transparent);
   --acm-heat-negative-4: color-mix(in srgb, var(--acm-negative) 51%, transparent);
+
+  /* cellColor grid (exception 1): red / blue diverging background, symmetric
+   * alphas 12/23/35/46%. rate-up = the negative (red) colour; rate-down = its
+   * own blue base below — deliberately NOT derived from the direction tokens,
+   * so re-pointing direction can never recolour the heatmap. Text on these
+   * cells follows the red/green rule. */
+  --acm-heat-rate-blue:   #7CC4F2;
+  --acm-heat-rate-up-1:   color-mix(in srgb, var(--acm-negative) 12%, transparent);
+  --acm-heat-rate-up-2:   color-mix(in srgb, var(--acm-negative) 23%, transparent);
+  --acm-heat-rate-up-3:   color-mix(in srgb, var(--acm-negative) 35%, transparent);
+  --acm-heat-rate-up-4:   color-mix(in srgb, var(--acm-negative) 46%, transparent);
+  --acm-heat-rate-down-1: color-mix(in srgb, var(--acm-heat-rate-blue) 12%, transparent);
+  --acm-heat-rate-down-2: color-mix(in srgb, var(--acm-heat-rate-blue) 23%, transparent);
+  --acm-heat-rate-down-3: color-mix(in srgb, var(--acm-heat-rate-blue) 35%, transparent);
+  --acm-heat-rate-down-4: color-mix(in srgb, var(--acm-heat-rate-blue) 46%, transparent);
 
   /* ── Typography ───────────────────────────────────────────────────────────
    * Sans for chrome, mono (tabular) for numerics. The mono token is

@@ -7,7 +7,7 @@
 //
 // Cross-route components found in Phase 0-H:
 //   • TreasuryAuctionContent — RATES → US → TREASURY AUCTIONS and the standalone
-//     /treasury route. Converted in Phase 3 → test below is PENDING until then.
+//     /treasury route. Converted at R4 — test below is live.
 //   • NavDropdown, FredRefreshButton — cross-route but NOT converted
 //     (Decision 4), so they never reference --acm-* tokens. Guarded below so a
 //     future edit that starts using the tokens without the root class fails.
@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { raw } from '../styles/acmTokenReader'
 import { TreasuryAuctionContent } from './TreasuryAuctionPage'
+import { DailyChangeModal } from '../components/DailyChangeModal'
 
 beforeEach(() => { vi.stubGlobal('fetch', () => new Promise<Response>(() => undefined)) })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
@@ -42,10 +43,18 @@ function assertSelfContained(container: HTMLElement) {
 }
 
 describe('component-level acm-root rule — cross-route components', () => {
-  it.skip('PENDING PHASE 3 — TreasuryAuctionContent resolves every var(--acm-*) with no .acm-root ancestor (unskip when converted)', () => {
+  it('TreasuryAuctionContent resolves every var(--acm-*) with no .acm-root ancestor (converted at R4)', () => {
     const { container } = render(<MemoryRouter><div data-testid="no-acm-ancestor"><TreasuryAuctionContent /></div></MemoryRouter>)
     const host = container.querySelector<HTMLElement>('[data-testid="no-acm-ancestor"]')!
     assertSelfContained(host)
+  })
+
+  it('DailyChangeModal (portalled to <body>, outside every .acm-root) carries acm-root on its own backdrop (R5d)', () => {
+    render(<DailyChangeModal country="US" countryLabel="US" tenor="10Y" onClose={() => undefined} />)
+    const backdrop = document.body.querySelector<HTMLElement>(':scope > div[role="presentation"]')
+    expect(backdrop, 'modal backdrop portalled to body').toBeTruthy()
+    expect(backdrop!.parentElement).toBe(document.body)
+    expect(backdrop!.classList.contains('acm-root'), 'backdrop carries acm-root').toBe(true)
   })
 
   it('unconverted cross-route components (NavDropdown, FredRefreshButton) reference no --acm-* token', () => {

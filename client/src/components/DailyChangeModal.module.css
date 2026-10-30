@@ -144,3 +144,142 @@
 .error {
   color: #ef4444;
 }
+
+/* ── R5d (token-only): the dm* classes below are the only ones the modal uses;
+   the rules above are legacy, removed at Z. The modal is portalled to <body>,
+   so its backdrop carries acm-root (component-level root rule). ─────────── */
+
+.dmBackdrop {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, var(--acm-surface-bg) 80%, transparent);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dmContent {
+  background: var(--acm-surface-panel);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-lg);
+  padding: var(--acm-space-5) var(--acm-space-6);
+  width: 70vw;
+  max-width: 900px;
+  height: 65vh;
+  max-height: 720px;
+  min-height: 480px;
+  position: relative;
+  font-family: var(--acm-font-mono);
+  display: flex;
+  flex-direction: column;
+  color: var(--acm-text-primary);
+}
+
+.dmTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+  padding-bottom: var(--acm-space-2);
+  margin-bottom: var(--acm-space-3);
+}
+
+.dmTitle {
+  margin: 0;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-xl);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.dmTitleSubtle {
+  color: var(--acm-text-secondary);
+  font-weight: var(--acm-fw-medium);
+  margin-left: var(--acm-space-2);
+}
+
+.dmClose {
+  background: transparent;
+  border: none;
+  color: var(--acm-text-secondary);
+  font-size: var(--acm-fs-2xl);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 var(--acm-space-2);
+}
+
+.dmClose:hover { color: var(--acm-text-primary); }
+
+.dmLookbackRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  margin-bottom: var(--acm-space-3);
+}
+
+.dmLookbackLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.dmToggleGroup { display: inline-flex; }
+
+.dmToggle {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  color: var(--acm-text-secondary);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  cursor: pointer;
+}
+
+.dmToggle + .dmToggle { border-left-width: 0; }
+.dmToggle:first-child { border-radius: var(--acm-radius-md) 0 0 var(--acm-radius-md); }
+.dmToggle:last-child { border-radius: 0 var(--acm-radius-md) var(--acm-radius-md) 0; }
+.dmToggle:hover { color: var(--acm-text-primary); background: var(--acm-surface-raised); }
+
+.dmToggleActive,
+.dmToggleActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.dmState {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.dmStateError { color: var(--acm-status-warning); }
+
+.dmChart {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.dmStats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--acm-space-4);
+  padding-top: var(--acm-space-3);
+  margin-top: var(--acm-space-2);
+  border-top: var(--acm-border-width) solid var(--acm-border-hairline);
+  font-size: var(--acm-fs-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.dmStatLabel { color: var(--acm-text-secondary); }
+.dmStatSep { color: var(--acm-text-tertiary); }

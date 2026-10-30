@@ -1,54 +1,75 @@
+/* ── Section shell (Asset Class Models revamp, Phase 3 R1) ───────────────────
+   The outer element carries .acm-root, so the whole section sits on the
+   token layer. Heights mirror the terminal-wide top bar (46px) and
+   breadcrumb (34px) exactly, expressed in spacing tokens. NavDropdown inside
+   the top bar is intentionally not converted (Decision 4). */
+
 .shell {
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--acm-surface-bg);
 }
 
 .topBar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
-  height: 46px;
-  background: var(--surface-header);
-  border-bottom: 1px solid var(--border-accent);
+  gap: var(--acm-space-4);
+  padding: 0 var(--acm-space-4);
+  height: calc(var(--acm-space-12) - var(--acm-space-0-5));
+  background: var(--acm-surface-panel);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
   flex-shrink: 0;
-  gap: 16px;
 }
 
 .barLeft {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--acm-space-3);
   flex-shrink: 0;
 }
 
 .barCenter { flex: 1; }
+
 .barRight { flex-shrink: 0; }
 
 .logo {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--text-primary);
-  border-left: 1px solid var(--border-accent);
-  padding-left: 10px;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-xl);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  color: var(--acm-text-primary);
+  border-left: var(--acm-border-width) solid var(--acm-border-emphasis);
+  padding-left: var(--acm-space-3);
 }
 
 .breadcrumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 20px;
-  height: 34px;
-  background: var(--surface-header);
-  border-bottom: 1px solid var(--border);
+  gap: var(--acm-space-2);
+  padding: 0 var(--acm-space-5);
+  height: calc(var(--acm-space-8) + var(--acm-space-0-5));
+  background: var(--acm-surface-panel);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
   flex-shrink: 0;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  color: #64748b;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  letter-spacing: var(--acm-tracking-label);
+  color: var(--acm-text-tertiary);
+}
+
+.breadcrumbCurrent { color: var(--acm-text-secondary); }
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--acm-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-5);
+  min-height: 0;
 }
 
 .breadcrumbLink {
@@ -61,21 +82,11 @@
 }
 
 .breadcrumbSep { opacity: 0.4; }
-.breadcrumbCurrent { color: #94a3b8; }
 
-.body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-height: 0;
-}
 
 .twoPanel {
   display: flex;
-  gap: 16px;
+  gap: var(--acm-space-4);
   align-items: flex-start;
   width: 100%;
 }
@@ -91,42 +102,11 @@
   min-width: 0;
 }
 
-.viewTabs {
-  display: flex;
-  gap: 0;
-  margin-bottom: 16px;
-}
 
-.viewTab {
-  background: transparent;
-  color: #728197;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 8px 24px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
 
-.viewTab:first-child {
-  border-radius: 3px 0 0 3px;
-}
 
-.viewTab:last-child {
-  border-radius: 0 3px 3px 0;
-}
 
-.viewTab:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.04);
-}
 
-.viewTabActive {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.12);
-}
 
 .controlsSection,
 .section {
@@ -148,28 +128,45 @@
   gap: 0;
 }
 
+/* Product toggle (FED FUNDS / SOFR …): segmented, same active treatment as the nav tiers. */
+.toggleGroup { margin-bottom: var(--acm-space-3); }
+
 .toggleButton {
-  background: rgba(255,255,255,0.03);
-  color: #8ea1b5;
-  padding: 6px 10px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.08em;
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  color: var(--acm-text-secondary);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-size: var(--acm-fs-sm);
+  font-family: var(--acm-font-sans);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
   cursor: pointer;
 }
 
+.toggleButton + .toggleButton { border-left-width: 0; }
+
 .toggleButton:first-child {
-  border-radius: 2px 0 0 2px;
+  border-radius: var(--acm-radius-md) 0 0 var(--acm-radius-md);
 }
 
 .toggleButton:last-child {
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 var(--acm-radius-md) var(--acm-radius-md) 0;
 }
 
-.toggleButtonActive {
-  color: #4ec9b0;
-  background: rgba(78, 201, 176, 0.12);
+.toggleButton:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
 }
+
+.toggleButtonActive,
+.toggleButtonActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.toggleButton + .toggleButtonActive { box-shadow: calc(-1 * var(--acm-border-width)) 0 0 var(--acm-accent-active); }
 
 .headerBlock {
   display: flex;
@@ -226,40 +223,18 @@
   border-bottom: none;
 }
 
-.sectionTitle {
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: #94a3b8;
-  font-family: var(--font-mono);
-}
-
-.sectionHeader {
-  padding: 11px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.panelTitle {
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #94A3B8;
-  margin-bottom: 10px;
-}
-
+/* Data-quality / stale note: status-warning treatment. */
 .curveNote {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: #f59e0b;
-  padding: 4px 8px;
-  margin: 0 0 8px;
-  border: 1px solid rgba(245, 158, 11, 0.28);
-  border-radius: 2px;
-  background: rgba(245, 158, 11, 0.06);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-regular);
+  color: var(--acm-text-primary);
+  padding: var(--acm-space-1) var(--acm-space-2);
+  margin: 0 0 var(--acm-space-2);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+  border-left: var(--acm-border-width-strong) solid var(--acm-status-warning);
+  border-radius: var(--acm-radius-md);
+  background: var(--acm-status-warning-tint);
 }
 
 .tooltip {
@@ -298,119 +273,54 @@
   overflow-x: auto;
 }
 
-.table,
 .matrixTable {
   width: 100%;
-  border-collapse: collapse;
-}
-
-.table th,
-.table td {
-  font-size: 0.85rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--acm-lh-tight);
 }
 
 .matrixTable th,
 .matrixTable td {
-  font-size: 0.8rem;
+  padding: var(--acm-space-1) var(--acm-space-2);
+  text-align: right;
+  white-space: nowrap;
+  color: var(--acm-text-primary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
 }
 
-.table th,
-.table td,
-.matrixTable th,
-.matrixTable td {
-  border-bottom: 1px solid var(--border);
-  padding: 8px 10px;
-  text-align: left;
-}
-
-.table th,
 .matrixTable th {
-  color: #6f8196;
-  font-family: var(--font-mono);
-  letter-spacing: 0.06em;
-  font-size: 10px;
-  background: rgba(255,255,255,0.02);
-  /* Allow paired (Step)/(Total) headers to wrap to two lines and stay
-   * vertically/horizontally centered so column widths stay uniform. */
-  text-align: center;
-  vertical-align: middle;
-  white-space: normal;
-  line-height: 1.25;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-secondary);
+  border-bottom-color: var(--acm-border-emphasis);
 }
 
-.table tbody tr:nth-child(even),
-.matrixTable tbody tr:nth-child(even) {
-  background: rgba(255,255,255,0.015);
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-/* Applied to body cells that should sit visually centered under their
- * two-line header (e.g. the Implied # Cuts/Hikes (Step) and (Total) columns
- * on the Summary Table). */
-.cellCenter {
-  text-align: center;
-}
-
-.badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-}
-
-.hike {
-  background: rgba(78, 201, 176, 0.14);
-  color: #4ec9b0;
-}
-
-.cut {
-  background: rgba(224, 108, 117, 0.15);
-  color: #e06c75;
-}
-
-.flat {
-  background: rgba(148, 163, 184, 0.14);
-  color: #94a3b8;
-}
-
-.hikeText { color: #4ec9b0; }
-.cutText { color: #e06c75; }
-.flatText { color: #94a3b8; }
-
-.matrixToggle {
-  width: 100%;
+.matrixTable th:first-child,
+.matrixTable td:first-child {
   text-align: left;
-  border: 0;
-  background: transparent;
-  color: #94a3b8;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
+  font-family: var(--acm-font-sans);
 }
+
+.matrixTable tr:last-child td { border-bottom: none; }
 
 .matrixSubtitle {
-  padding: 6px 16px 10px;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.04em;
-  color: #6b7889;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
 }
 
-.matrixHot {
-  background: rgba(78, 201, 176, 0.12);
-  color: #4ec9b0;
-  font-weight: 700;
+/* Most-likely target range per meeting: neutral emphasis (not a sign colour). */
+.matrixHot.matrixHot {
+  background: var(--acm-surface-raised);
+  font-weight: var(--acm-fw-semibold);
 }
 
 .loading,
@@ -420,75 +330,82 @@
   font-size: 12px;
 }
 
-/* ── Summary Boxes ── */
+/* ── Summary Boxes (STIR STRIPS) — stat-tile treatment ── */
 .summaryRow {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: var(--acm-space-3);
   width: 100%;
 }
 
 .summaryBox {
   flex: 1 1 0;
   min-width: 0;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  padding: 10px 12px;
-  font-family: var(--font-mono);
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-1);
+  background: var(--acm-surface-bg);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+  border-radius: var(--acm-radius-md);
+  padding: var(--acm-space-2) var(--acm-space-3);
 }
 
+.summaryBoxHover {
+  position: relative;
+  cursor: pointer;
+}
+
+.summaryBoxHover:hover { border-color: var(--acm-border-emphasis); }
+
 .summaryBoxLabel {
-  font-size: 0.7rem;
-  color: #e2e8f0;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  color: var(--acm-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 6px;
+  letter-spacing: var(--acm-tracking-label);
+  line-height: var(--acm-lh-tight);
 }
 
 .summaryBoxValue {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--acm-fs-xl);
+  font-weight: var(--acm-fw-medium);
+  line-height: var(--acm-lh-tight);
+  color: var(--acm-text-primary);
 }
 
 .nextMoveValue {
-  font-family: var(--font-mono);
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-2xl);
+  font-weight: var(--acm-fw-semibold);
+  line-height: var(--acm-lh-tight);
   text-align: center;
   width: 100%;
-  margin-top: 8px;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--acm-tracking-label);
+  color: var(--acm-text-primary);
 }
+
+.summaryBoxValueNeutral { color: var(--acm-text-secondary); }
 
 .summaryBoxSub {
-  font-size: 0.7rem;
-  color: #94A3B8;
-  font-weight: 600;
-  margin-top: 4px;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-xs);
+  color: var(--acm-text-tertiary);
 }
 
-.spreadPopup {
+/* Hover history popup: an AcmChartFrame, positioned under its box. Doubled
+   selector so the overlay surface wins over the frame's own panel rule. */
+.spreadPopup.spreadPopup {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + var(--acm-space-2));
   left: 0;
   right: 0;
   z-index: 100;
-  background: #0d1520;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 3px;
-  padding: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   min-width: 280px;
-}
-
-.spreadPopupTitle {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: #728197;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  margin: 0;
+  background: var(--acm-surface-overlay);
+  border-color: var(--acm-border-emphasis);
 }
 
 .ustSectionLabel {
@@ -661,32 +578,26 @@
   box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.3);
 }
 
-/* ── Strip Table ── */
-.stripHeader {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: #728197;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 12px;
-}
-
+/* ── Strip Table — data-table treatment ── */
 .stripTable {
   width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  line-height: var(--acm-lh-tight);
 }
 
 .stripTable th {
   text-align: right;
-  padding: 6px 12px;
-  color: #728197;
-  font-weight: 600;
-  font-size: 0.7rem;
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-family: var(--acm-font-sans);
+  color: var(--acm-text-secondary);
+  font-weight: var(--acm-fw-medium);
+  font-size: var(--acm-fs-sm);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  letter-spacing: var(--acm-tracking-label);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
   white-space: nowrap;
 }
 
@@ -696,17 +607,53 @@
 
 .stripTable td {
   text-align: right;
-  padding: 5px 12px;
-  color: #e2e8f0;
+  padding: var(--acm-space-1) var(--acm-space-3);
+  color: var(--acm-text-primary);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .stripTable td:first-child {
   text-align: left;
-  color: #94A3B8;
-  font-weight: 600;
+  color: var(--acm-text-secondary);
+  font-weight: var(--acm-fw-medium);
 }
+
+.stripPrimary { color: var(--acm-text-primary); }
+
+/* Named heatmap #3 (valence scale): the strip implied-rate Δ columns and the
+   FF table's price-change cells — rates colour rule (price down / rate up =
+   negative). Text stays primary; no alert treatment. Thresholds live in
+   STIRDashboardPage.stripHeatClass.
+   Each fill sits on an opaque panel base, so it never stacks on the row's pack
+   tint: the cell is exactly the fill-over-panel case whose primary-text
+   contrast acmTokens.test.ts guarantees. */
+.stripHeatPositive1 { background: linear-gradient(var(--acm-heat-positive-1), var(--acm-heat-positive-1)), var(--acm-surface-panel); }
+.stripHeatPositive2 { background: linear-gradient(var(--acm-heat-positive-2), var(--acm-heat-positive-2)), var(--acm-surface-panel); }
+.stripHeatPositive3 { background: linear-gradient(var(--acm-heat-positive-3), var(--acm-heat-positive-3)), var(--acm-surface-panel); }
+.stripHeatPositive4 { background: linear-gradient(var(--acm-heat-positive-4), var(--acm-heat-positive-4)), var(--acm-surface-panel); }
+.stripHeatNegative1 { background: linear-gradient(var(--acm-heat-negative-1), var(--acm-heat-negative-1)), var(--acm-surface-panel); }
+.stripHeatNegative2 { background: linear-gradient(var(--acm-heat-negative-2), var(--acm-heat-negative-2)), var(--acm-surface-panel); }
+.stripHeatNegative3 { background: linear-gradient(var(--acm-heat-negative-3), var(--acm-heat-negative-3)), var(--acm-surface-panel); }
+.stripHeatNegative4 { background: linear-gradient(var(--acm-heat-negative-4), var(--acm-heat-negative-4)), var(--acm-surface-panel); }
+/* Named heatmap #4 — CREDIT SPREADS table Δ cells (US + EU CREDIT), valence
+   heat scale: widening → heat-negative, tightening → heat-positive; quartile-
+   of-column-max steps (STIRDashboardPage.creditHeatClass). Primary text, no
+   tone, no alerts; opaque panel base like the strip heatmap. */
+.creditHeatPositive1 { background: linear-gradient(var(--acm-heat-positive-1), var(--acm-heat-positive-1)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive2 { background: linear-gradient(var(--acm-heat-positive-2), var(--acm-heat-positive-2)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive3 { background: linear-gradient(var(--acm-heat-positive-3), var(--acm-heat-positive-3)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatPositive4 { background: linear-gradient(var(--acm-heat-positive-4), var(--acm-heat-positive-4)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative1 { background: linear-gradient(var(--acm-heat-negative-1), var(--acm-heat-negative-1)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative2 { background: linear-gradient(var(--acm-heat-negative-2), var(--acm-heat-negative-2)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative3 { background: linear-gradient(var(--acm-heat-negative-3), var(--acm-heat-negative-3)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.creditHeatNegative4 { background: linear-gradient(var(--acm-heat-negative-4), var(--acm-heat-negative-4)), var(--acm-surface-panel); color: var(--acm-text-primary); }
+.stripStrong { font-weight: var(--acm-fw-medium); }
+/* MONEY MARKETS RDE refresh (R3b): a lone .toggleButton; disabled while syncing. */
+.mmRefresh { margin-left: var(--acm-space-2); border-radius: var(--acm-radius-md); }
+.mmRefresh:disabled,
+.mmRefresh:disabled:hover { color: var(--acm-text-disabled); background: transparent; cursor: not-allowed; }
+.muted.muted { color: var(--acm-text-tertiary); }
 
 .oiCell {
   padding: 0 !important;
@@ -738,52 +685,38 @@
 }
 
 .yearRow td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
 }
 
 .yearRowLabel {
-  padding: 12px 12px 6px;
-  color: #94A3B8;
-  font-weight: 700;
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
+  padding: var(--acm-space-3) var(--acm-space-3) var(--acm-space-1);
+  font-family: var(--acm-font-sans);
+  color: var(--acm-text-secondary);
+  font-weight: var(--acm-fw-semibold);
+  font-size: var(--acm-fs-md);
+  letter-spacing: var(--acm-tracking-label);
   text-align: left;
 }
 
-.packHeaderRow {
-  background: rgba(255, 255, 255, 0.03);
-}
-
 .packHeaderRow td {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
 }
 
 .packHeaderCell {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  font-style: italic;
-  letter-spacing: 0.05em;
-  padding: 6px 12px;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  padding: var(--acm-space-1) var(--acm-space-3);
   text-transform: uppercase;
   text-align: left;
 }
 
 .changeCell {
-  font-weight: 600;
+  font-weight: var(--acm-fw-medium);
   text-align: right;
-  padding-right: 16px !important;
+  padding-right: var(--acm-space-4) !important;
   white-space: nowrap;
-}
-
-.changePositive {
-  color: #4ec9b0 !important;
-  font-weight: 600;
-}
-
-.changeNegative {
-  color: #ef5350 !important;
-  font-weight: 600;
 }
 
 .ocrHeader {
@@ -799,6 +732,221 @@
   color: #ef4444 !important;
   font-weight: 600;
 }
+
+/* ── View header (title + as-of dates + t − N lookback). Token rules for
+   converted views; the ust* header rules stay for unconverted views. ── */
+.viewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--acm-space-3);
+  margin-bottom: var(--acm-space-3);
+}
+
+.viewHeadTitle {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-lg);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-primary);
+}
+
+.viewHeadDates {
+  margin-top: var(--acm-space-1);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+}
+
+.viewHeadControls {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-3);
+}
+
+.tLookback {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-secondary);
+  white-space: nowrap;
+}
+
+.tLookbackInput {
+  width: 48px;
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-sm);
+  color: var(--acm-text-primary);
+  padding: var(--acm-space-1) var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  text-align: center;
+}
+
+.tLookbackInput:focus {
+  outline: none;
+  border-color: var(--acm-accent-hover);
+}
+
+/* FORWARD PRICING curve tooltip — surface from chartTheme.tooltipSurfaceStyle. */
+.curveTip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-0-5);
+  min-width: 180px;
+}
+
+.curveTipTitle {
+  color: var(--acm-text-secondary);
+  margin-bottom: var(--acm-space-1);
+}
+
+.curveTipRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--acm-space-3);
+}
+
+.curveTipKey {
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-sans);
+}
+
+/* ── STIR STRIPS state messages ── */
+.stateMsg,
+.stateError {
+  padding: var(--acm-space-6) var(--acm-space-4);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+}
+
+.stateMsg { color: var(--acm-text-tertiary); }
+.stateError { color: var(--acm-status-warning); }
+
+/* ── STIR STRIPS calendar spreads (token rules; GlobalRatesPage keeps the
+   spreads* rules below until it converts in R5) ── */
+.calSpreads {
+  display: block;
+  clear: both;
+  width: 100%;
+  margin-top: var(--acm-space-6);
+}
+
+.calSpreadsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--acm-space-2);
+}
+
+.calSpreadsTitle {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-lg);
+  font-weight: var(--acm-fw-semibold);
+  color: var(--acm-text-primary);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.calLookback {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-secondary);
+}
+
+.calLookbackInput {
+  width: 60px;
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  color: var(--acm-text-primary);
+  padding: var(--acm-space-1) var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  text-align: center;
+  border-radius: var(--acm-radius-sm);
+}
+
+.calLookbackInput:focus {
+  outline: none;
+  border-color: var(--acm-accent-hover);
+}
+
+.calDateLabels {
+  display: flex;
+  gap: var(--acm-space-4);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+  margin-bottom: var(--acm-space-3);
+}
+
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--acm-space-4);
+}
+
+.calColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--acm-surface-panel);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+  border-radius: var(--acm-radius-md);
+}
+
+/* The column is the panel; the frame inside drops its own border + surface. */
+.calFrame.calFrame {
+  margin: 0;
+  border: none;
+  background: transparent;
+}
+
+.calTable {
+  width: 100%;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0 0 var(--acm-space-2);
+}
+
+.calTable th {
+  text-align: right;
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  color: var(--acm-text-secondary);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
+}
+
+.calTable th:first-child { text-align: left; }
+
+.calTable td {
+  padding: var(--acm-space-1) var(--acm-space-3);
+  text-align: right;
+  color: var(--acm-text-primary);
+  font-variant-numeric: tabular-nums;
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+}
+
+.calTable tr:last-child td { border-bottom: none; }
+
+.calTable td:first-child {
+  text-align: left;
+  font-weight: var(--acm-fw-medium);
+}
+
+.calTable tbody tr:hover { background: var(--acm-surface-raised); }
 
 /* ── Calendar Spreads Dashboard ── */
 .spreadsDashboardFullWidth {
@@ -971,8 +1119,8 @@
   min-width: 145px;
   white-space: nowrap !important;
   text-align: right !important;
-  padding-right: 16px !important;
-  line-height: 1.2;
+  padding-right: var(--acm-space-4) !important;
+  line-height: var(--acm-lh-tight);
 }
 
 .contractClickable {
@@ -989,7 +1137,7 @@
 .modalBackdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: color-mix(in srgb, var(--acm-surface-bg) 80%, transparent);
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -997,18 +1145,29 @@
 }
 
 .modalContent {
-  background: #0a1018;
-  border: 1px solid #334155;
-  border-radius: 6px;
-  padding: 24px;
+  background: var(--acm-surface-panel);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-lg);
+  padding: var(--acm-space-6);
   width: 92%;
   max-width: 1400px;
   height: 85vh;
   max-height: 900px;
   position: relative;
-  font-family: var(--font-mono);
+  font-family: var(--acm-font-sans);
+  color: var(--acm-text-primary);
   display: flex;
   flex-direction: column;
+}
+
+.modalState {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
 }
 
 .modalChartContainer {
@@ -1019,34 +1178,33 @@
 
 .modalClose {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: var(--acm-space-3);
+  right: var(--acm-space-3);
   background: transparent;
   border: none;
-  color: #94A3B8;
-  font-size: 24px;
+  color: var(--acm-text-secondary);
+  font-size: var(--acm-fs-2xl);
   cursor: pointer;
   line-height: 1;
 }
 
 .modalClose:hover {
-  color: #ffffff;
+  color: var(--acm-text-primary);
 }
 
 .modalTitle {
   margin: 0;
-  font-family: var(--font-mono);
-  font-size: 1.4rem;
-  font-style: italic;
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-2xl);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
 }
 
 .modalSubtitle {
-  margin: 4px 0 0;
-  color: #94A3B8;
-  font-size: 0.75rem;
-  letter-spacing: 0.05em;
+  margin: var(--acm-space-1) 0 0;
+  color: var(--acm-text-secondary);
+  font-size: var(--acm-fs-sm);
+  letter-spacing: var(--acm-tracking-label);
   text-transform: uppercase;
 }
 
@@ -1054,14 +1212,14 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 16px 0 12px;
-  gap: 24px;
+  margin: var(--acm-space-4) 0 var(--acm-space-3);
+  gap: var(--acm-space-6);
   flex-wrap: wrap;
 }
 
 .modalToggleGroup {
   display: flex;
-  gap: 8px;
+  gap: var(--acm-space-2);
 }
 
 .modalToggle {
@@ -1080,173 +1238,87 @@
   letter-spacing: 0.05em;
 }
 
-.activeToggle {
-  background: #1e3a5f !important;
-  color: #60a5fa !important;
-  border-color: #60a5fa !important;
-}
-
-.activeToggleGreen {
-  background: #1e3f2a !important;
-  color: #4ade80 !important;
-  border-color: #4ade80 !important;
-}
-
-.modalToggleGroup button {
+/* Modal toggles + range buttons: same active treatment as the nav tiers. */
+.modalToggleGroup button,
+.modalRangeButtons button {
   background: transparent;
-  border: 1px solid #334155;
-  color: #94A3B8;
-  padding: 6px 12px;
-  font-size: 11px;
-  font-family: var(--font-mono);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
   cursor: pointer;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.modalToggleGroup button { font-family: var(--acm-font-sans); }
+.modalRangeButtons button { font-family: var(--acm-font-mono); }
+
+.modalToggleGroup button:hover,
+.modalRangeButtons button:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
 }
 
 .modalRangeButtons {
   display: flex;
-  gap: 6px;
-  margin-top: 12px;
+  gap: var(--acm-space-1);
+  margin-top: var(--acm-space-3);
   justify-content: center;
 }
 
-.modalRangeButtons button {
-  background: transparent;
-  border: 1px solid #334155;
-  color: #94A3B8;
-  padding: 4px 10px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  cursor: pointer;
-}
-
+.activeToggle,
 .activeRange {
-  background: #1e3a5f !important;
-  color: #60a5fa !important;
-  border-color: #60a5fa !important;
+  background: var(--acm-accent-muted) !important;
+  color: var(--acm-accent-hover) !important;
+  border-color: var(--acm-accent-active) !important;
 }
 
-.fvmPanel {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.2);
-  display: flex;
-  flex-direction: column;
-}
-
-.fvmHeader {
-  padding: 14px 16px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.fvmTitle {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #e2e8f0;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.fvmMeasureToggle {
-  display: flex;
-  gap: 0;
-}
-
-.fvmMeasureBtn {
-  background: transparent;
-  color: #728197;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 4px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.fvmMeasureBtn:first-child {
-  border-radius: 2px 0 0 2px;
-}
-
-.fvmMeasureBtn:last-child {
-  border-radius: 0 2px 2px 0;
-}
-
-.fvmMeasureBtn:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.fvmMeasureBtnActive {
-  color: #e2e8f0;
-  background: rgba(226, 232, 240, 0.08);
-}
-
-.fvmTabs {
-  display: flex;
+/* ── US FUNDAMENTAL MODEL panel (R2c): AcmPanel + AcmChartFrame; tabs, measure
+ * toggle, ranges and FED FUNDS use the shared .toggleGroup / .toggleButton. */
+.fvmTabs,
+.fvmRangeBar {
   flex-wrap: wrap;
-  gap: 0;
-  padding: 12px 16px 0;
-}
-
-.fvmTab {
-  background: transparent;
-  color: #728197;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 5px 12px;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-
-.fvmTab:first-child {
-  border-radius: 2px 0 0 2px;
-}
-
-.fvmTab:last-child {
-  border-radius: 0 2px 2px 0;
-}
-
-.fvmTab:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.fvmTabActive {
-  color: #e2e8f0;
-  background: rgba(226, 232, 240, 0.08);
 }
 
 .fvmBody {
-  padding: 16px;
-  flex: 1;
   min-height: 400px;
 }
 
 .fvmStatsLine {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: #94A3B8;
-  padding: 0 0 10px;
-  letter-spacing: 0.03em;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--acm-text-secondary);
+  letter-spacing: var(--acm-tracking-none);
+  padding: 0 0 var(--acm-space-2);
 }
 
-.fvmRangeBar {
-  display: flex;
-  gap: 0;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
+.fvmRefresh {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  padding: var(--acm-space-1) var(--acm-space-2);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-xs);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  cursor: pointer;
 }
 
+.fvmRefresh:hover:not(:disabled) {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.fvmRefresh:disabled {
+  color: var(--acm-text-disabled);
+  cursor: not-allowed;
+}
+
+/* Legacy range buttons — still used by UST CURVE / MONEY MARKETS (convert in R2d / R3). */
 .fvmRangeBtn {
   background: transparent;
   color: #728197;
@@ -1275,115 +1347,401 @@
   background: rgba(226, 232, 240, 0.08);
 }
 
-.fvmLegend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
-  color: #728197;
-  padding: 6px 0;
-}
-
-.fvmSectionLabel {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: #728197;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 12px 0 6px;
-}
-
 .laborInputRow {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 0 0 10px;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  color: #94A3B8;
+  gap: var(--acm-space-2);
+  padding: 0 0 var(--acm-space-3);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
 }
 
 .laborInputLabel {
-  color: #728197;
+  color: var(--acm-text-tertiary);
   white-space: nowrap;
 }
 
 .laborInput {
-  background: #0d1520;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #e2e8f0;
-  border-radius: 2px;
-  padding: 3px 6px;
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
+  background: var(--acm-surface-bg);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  color: var(--acm-text-primary);
+  border-radius: var(--acm-radius-sm);
+  padding: var(--acm-space-0-5) var(--acm-space-1);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-xs);
+  font-variant-numeric: tabular-nums;
   width: 50px;
   text-align: center;
 }
 
+.laborInput:focus-visible {
+  outline: var(--acm-focus-ring-width) solid var(--acm-focus-ring-color);
+  outline-offset: var(--acm-focus-ring-offset);
+}
+
+/* Empty / loading / error states — shared by every section that renders one. */
 .comingSoon {
-  color: #4a5568;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
+  color: var(--acm-text-disabled);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-lg);
   text-align: center;
-  padding: 80px 0;
+  padding: var(--acm-space-20) 0;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: var(--acm-tracking-label);
+}
+
+/* ── UST CURVE (R2d): token-only classes. The legacy ust* / histChanges* rules
+ * above stay for the country curve pages, GLOBAL and the R3 sections until
+ * those convert. Family colour arrives as --ust-family (UST_FAMILY_COLORS). */
+.ustStack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ustPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--acm-space-4);
+}
+
+.ustAsOf {
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+  padding: 0 0 var(--acm-space-2);
+}
+
+.ustLookback {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+  white-space: nowrap;
+}
+
+.ustLookback .inputNarrow { width: 40px; }
+
+.ustSubLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-secondary);
+  padding: var(--acm-space-3) 0 var(--acm-space-2);
+}
+
+.ustTiles {
+  display: grid;
+  gap: var(--acm-space-2);
+  margin-bottom: var(--acm-space-3);
+}
+
+.ustTiles7 { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ustTiles4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ustTiles3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Per-market tile rows (R5a): column count from --ust-cols (set inline, capped), wrapping beyond it. */
+.ustTilesN { grid-template-columns: repeat(var(--ust-cols, 4), minmax(0, 1fr)); }
+/* ── GLOBAL (R5c) — token-only; the legacy summary / yieldChanges / spreads*
+   / ocr* rules stay for Z. ───────────────────────────────────────────────── */
+.gsSelect {
+  background: var(--acm-surface-raised);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  padding: var(--acm-space-1) var(--acm-space-2);
+}
+
+.summaryTableAcm {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryTableAcm th {
+  padding: var(--acm-space-2) var(--acm-space-2);
+  text-align: right;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-secondary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
+  white-space: nowrap;
+}
+
+.summaryTableAcm td {
+  padding: var(--acm-space-2) var(--acm-space-2);
+  text-align: right;
+  color: var(--acm-text-primary);
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+  white-space: nowrap;
+}
+
+.summaryTableAcm th:first-child,
+.summaryTableAcm td:first-child {
+  text-align: left;
+  font-weight: var(--acm-fw-medium);
+}
+
+.summaryTableAcm tr:last-child td { border-bottom: none; }
+
+/* Δ cells: the cellColor named heatmap (fill set inline by getCellColor over an
+   opaque panel base); text stays primary. */
+.summaryTableAcm td.gsHeat { background: var(--acm-surface-panel); color: var(--acm-text-primary); }
+
+/* Regime cells: a uniform 0.36 tint of the CURVE_REGIME_COLORS identity (set inline,
+   ratesShared.regimeTintBackground) over the panel; text stays primary. */
+.summaryTableAcm td.gsRegime { text-align: center; font-weight: var(--acm-fw-semibold); }
+
+.gsUnit {
+  color: var(--acm-text-tertiary);
+  font-weight: var(--acm-fw-regular);
+  text-transform: none;
+}
+
+/* 1-day z-score grid: the cellColor named heatmap; opaque panel base, primary text. */
+.gzGrid {
+  display: grid;
+  gap: var(--acm-border-width);
+  background: var(--acm-border-hairline);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+}
+
+.gzCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--acm-space-0-5);
+  padding: var(--acm-space-2) var(--acm-space-3);
+  background: var(--acm-surface-panel);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  cursor: pointer;
+}
+
+.gzCell:focus-visible { outline: var(--acm-border-width) solid var(--acm-accent-active); }
+
+.gzHead {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+}
+
+.gzSigma { font-size: var(--acm-fs-md); font-weight: var(--acm-fw-medium); }
+.gzBps { font-size: var(--acm-fs-sm); }
+
+/* GLOBAL calendar-spread table header: market short name under its key. */
+.calHeadName {
+  font-weight: var(--acm-fw-regular);
+  color: var(--acm-text-tertiary);
+  text-transform: none;
+  letter-spacing: var(--acm-tracking-none);
+}
+
+/* GLOBAL small multiples + shared brush (R5c). */
+.gGrid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--acm-space-3);
+}
+
+.gBrush { margin-top: var(--acm-space-2); }
+
+/* Shared legend for the GLOBAL small-multiples grid (same look as AcmChartFrame's legend). */
+.gLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acm-space-1) var(--acm-space-4);
+  margin: 0 0 var(--acm-space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.gLegendButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  padding: 0;
+  background: none;
+  border: none;
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-secondary);
+  cursor: pointer;
+}
+
+.gLegendButton:hover { color: var(--acm-text-primary); }
+.gLegendButton.gLegendHidden { color: var(--acm-text-disabled); }
+
+.gLegendSwatch {
+  width: var(--acm-space-3);
+  height: var(--acm-space-0-5);
+  background: var(--acm-swatch);
+  border-radius: var(--acm-radius-sm);
+}
+
+.gLegendHidden .gLegendSwatch { opacity: 0.35; }
+
+.gLegendSwatchDashed {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--acm-swatch) 0 var(--acm-space-1),
+    transparent var(--acm-space-1) var(--acm-space-2)
+  );
+}
+
+/* Static legend rows (no toggle) use the button look without the pointer. */
+li.gLegendButton { cursor: default; }
+
+/* Small-multiple frames sit in a grid: no bottom margin of their own. */
+.gMini.gMini { margin-bottom: 0; }
+
+.gTipRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--acm-space-3);
+}
+
+/* Fundamental-model panels (R5b): one-line note under the header (JP core
+   convention, AU measure subtitle) and footnotes (BoC core measures). */
+.fvmNote {
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-xs);
+  color: var(--acm-text-tertiary);
+  padding: 0 0 var(--acm-space-2);
+  line-height: var(--acm-lh-prose);
+}
+
+.ustTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--acm-space-1);
+  padding: var(--acm-space-3) var(--acm-space-2);
+  background: var(--acm-surface-raised);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+  border-radius: var(--acm-radius-md);
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--acm-text-primary);
+  cursor: pointer;
+  min-width: 0;
+}
+
+.ustTile:hover { border-color: var(--acm-border-emphasis); }
+
+.ustTile:focus-visible {
+  outline: var(--acm-focus-ring-width) solid var(--acm-focus-ring-color);
+  outline-offset: var(--acm-focus-ring-offset);
+}
+
+.ustTileActive,
+.ustTileActive:hover {
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.ustTileLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-md);
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  color: var(--ust-family, var(--acm-text-secondary));
+}
+
+.ustTileValue {
+  font-size: var(--acm-fs-xl);
+  font-weight: var(--acm-fw-semibold);
+  line-height: var(--acm-lh-tight);
+}
+
+.ustTileValueFamily { color: var(--ust-family, var(--acm-text-primary)); }
+
+.ustTileChange { font-size: var(--acm-fs-sm); }
+
+/* CREDIT SPREADS dashboard table (AcmDataTable) under the overview chart. */
+.creditDashboard { margin-bottom: var(--acm-space-4); }
+
+/* The cellColor grid (named heatmap; rule 6 exception b). Hairline gaps
+ * between cells; filled cells bring their own opaque panel base. */
+.chgGrid {
+  display: grid;
+  gap: var(--acm-border-width);
+  background: var(--acm-border-hairline);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+}
+
+.chgGridNominal { grid-template-columns: 80px repeat(5, minmax(0, 1fr)); }
+.chgGridBeReal  { grid-template-columns: 90px repeat(5, minmax(0, 1fr)); }
+
+.chgHead,
+.chgRowLabel,
+.chgCell {
+  padding: var(--acm-space-2) var(--acm-space-3);
+  text-align: center;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--acm-text-primary);
+}
+
+.chgHead,
+.chgRowLabel {
+  font-weight: var(--acm-fw-semibold);
+  letter-spacing: var(--acm-tracking-label);
+  background: var(--acm-surface-raised);
+}
+
+.chgCell { background: var(--acm-surface-panel); }
+
+.chgSeparator {
+  grid-column: 1 / -1;
+  height: var(--acm-space-2);
+  background: var(--acm-surface-bg);
 }
 
 /* ── Asset Class Selector ── */
-.assetClassBar {
-  display: flex;
-  gap: 0;
-  margin-bottom: 12px;
-}
 
-.assetClassBtn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #728197;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 10px 28px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
 
-.assetClassBtn:first-child {
-  border-radius: 3px 0 0 3px;
-}
 
-.assetClassBtn:last-child {
-  border-radius: 0 3px 3px 0;
-}
 
-.assetClassBtn:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.04);
-}
 
-.assetClassBtnActive {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.12);
-}
 
+/* Overnight-rate band (EFFR / SONIA / …) above STRIPS + PRICING. */
 .ffrBand {
-  font-family: var(--font-mono);
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #60a5fa;
-  letter-spacing: 0.06em;
-  padding: 8px 14px;
-  margin-bottom: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--acm-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--acm-fs-lg);
+  font-weight: var(--acm-fw-medium);
+  color: var(--acm-text-primary);
+  letter-spacing: var(--acm-tracking-label);
+  padding: var(--acm-space-2) var(--acm-space-3);
+  margin-bottom: var(--acm-space-3);
+  border: var(--acm-border-width) solid var(--acm-border-hairline);
+  border-radius: var(--acm-radius-md);
+  background: var(--acm-surface-panel);
   display: inline-block;
+}
+
+.ffrBandNote {
+  display: inline-block;
+  margin: 0 0 0 var(--acm-space-2);
 }
 
 .fullPanel {
@@ -1829,14 +2187,14 @@
   }
 
   .body {
-    padding: 16px;
+    padding: var(--acm-space-4);
   }
 
   .summaryRow {
     flex-wrap: wrap;
   }
   .summaryRow .summaryBox {
-    flex: 1 1 calc(50% - 6px);
+    flex: 1 1 calc(50% - var(--acm-space-3) / 2);
   }
 
   .twoPanel {

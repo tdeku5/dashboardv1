@@ -86,3 +86,76 @@
   color: #0f172a;
   background: #60a5fa;
 }
+
+/* ── R4 (token-only): RATES › US › POLICY RATE. The rules above are legacy —
+   still used by CountryTermStructure (other markets' POLICY RATE), removed at
+   R5/Z. PolicyRatePage uses only the pr* classes below; charts sit in
+   AcmChartFrame. Side-by-side at desktop widths; stacked below 1400. */
+
+.prRow {
+  display: grid;
+  gap: var(--acm-space-4);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+@media (max-width: 1399px) {
+  .prRow { grid-template-columns: minmax(0, 1fr); }
+}
+
+.prColumn {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.prRangeButtons {
+  display: flex;
+  gap: var(--acm-space-1);
+  flex-wrap: wrap;
+}
+
+/* Same treatment as the US Rates VOL range buttons. */
+.prRangeBtn {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  cursor: pointer;
+}
+
+.prRangeBtn:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.prRangeBtnActive,
+.prRangeBtnActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.prStateMsg,
+.prStateError {
+  padding: var(--acm-space-6) var(--acm-space-4);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+}
+
+.prStateMsg { color: var(--acm-text-tertiary); }
+.prStateError { color: var(--acm-status-warning); }
+
+/* R5a: notes above the CountryTermStructure charts (e.g. cash series not ingested). */
+.prNote {
+  margin-bottom: var(--acm-space-3);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+}
+
+.prNoteWarning { color: var(--acm-status-warning); }

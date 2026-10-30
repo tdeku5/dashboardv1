@@ -20,8 +20,10 @@ const TEXT_ON_SURFACE: Array<[string, number, string]> = [
   ['acm-accent-hover', AA, 'accent text'],
   ['acm-positive', AA, 'valence text'],
   ['acm-negative', AA, 'valence text'],
-  ['acm-dir-up', AA, 'direction text'],
-  ['acm-dir-down', AA, 'direction text'],
+  ['acm-dir-up', AA, 'direction text (red)'],
+  ['acm-dir-down', AA, 'direction text (green)'],
+  ['acm-vol-premium-up', AA, 'VOL premium text (exception 2)'],
+  ['acm-vol-premium-down', AA, 'VOL premium text (exception 2)'],
   ['acm-alert-mild', AA, 'alert (as text)'],
   ['acm-alert-strong', AA, 'alert (as text)'],
   ['acm-status-warning', AA, 'status (as text)'],
@@ -43,7 +45,7 @@ const TINT_SURFACES = ['acm-surface-bg', 'acm-surface-panel'] as const
  * clear AA on it; banners carry primary/secondary prose; nav rows carry
  * accent labels on accent-muted.
  */
-const VALUE_TEXT = ['acm-text-primary', 'acm-positive', 'acm-negative', 'acm-dir-up', 'acm-dir-down']
+const VALUE_TEXT = ['acm-text-primary', 'acm-positive', 'acm-negative', 'acm-dir-up', 'acm-dir-down', 'acm-vol-premium-up', 'acm-vol-premium-down']
 const TEXT_ON_TINT: Array<[string, string, number]> = [
   ...VALUE_TEXT.map(t => [t, 'acm-alert-mild-tint', AA] as [string, string, number]),
   ...VALUE_TEXT.map(t => [t, 'acm-alert-strong-tint', AA] as [string, string, number]),
@@ -59,7 +61,9 @@ const TEXT_ON_TINT: Array<[string, string, number]> = [
  * only via the one-pass stopping rule, declared here with the reason.
  */
 const SEEDS: Record<string, string> = {
-  'acm-dir-up': '#F0954A', 'acm-dir-down': '#7CC4F2', 'acm-positive': '#4CC38A',
+  // The phase-1 orange / blue "direction" seeds now live on the VOL premium
+  // (exception 2); the direction pair itself is red / green (tested below).
+  'acm-vol-premium-up': '#F0954A', 'acm-vol-premium-down': '#7CC4F2', 'acm-positive': '#4CC38A',
   'acm-negative': '#E06C6C', 'acm-alert-mild': '#E8C547', 'acm-alert-strong': '#F05BA0',
   'acm-status-warning': '#E8C547',
 }
@@ -143,6 +147,22 @@ describe('acm-tokens.css — contrast matrix', () => {
     }
   })
 
+  it('red / green direction rule: dir-up IS the negative (red) token, dir-down the positive (green) one', () => {
+    expect(raw['acm-dir-up']).toBe('var(--acm-negative)')
+    expect(raw['acm-dir-down']).toBe('var(--acm-positive)')
+    expect(hex('acm-dir-up')).toBe(hex('acm-negative'))
+    expect(hex('acm-dir-down')).toBe(hex('acm-positive'))
+  })
+
+  it('exceptions keep their own literal values (never derived from the direction pair)', () => {
+    expect(raw['acm-vol-premium-up']).toBe('#F0954A')    // orange
+    expect(raw['acm-vol-premium-down']).toBe('#7CC4F2')  // blue
+    expect(raw['acm-heat-rate-blue']).toBe('#7CC4F2')    // heatmap decrease side
+    for (const [k, v] of Object.entries(raw)) {
+      if (/^acm-(vol-premium|heat-rate)-/.test(k)) expect(v, k).not.toMatch(/--acm-dir-/)
+    }
+  })
+
   it('the old global --text-secondary #4e6070 is not used as any acm token', () => {
     expect(Object.values(raw).map(v => v.toLowerCase())).not.toContain('#4e6070')
   })
@@ -150,10 +170,10 @@ describe('acm-tokens.css — contrast matrix', () => {
 
 describe('acm-tokens.css — distinctness (ΔE2000)', () => {
   const RULES: Array<[string, string, number, Array<'normal' | 'deut' | 'prot'>]> = [
-    ['acm-dir-up', 'acm-dir-down', 30, ['normal', 'deut', 'prot']],
+    ['acm-vol-premium-up', 'acm-vol-premium-down', 30, ['normal', 'deut', 'prot']],
     ['acm-negative', 'acm-alert-strong', 15, ['normal']],
-    ['acm-dir-up', 'acm-alert-mild', 15, ['normal']],
-    ['acm-dir-down', 'acm-accent', 10, ['normal']],
+    ['acm-vol-premium-up', 'acm-alert-mild', 15, ['normal']],
+    ['acm-vol-premium-down', 'acm-accent', 10, ['normal']],
   ]
   it('every distinctness threshold holds', () => {
     const rows: string[] = []
@@ -170,7 +190,7 @@ describe('acm-tokens.css — distinctness (ΔE2000)', () => {
     }
     // Reported, not gated: the two deuteranopia-weak pairs handled by the
     // never-colour-only + separate-channel rules.
-    for (const [a, b] of [['acm-positive', 'acm-negative'], ['acm-negative', 'acm-dir-up']] as const) {
+    for (const [a, b] of [['acm-positive', 'acm-negative'], ['acm-negative', 'acm-vol-premium-up']] as const) {
       const d = (['normal', 'deut', 'prot'] as const).map(k => deltaE(hex(a), hex(b), M[k]))
       rows.push(`${`${a.replace('acm-', '')} vs ${b.replace('acm-', '')}`.padEnd(34)}${d.map(x => x.toFixed(1).padStart(8)).join('')}   (info)`)
     }
@@ -185,11 +205,14 @@ describe('acm-tokens.css — distinctness (ΔE2000)', () => {
 })
 
 describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => {
-  // Direction scale → cellColor grid; valence scale → ReturnsHeatmap.
+  // Valence scale → ReturnsHeatmap and the STIR strip move cells. Rate scale
+  // (red / blue, symmetric; exception 1) → the cellColor grid. The old
+  // direction heat scale was removed with the red / green rule.
+  // See assetClassModels.heatmaps.test.ts.
   const SCALES: Array<[string, string, string]> = [
-    // [scale, token for the "down" side, token for the "up" side]
-    ['dir', 'acm-dir-down', 'acm-dir-up'],
-    ['valence', 'acm-negative', 'acm-positive'],
+    // [scale, heat prefix for the "down" side, heat prefix for the "up" side]
+    ['valence', 'acm-heat-negative-', 'acm-heat-positive-'],
+    ['rate: cellColor', 'acm-heat-rate-down-', 'acm-heat-rate-up-'],
   ]
   const sideSteps = (prefix: string) =>
     Object.keys(raw).filter(k => k.startsWith(prefix)).sort()
@@ -198,8 +221,8 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
 
   it('each side has ≤ 4 steps, built on its own sign token, strictly increasing', () => {
     const sides: Array<[string, string]> = [
-      ['acm-heat-dir-up-', 'acm-dir-up'], ['acm-heat-dir-down-', 'acm-dir-down'],
       ['acm-heat-positive-', 'acm-positive'], ['acm-heat-negative-', 'acm-negative'],
+      ['acm-heat-rate-up-', 'acm-negative'], ['acm-heat-rate-down-', 'acm-heat-rate-blue'],
     ]
     for (const [prefix, base] of sides) {
       const steps = sideSteps(prefix)
@@ -212,8 +235,15 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
 
   it('both sides of a scale mirror each other (equal magnitude → equal intensity)', () => {
     const alphas = (prefix: string) => sideSteps(prefix).map(s => tint(s)[1])
-    expect(alphas('acm-heat-dir-up-')).toEqual(alphas('acm-heat-dir-down-'))
     expect(alphas('acm-heat-positive-')).toEqual(alphas('acm-heat-negative-'))
+    // cellColor grid: an equal rise and fall shade identically, at 12/23/35/46%
+    expect(alphas('acm-heat-rate-up-')).toEqual(alphas('acm-heat-rate-down-'))
+    expect(alphas('acm-heat-rate-up-')).toEqual([0.12, 0.23, 0.35, 0.46])
+  })
+
+  it('the direction heat scale is gone; rate-up is no more opaque than heat-negative', () => {
+    expect(sideSteps('acm-heat-dir-')).toEqual([])
+    sideSteps('acm-heat-rate-up-').forEach((s, i) => expect(tint(s)[1]).toBeLessThanOrEqual(tint(sideSteps('acm-heat-negative-')[i])[1]))
   })
 
   it('primary text clears 4.5:1 over every step, on bg and panel', () => {
@@ -221,8 +251,8 @@ describe('acm-tokens.css — heatmap scales (named exception to Rule 2)', () => 
     const failures: string[] = []
     rows.push(`${'step'.padEnd(24)}${'alpha'.padStart(6)}${'bg'.padStart(8)}${'panel'.padStart(8)}   min`)
     for (const [scale, down, up] of SCALES) {
-      for (const side of [down, up]) {
-        const prefix = `acm-heat-${side.replace('acm-', '')}-`
+      for (const prefix of [down, up]) {
+        expect(sideSteps(prefix).length, prefix).toBeGreaterThan(0)
         for (const step of sideSteps(prefix)) {
           const [c, a] = tint(step)
           const r = TINT_SURFACES.map(s => contrast(hex('acm-text-primary'), composite(c, a, hex(s))))

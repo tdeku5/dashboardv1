@@ -88,13 +88,16 @@ export const xAxisProps: Partial<XAxisProps> = { ...axisBase }
  */
 export const yAxisProps: Partial<YAxisProps> = { ...axisBase, width: 60 }
 
-/** Axis title (e.g. "bp", "%"), when an axis carries one. */
-export const axisLabelStyle: CSSProperties = {
+/**
+ * Axis title (e.g. "bp", "%"), when an axis carries one. Typed `as const`
+ * (not CSSProperties) so it spreads into a Recharts `label={{ … }}` object.
+ */
+export const axisLabelStyle = {
   fill: v('text-tertiary'),
   fontFamily: CHART_FONT_SANS,
   fontSize: CHART_LABEL_FONT_SIZE,
   fontWeight: CHART_FONT_WEIGHT,
-}
+} as const
 
 // ── Tooltip ─────────────────────────────────────────────────────────────────
 // Rendered as HTML inside the chart wrapper, so var() resolves normally.

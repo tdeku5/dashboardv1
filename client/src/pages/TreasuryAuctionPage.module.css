@@ -355,3 +355,128 @@
   font-family: var(--font-mono);
   white-space: nowrap;
 }
+
+/* ── R4 (token-only): TreasuryAuctionContent — RATES › US › TREASURY AUCTIONS
+   and the standalone /treasury route. Content uses only the ta* classes below
+   (its root carries acm-root). The shell rules at the top (.shell … .body) are
+   the /treasury page chrome and stay untouched; the other legacy content rules
+   above are unused now and go at R5/Z. */
+
+.taRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-4);
+  min-width: 0;
+}
+
+.taRefreshBtn {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  padding: var(--acm-space-1) var(--acm-space-3);
+  cursor: pointer;
+}
+
+.taRefreshBtn:hover:not(:disabled) {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.taRefreshBtn:disabled {
+  color: var(--acm-text-disabled);
+  cursor: not-allowed;
+}
+
+.taSelect {
+  background: var(--acm-surface-raised);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  padding: var(--acm-space-1) var(--acm-space-2);
+  cursor: pointer;
+}
+
+.taSelect:focus {
+  outline: none;
+  border-color: var(--acm-accent-active);
+}
+
+.taStatus {
+  padding: var(--acm-space-6) var(--acm-space-4);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.taStatusError { color: var(--acm-status-warning); }
+
+.taStats { margin-bottom: var(--acm-space-4); }
+
+/* Quick-select range row (drives the brushes): same treatment as the VOL range buttons. */
+.taRangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  flex-wrap: wrap;
+}
+
+.taRangeLabel {
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-tertiary);
+  margin-right: var(--acm-space-1);
+}
+
+.taRangeBtn {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  cursor: pointer;
+}
+
+.taRangeBtn:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.taRangeBtnActive,
+.taRangeBtnActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+/* Custom tooltip rows (surface + date label come from chartTheme). */
+.taTipRow { color: var(--acm-text-primary); }
+.taTipKey { color: var(--acm-text-secondary); }
+.taTipMeta {
+  color: var(--acm-text-tertiary);
+  font-size: var(--acm-fs-xs);
+  margin-top: var(--acm-space-0-5);
+}
+.taTipSwatchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+}
+.taTipSwatch {
+  width: var(--acm-space-2);
+  height: var(--acm-space-2);
+  border-radius: var(--acm-radius-sm);
+  flex-shrink: 0;
+}

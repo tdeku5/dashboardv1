@@ -32,22 +32,22 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { AcmChartFrame, AcmPanel, niceAxis, type AcmLegendItem } from '../components/acm'
+import { chartTheme, referenceBand } from '../components/acm/chartTheme'
+import { TENOR_COLORS as REGISTRY_TENOR_COLORS } from '../constants/identityColors'
 import { fetchFredSeries, type FredObservation } from '../lib/fred'
+import { rangeToggle } from './ratesShared'
 import styles from './STIRDashboardPage.module.css'
 
-// ── Visual constants (kept in sync with PolicyRatePage / CountryTermStructure) ──
-
-const COLOR_CASH = '#e2e8f0'
-const COLOR_2Y   = '#60a5fa'
-const COLOR_5Y   = '#a78bfa'
-const COLOR_10Y  = '#34d399'
-const COLOR_30Y  = '#f87171'
-const COLOR_RECESSION = 'rgba(148, 163, 184, 0.15)'
+// ── Colours: the registry's TENOR_COLORS (as POLICY RATE / CountryTermStructure);
+// every line is a LEVEL — identity colour, never sign (rule 6). Recession
+// shading = the theme's reference band. ──────────────────────────────────────
+const COLOR_CASH = REGISTRY_TENOR_COLORS.cash
 
 const TENOR_ORDER = ['2Y', '5Y', '10Y', '30Y'] as const
 type TenorLabel = typeof TENOR_ORDER[number]
 const TENOR_COLORS: Record<TenorLabel, string> = {
-  '2Y': COLOR_2Y, '5Y': COLOR_5Y, '10Y': COLOR_10Y, '30Y': COLOR_30Y,
+  '2Y': REGISTRY_TENOR_COLORS['2Y'], '5Y': REGISTRY_TENOR_COLORS['5Y'], '10Y': REGISTRY_TENOR_COLORS['10Y'], '30Y': REGISTRY_TENOR_COLORS['30Y'],
 }
 
 const RANGES = [
@@ -59,6 +59,7 @@ const RANGES = [
   { key: 'max', label: 'MAX', years: 100 },
 ] as const
 type RangeKey = typeof RANGES[number]['key']
+const RANGE_KEYS: readonly RangeKey[] = RANGES.map(r => r.key)
 
 function cutoffForRange(range: RangeKey): string {
   if (range === 'max') return '1900-01-01'
@@ -202,93 +203,6 @@ function clipBands(
 
 type Tone = 'on' | 'off'
 
-interface RangeButtonsProps {
-  value: RangeKey
-  onChange: (r: RangeKey) => void
-}
-function RangeButtons({ value, onChange }: RangeButtonsProps) {
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {RANGES.map(r => {
-        const active = value === r.key
-        return (
-          <button
-            key={r.key}
-            onClick={() => onChange(r.key)}
-            style={{
-              padding: '4px 10px',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              cursor: 'pointer',
-              color: active ? '#0f172a' : '#94a3b8',
-              background: active ? '#60a5fa' : 'transparent',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: 2,
-            }}
-          >
-            {r.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
-interface LegendEntry { key: string; label: string; color: string }
-interface SharedLegendProps {
-  entries: LegendEntry[]
-  state: Record<string, Tone>
-  onToggle: (key: string) => void
-}
-function SharedLegend({ entries, state, onToggle }: SharedLegendProps) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '8px 18px',
-        padding: '8px 12px',
-        marginBottom: 8,
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        background: 'rgba(255, 255, 255, 0.02)',
-        borderRadius: 2,
-      }}
-    >
-      {entries.map(e => {
-        const off = state[e.key] === 'off'
-        return (
-          <button
-            key={e.key}
-            onClick={() => onToggle(e.key)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'transparent',
-              border: 0,
-              padding: 0,
-              cursor: 'pointer',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11,
-              letterSpacing: '0.04em',
-              color: off ? '#475569' : '#cbd5e1',
-              opacity: off ? 0.55 : 1,
-            }}
-            title={off ? 'Show series' : 'Hide series'}
-          >
-            <span style={{
-              width: 14, height: 3, borderRadius: 1, display: 'inline-block',
-              background: off ? '#475569' : e.color,
-            }} />
-            {e.label}
-          </button>
-        )
-      })}
-    </div>
-  )
-}
-
 // ── Mini chart (one country) ───────────────────────────────────────────────
 
 interface MiniChartProps {
@@ -322,76 +236,24 @@ function MiniChart({ cfg, rows, bands, toggle }: MiniChartProps) {
     return [min - pad, max + pad]
   }, [rows, toggle])
 
+  // Visible-window y axis snapped to even 1dp ticks (niceAxis).
+  const yAxis = yDomain ? niceAxis(yDomain, { dp: 1, maxIntervals: 4 }) : null
+
   return (
-    <div
-      style={{
-        background: 'var(--surface, #0b1220)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: 2,
-        display: 'flex',
-        flexDirection: 'column',
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '6px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          background: 'rgba(255, 255, 255, 0.02)',
-        }}
-      >
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.08em',
-          color: '#e2e8f0',
-        }}>
-          {cfg.label}
-        </span>
-        <span style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 10,
-          letterSpacing: '0.04em',
-          color: '#64748b',
-        }}>
-          {cfg.cashLabel}
-        </span>
-      </div>
-      <ResponsiveContainer width="100%" height={280}>
+    <AcmChartFrame title={cfg.label} subtitle={cfg.cashLabel} height={MINI_HEIGHT} className={styles.gMini}>
+      <ResponsiveContainer width="100%" height="100%">
         <LineChart data={rows} margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
-          <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="date"
-            stroke="#728197"
-            tick={{ fontSize: 9, fill: '#94a3b8' }}
-            minTickGap={50}
-          />
+          <CartesianGrid {...chartTheme.grid} />
+          <XAxis dataKey="date" {...chartTheme.xAxis} minTickGap={50} />
           <YAxis
-            stroke="#728197"
-            tick={{ fontSize: 9, fill: '#94a3b8' }}
+            {...chartTheme.yAxis}
             tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-            width={36}
-            domain={yDomain ?? ['auto', 'auto']}
-            allowDataOverflow={false}
+            width={46}
+            {...(yAxis ? { domain: yAxis.domain, ticks: yAxis.ticks } : { domain: ['auto', 'auto'] as [string, string] })}
           />
-          <Tooltip
-            contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.12)', fontSize: 11 }}
-            labelStyle={{ color: '#cbd5e1' }}
-            formatter={(v: unknown) => `${Number(v).toFixed(2)}%`}
-          />
+          <Tooltip {...chartTheme.tooltip} formatter={(v: unknown) => (typeof v === 'number' ? `${v.toFixed(2)}%` : '—')} />
           {bands.map((b, i) => (
-            <ReferenceArea
-              key={`r-${cfg.key}-${i}`}
-              x1={b.x1}
-              x2={b.x2}
-              fill={COLOR_RECESSION}
-              fillOpacity={1}
-              ifOverflow="visible"
-            />
+            <ReferenceArea key={`r-${cfg.key}-${i}`} x1={b.x1} x2={b.x2} {...referenceBand} ifOverflow="visible" />
           ))}
           <Line
             type="monotone"
@@ -420,9 +282,11 @@ function MiniChart({ cfg, rows, bands, toggle }: MiniChartProps) {
           ))}
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </AcmChartFrame>
   )
 }
+
+const MINI_HEIGHT = 280
 
 // ── Section ────────────────────────────────────────────────────────────────
 
@@ -520,39 +384,34 @@ export function GlobalPolicyTermStructureSection() {
     return out
   }, [bundles, range, unifiedDates, visibleStart, visibleEnd])
 
-  const legendEntries: LegendEntry[] = [
-    { key: 'cash', label: 'Cash Rate (Overnight)', color: COLOR_CASH },
-    { key: '2Y',   label: '2Y',                    color: COLOR_2Y },
-    { key: '5Y',   label: '5Y',                    color: COLOR_5Y },
-    { key: '10Y',  label: '10Y',                   color: COLOR_10Y },
-    { key: '30Y',  label: '30Y',                   color: COLOR_30Y },
-  ]
-
   const toggleKey = (key: string) =>
     setToggle(prev => ({ ...prev, [key]: prev[key] === 'off' ? 'on' : 'off' }))
+  // One legend for the whole grid (tenor colours are identical across countries).
+  const legend: AcmLegendItem[] = [
+    { key: 'cash', label: 'Cash Rate (Overnight)', color: COLOR_CASH },
+    ...TENOR_ORDER.map(t => ({ key: t, label: t, color: TENOR_COLORS[t] })),
+  ].map(e => ({ label: e.label, color: e.color, hidden: toggle[e.key] === 'off', onClick: () => toggleKey(e.key) }))
 
   return (
-    <div className={styles.yieldChangesSection}>
-      <div className={styles.yieldChangesHeader}>
-        <div className={styles.yieldChangesTitle}>GLOBAL POLICY RATE &amp; TERM STRUCTURE</div>
-        <RangeButtons value={range} onChange={setRange} />
-      </div>
-
-      <SharedLegend entries={legendEntries} state={toggle} onToggle={toggleKey} />
+    <AcmPanel title="GLOBAL POLICY RATE & TERM STRUCTURE" actions={rangeToggle(range, (r) => setRange(r as RangeKey), RANGE_KEYS)}>
+      <ul className={styles.gLegend}>
+        {legend.map(item => (
+          <li key={item.label}>
+            <button type="button" className={`${styles.gLegendButton} ${item.hidden ? styles.gLegendHidden : ''}`} aria-pressed={!item.hidden} onClick={item.onClick}>
+              <span aria-hidden="true" className={styles.gLegendSwatch} style={{ ['--acm-swatch' as string]: item.color }} />
+              {item.label}
+            </button>
+          </li>
+        ))}
+      </ul>
 
       {loading ? (
-        <div className={styles.loading}>Loading global policy rate &amp; term structure…</div>
+        <div className={styles.stateMsg}>Loading global policy rate &amp; term structure…</div>
       ) : error ? (
-        <div className={styles.error}>{error}</div>
+        <div className={styles.stateError}>{error}</div>
       ) : (
         <>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-              gap: 12,
-            }}
-          >
+          <div className={styles.gGrid3}>
             {COUNTRIES.map(cfg => (
               <MiniChart
                 key={cfg.key}
@@ -567,7 +426,7 @@ export function GlobalPolicyTermStructureSection() {
           {/* Shared brush — operates on the unified date grid. Re-mounts on
               range change so the slider resets to the new full window. */}
           {unifiedDates.length > 1 && (
-            <div style={{ marginTop: 8 }}>
+            <div className={styles.gBrush}>
               <ResponsiveContainer width="100%" height={50}>
                 <LineChart
                   data={unifiedDates.map(d => ({ date: d }))}
@@ -578,10 +437,8 @@ export function GlobalPolicyTermStructureSection() {
                   <Brush
                     key={range}
                     dataKey="date"
+                    {...chartTheme.brush}
                     height={36}
-                    stroke="#728197"
-                    fill="#0d1520"
-                    travellerWidth={6}
                     onChange={(e: { startIndex?: number; endIndex?: number } | null) => {
                       if (
                         e &&
@@ -604,6 +461,6 @@ export function GlobalPolicyTermStructureSection() {
           )}
         </>
       )}
-    </div>
+    </AcmPanel>
   )
 }

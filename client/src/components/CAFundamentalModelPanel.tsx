@@ -1,15 +1,8 @@
 import { useMemo, useState } from 'react'
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts'
 import styles from '../pages/STIRDashboardPage.module.css'
+import { fmtSignedFixed } from './acm'
+import { FUNDAMENTAL_MODEL_COLORS as FMC, LABOR_COLORS } from '../constants/identityColors'
+import { FvmLineChart, FvmMessage, FvmNote, FvmOverlayToggle, FvmPanel, FvmStats, FvmToggleGroup, type FvmLine } from './fundamentalPanelParts'
 import { useCAFundamental, type CAFundamentalTab } from '../hooks/useCAFundamental'
 
 // Canadian sibling of EUFundamentalModelPanel. Two tabs: CPI + LABOR (no GROWTH —
@@ -46,7 +39,6 @@ const RANGES = [
 
 type RangeKey = typeof RANGES[number]['key']
 
-const FVM_TICK = { fontSize: 10, fontFamily: 'var(--font-mono)', fill: '#94A3B8' }
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function fmtShortMonthYear(d: string): string {
@@ -54,10 +46,10 @@ function fmtShortMonthYear(d: string): string {
   return `${SHORT_MONTHS[parseInt(m, 10) - 1]} ${y}`
 }
 
+/** Signed MoM / QoQ in the stats line; a value that rounds to zero prints as 0.00 (near-zero rule). */
 function fmtSignedPct(v: number | null, digits = 2): string {
   if (v == null) return '—'
-  const sign = v > 0 ? '+' : ''
-  return `${sign}${v.toFixed(digits)}`
+  return fmtSignedFixed(v, digits)
 }
 
 function fmtPct(v: number | null | undefined, digits = 2): string {
@@ -107,6 +99,20 @@ interface CoreRow {
 }
 
 interface MoMRow { date: string; mom: number | null }
+
+const PACE_LINES: FvmLine[] = [
+  { key: 'pace1m', label: '1M MoM', color: FMC.pace1, dash: '5 4' },
+  { key: 'pace3m', label: '3M MoM avg', color: FMC.pace3, dash: '5 4' },
+  { key: 'pace6m', label: '6M MoM avg', color: FMC.pace6, dash: '5 4' },
+]
+// BoC core measures: CPI-trim takes the headline line's identity (registry note), the rest their own.
+const CORE_LINES: FvmLine[] = [
+  { key: 'trim', label: 'CPI-trim', color: FMC.headline },
+  { key: 'median', label: 'CPI-median', color: FMC.caMedian, width: 1.6 },
+  { key: 'common', label: 'CPI-common', color: FMC.caCommon, width: 1.6 },
+  { key: 'average', label: 'Average', color: FMC.caAverage, dash: '6 3', width: 2 },
+]
+const HC_OPTIONS = [{ key: 'HEADLINE', label: 'HEADLINE' }, { key: 'CORE', label: 'CORE' }] as const
 
 export function CAFundamentalModelPanel() {
   const [activeTab, setActiveTab] = useState<VisibleTab>('cpi')
@@ -258,210 +264,79 @@ export function CAFundamentalModelPanel() {
     return `LATEST: ${fmtShortMonthYear(latest.date)} | Index: ${latest.indexLevel != null ? latest.indexLevel.toFixed(1) : '—'} | MoM: ${latest.mom != null ? `${fmtSignedPct(latest.mom)}%` : '—'} | YoY: ${fmtPct(latest.yoy)}`
   })()
 
+  const policyLines: FvmLine[] = showTarget ? [{ key: 'target', label: 'BoC Target', color: FMC.policyRate, width: 1.5 }] : []
+  const overlay = <FvmOverlayToggle label="BOC TARGET" on={showTarget} onToggle={() => setShowTarget((v) => !v)} />
+
   return (
-    <div className={styles.fvmPanel}>
-      <div className={styles.fvmHeader}>
-        <h2 className={styles.fvmTitle}>FUNDAMENTAL MODEL</h2>
-        {isInflation && (
-          <div className={styles.fvmMeasureToggle}>
-            <button
-              className={`${styles.fvmMeasureBtn} ${headlineCore === 'HEADLINE' ? styles.fvmMeasureBtnActive : ''}`}
-              onClick={() => setHeadlineCore('HEADLINE')}
-              style={{ border: `1px solid ${headlineCore === 'HEADLINE' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}` }}
-            >
-              HEADLINE
-            </button>
-            <button
-              className={`${styles.fvmMeasureBtn} ${headlineCore === 'CORE' ? styles.fvmMeasureBtnActive : ''}`}
-              onClick={() => setHeadlineCore('CORE')}
-              style={{
-                border: `1px solid ${headlineCore === 'CORE' ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                borderLeft: 'none',
-              }}
-            >
-              CORE
-            </button>
-          </div>
-        )}
-      </div>
+    <FvmPanel
+      actions={isInflation && <FvmToggleGroup options={HC_OPTIONS} value={headlineCore} onChange={setHeadlineCore} />}
+      tabs={TABS}
+      activeTab={activeTab}
+      onTab={setActiveTab}
+    >
+      {error ? (
+        <FvmMessage>{error}</FvmMessage>
+      ) : loading || !data || !latest ? (
+        <FvmMessage>Loading {TABS.find((t) => t.key === activeTab)?.label} model…</FvmMessage>
+      ) : (
+        <>
+          <FvmStats>{statsLine}</FvmStats>
+          <FvmToggleGroup options={RANGES} value={range} onChange={setRange} className={styles.fvmRangeBar} />
 
-      <div className={styles.fvmTabs}>
-        {TABS.map((tab, idx) => (
-          <button
-            key={tab.key}
-            className={`${styles.fvmTab} ${activeTab === tab.key ? styles.fvmTabActive : ''}`}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              border: `1px solid ${activeTab === tab.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-              ...(idx > 0 ? { borderLeft: 'none' } : {}),
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.fvmBody}>
-        {error ? (
-          <div className={styles.comingSoon}>{error}</div>
-        ) : loading || !data || !latest ? (
-          <div className={styles.comingSoon}>Loading {TABS.find((t) => t.key === activeTab)?.label} model…</div>
-        ) : (
-          <>
-            <div className={styles.fvmStatsLine}>{statsLine}</div>
-
-            <div className={styles.fvmRangeBar}>
-              {RANGES.map((r, idx) => (
-                <button
-                  key={r.key}
-                  className={`${styles.fvmRangeBtn} ${range === r.key ? styles.fvmRangeBtnActive : ''}`}
-                  onClick={() => setRange(r.key)}
-                  style={{
-                    border: `1px solid ${range === r.key ? '#e2e8f0' : 'rgba(255, 255, 255, 0.12)'}`,
-                    ...(idx > 0 ? { borderLeft: 'none' } : {}),
-                  }}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setShowTarget((v) => !v)}
-              style={{
-                background: showTarget ? 'rgba(167, 139, 250, 0.08)' : 'transparent',
-                border: `1px solid ${showTarget ? '#a78bfa' : 'rgba(255, 255, 255, 0.12)'}`,
-                color: showTarget ? '#a78bfa' : '#728197',
-                fontFamily: 'var(--font-mono)',
-                fontSize: '0.65rem',
-                fontWeight: 600,
-                padding: '3px 10px',
-                cursor: 'pointer',
-                borderRadius: '2px',
-                marginBottom: '6px',
-              }}
-            >
-              BOC TARGET
-            </button>
-
-            {activeTab === 'labor' ? (
-              <>
-                <div className={styles.fvmLegend}>
-                  <span style={{ color: '#e2e8f0' }}>― Unemployment Rate</span>
-                  {showTarget && <span style={{ color: '#a78bfa' }}>― BoC Target</span>}
-                </div>
-
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={laborChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={fmtShortMonthYear} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={laborDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                    />
-                    <Line type="monotone" dataKey="rate" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls name="Unemployment Rate" />
-                    {showTarget && (
-                      <Line type="monotone" dataKey="target" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="BoC Target" />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-              </>
-            ) : isCore ? (
-              <>
-                <div className={styles.fvmLegend}>
-                  <span style={{ color: '#e2e8f0' }}>― CPI-trim</span>
-                  <span style={{ color: '#22d3ee' }}>― CPI-median</span>
-                  <span style={{ color: '#fbbf24' }}>― CPI-common</span>
-                  <span style={{ color: '#4ade80' }}>― Average</span>
-                  <span style={{ color: '#EF5350' }}>-- 2% Target</span>
-                  {showTarget && <span style={{ color: '#a78bfa' }}>― BoC Target</span>}
-                </div>
-
-                <ResponsiveContainer width="100%" height={350}>
-                  <LineChart data={coreChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={fmtShortMonthYear} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={coreDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown, name: unknown) => [typeof value === 'number' ? `${value.toFixed(2)}%` : '—', String(name ?? '')]}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                    />
-                    <ReferenceLine y={2} stroke="#EF5350" strokeDasharray="8 4" />
-                    <Line type="monotone" dataKey="trim" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls name="CPI-trim" />
-                    <Line type="monotone" dataKey="median" stroke="#22d3ee" strokeWidth={1.6} dot={false} connectNulls name="CPI-median" />
-                    <Line type="monotone" dataKey="common" stroke="#fbbf24" strokeWidth={1.6} dot={false} connectNulls name="CPI-common" />
-                    <Line type="monotone" dataKey="average" stroke="#4ade80" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls name="Average" />
-                    {showTarget && (
-                      <Line type="monotone" dataKey="target" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="BoC Target" />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-
-                <div className={styles.fvmSectionLabel} style={{ color: '#728197', fontWeight: 400 }}>
-                  BoC core measures (CPI-trim, CPI-median, CPI-common) are published as YoY % only — no
-                  momentum projections or MoM panel. Average is the simple mean of the three.
-                </div>
-              </>
-            ) : (
-              <>
-                <div className={styles.fvmLegend}>
-                  <span style={{ color: '#e2e8f0' }}>― YoY actual</span>
-                  <span style={{ color: '#4ade80' }}>-- 1M MoM</span>
-                  <span style={{ color: '#22d3ee' }}>-- 3M MoM avg</span>
-                  <span style={{ color: '#fbbf24' }}>-- 6M MoM avg</span>
-                  <span style={{ color: '#EF5350' }}>-- 2% Target</span>
-                  {showTarget && <span style={{ color: '#a78bfa' }}>― BoC Target</span>}
-                </div>
-
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={yoyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={fmtShortMonthYear} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={yoyDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                    />
-                    <ReferenceLine y={2} stroke="#EF5350" strokeDasharray="8 4" />
-                    <Line type="monotone" dataKey="yoy" stroke="#e2e8f0" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="pace1m" stroke="#4ade80" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    <Line type="monotone" dataKey="pace3m" stroke="#22d3ee" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    <Line type="monotone" dataKey="pace6m" stroke="#fbbf24" strokeWidth={1.8} strokeDasharray="5 4" dot={false} connectNulls />
-                    {showTarget && (
-                      <Line type="monotone" dataKey="target" stroke="#a78bfa" strokeWidth={1.5} dot={false} connectNulls name="BoC Target" />
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
-
-                <div className={styles.fvmSectionLabel}>MoM % — Historical month-over-month changes (NSA)</div>
-
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={momChartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
-                    <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" stroke="#728197" tick={FVM_TICK} tickFormatter={fmtShortMonthYear} minTickGap={24} />
-                    <YAxis stroke="#728197" tick={FVM_TICK} tickFormatter={(v: number) => `${v.toFixed(1)}%`} width={42} domain={momDomain} allowDataOverflow />
-                    <Tooltip
-                      contentStyle={{ background: '#090e15', border: '1px solid rgba(255,255,255,0.13)', borderRadius: 2, fontFamily: 'var(--font-mono)', fontSize: 10 }}
-                      labelStyle={{ color: '#94A3B8' }}
-                      formatter={(value: unknown) => (typeof value === 'number' ? `${value.toFixed(2)}%` : '—')}
-                      labelFormatter={(value: unknown) => (typeof value === 'string' ? fmtShortMonthYear(value) : '')}
-                    />
-                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.15)" />
-                    <Line type="monotone" dataKey="mom" stroke="#4EC9B0" strokeWidth={1.5} dot={false} connectNulls />
-                  </LineChart>
-                </ResponsiveContainer>
-              </>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+          {activeTab === 'labor' ? (
+            <FvmLineChart
+              title="Unemployment rate"
+              data={laborChartData}
+              lines={[{ key: 'rate', label: 'Unemployment Rate', color: LABOR_COLORS.u3 }, ...policyLines]}
+              height={350}
+              range={laborDomain}
+              tickFormatter={fmtShortMonthYear}
+              actions={overlay}
+              namedTooltip
+            />
+          ) : isCore ? (
+            <>
+              <FvmLineChart
+                title="BoC core measures — YoY %"
+                data={coreChartData}
+                lines={[...CORE_LINES, ...policyLines]}
+                target={2}
+                height={350}
+                range={coreDomain}
+                tickFormatter={fmtShortMonthYear}
+                actions={overlay}
+                namedTooltip
+              />
+              <FvmNote>
+                BoC core measures (CPI-trim, CPI-median, CPI-common) are published as YoY % only — no
+                momentum projections or MoM panel. Average is the simple mean of the three.
+              </FvmNote>
+            </>
+          ) : (
+            <>
+              <FvmLineChart
+                title="CPI Headline — YoY %"
+                data={yoyChartData}
+                lines={[{ key: 'yoy', label: 'YoY actual', color: FMC.headline }, ...PACE_LINES, ...policyLines]}
+                target={2}
+                height={300}
+                range={yoyDomain}
+                tickFormatter={fmtShortMonthYear}
+                actions={overlay}
+              />
+              <FvmLineChart
+                title="MoM % — Historical month-over-month changes (NSA)"
+                data={momChartData}
+                lines={[{ key: 'mom', label: 'MoM %', color: FMC.mom, width: 1.5 }]}
+                zeroLine
+                height={250}
+                range={momDomain}
+                tickFormatter={fmtShortMonthYear}
+              />
+            </>
+          )}
+        </>
+      )}
+    </FvmPanel>
   )
 }

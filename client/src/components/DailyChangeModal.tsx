@@ -11,6 +11,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { fmtSignedFixed, niceAxis, roundForDisplay, signColor } from './acm'
+import { cx } from './acm/acmFormat'
+import { chartTheme, referenceLabelStyle, referenceLines } from './acm/chartTheme'
+import { toneClass } from './acm/tones'
+import { rateChangeTone } from '../pages/ratesShared'
 import styles from './DailyChangeModal.module.css'
 
 export type DailyChangeLookback = '6m' | '1y' | '2y' | '5y'
@@ -44,17 +49,23 @@ interface DailyChangeModalProps {
   onClose: () => void
 }
 
+// R5d: daily yield CHANGES → rule 6 (increase red, decrease green); a value
+// that rounds to zero prints unsigned and untoned (near-zero rule). σ bands and
+// Stdev are unsigned levels. Portalled to <body>, so the backdrop carries
+// acm-root itself (component-level root rule).
+
 function fmtBpsSigned(v: number | null | undefined, digits = 1): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  const sign = v >= 0 ? '+' : '-'
-  return `${sign}${Math.abs(v).toFixed(digits)} bps`
+  return fmtSignedFixed(v, digits, ' bps')
 }
 
 function fmtSigmaSigned(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  const sign = v >= 0 ? '+' : '-'
-  return `${sign}${Math.abs(v).toFixed(2)}σ`
+  return fmtSignedFixed(v, 2, 'σ')
 }
+
+/** Rule-6 class for a bp change shown at `digits` decimals. */
+const changeClass = (v: number | null | undefined, digits = 1) => toneClass(rateChangeTone(v ?? null, digits))
 
 function fmtDateTick(date: string): string {
   // YYYY-MM-DD → "Jan '25"
@@ -149,32 +160,48 @@ export function DailyChangeModal({ country, countryLabel, tenor, onClose }: Dail
     return ticks
   }, [data?.series])
 
+  const yAxis = useMemo(() => niceAxis((data?.series ?? []).map(d => d.change_bps), { dp: 0, includeZero: true }), [data?.series])
+  const sigmaLine = (k: number) => {
+    if (sigma200d == null) return null
+    const line = k === 1 ? referenceLines.level : referenceLines.levelFaint
+    return [1, -1].map(sign => (
+      <ReferenceLine
+        key={`${sign * k}s`}
+        y={sign * k * sigma200d}
+        {...line}
+        label={{ value: `${sign > 0 ? '+' : '-'}${k}σ`, position: 'right', ...referenceLabelStyle }}
+      />
+    ))
+  }
+
   return createPortal(
-    <div className={styles.backdrop} onClick={onClose} role="presentation">
+    <div className={cx('acm-root', styles.dmBackdrop)} onClick={onClose} role="presentation">
       <div
         ref={contentRef}
-        className={styles.content}
+        className={styles.dmContent}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={`${title} daily changes`}
       >
-        <div className={styles.titleRow}>
-          <h2 className={styles.title}>
+        <div className={styles.dmTitleRow}>
+          <h2 className={styles.dmTitle}>
             {title}
-            <span className={styles.titleSubtle}>· Daily Changes</span>
+            <span className={styles.dmTitleSubtle}>· Daily Changes</span>
           </h2>
-          <button className={styles.close} onClick={onClose} aria-label="Close">×</button>
+          <button type="button" className={styles.dmClose} onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        <div className={styles.lookbackRow}>
-          <span className={styles.lookbackLabel}>LOOKBACK:</span>
-          <div className={styles.lookbackButtons}>
+        <div className={styles.dmLookbackRow}>
+          <span className={styles.dmLookbackLabel}>LOOKBACK:</span>
+          <div className={styles.dmToggleGroup}>
             {LOOKBACK_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
+                type="button"
+                aria-pressed={lookback === opt.value}
                 onClick={() => setLookback(opt.value)}
-                className={lookback === opt.value ? styles.activeLookback : ''}
+                className={cx(styles.dmToggle, lookback === opt.value && styles.dmToggleActive)}
               >
                 {opt.label}
               </button>
@@ -183,80 +210,63 @@ export function DailyChangeModal({ country, countryLabel, tenor, onClose }: Dail
         </div>
 
         {loading ? (
-          <div className={styles.loading}>Loading daily changes…</div>
+          <div className={styles.dmState}>Loading daily changes…</div>
         ) : error ? (
-          <div className={styles.error}>{error}</div>
+          <div className={cx(styles.dmState, styles.dmStateError)}>{error}</div>
         ) : data && data.series.length > 0 ? (
           <>
-            <div className={styles.chartContainer}>
+            <div className={styles.dmChart}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={data.series} margin={{ top: 12, right: 36, left: 8, bottom: 12 }}>
-                  <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    stroke="#728197"
-                    tick={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                    ticks={xTicks}
-                    tickFormatter={fmtDateTick}
-                    interval="preserveStartEnd"
-                  />
+                  <CartesianGrid {...chartTheme.grid} vertical={false} />
+                  <XAxis dataKey="date" {...chartTheme.xAxis} ticks={xTicks} tickFormatter={fmtDateTick} interval="preserveStartEnd" />
                   <YAxis
-                    stroke="#728197"
-                    tick={{ fontSize: 10, fill: '#94A3B8', fontFamily: 'var(--font-mono)' }}
-                    tickFormatter={(v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}`}
-                    label={{ value: 'bps', angle: -90, position: 'insideLeft', fill: '#94A3B8', fontSize: 10 }}
+                    {...chartTheme.yAxis}
+                    domain={yAxis.domain}
+                    ticks={yAxis.ticks}
+                    tickFormatter={(v: number) => fmtSignedFixed(v, 0)}
+                    label={{ ...chartTheme.axisLabel, value: 'bps', angle: -90, position: 'insideLeft' }}
                   />
                   <Tooltip
-                    contentStyle={{ background: '#0d1520', border: '1px solid #334155', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                    {...chartTheme.tooltip}
+                    cursor={chartTheme.barTooltipCursor}
                     labelFormatter={(label: unknown) => String(label)}
-                    formatter={(v: unknown) => [
-                      typeof v === 'number' ? `${v >= 0 ? '+' : ''}${v.toFixed(2)} bps` : '—',
-                      'Δ',
-                    ]}
+                    formatter={(v: unknown) => [typeof v === 'number' ? fmtSignedFixed(v, 2, ' bps') : '—', 'Δ']}
                   />
-                  <ReferenceLine y={0} stroke="#475569" strokeWidth={1} />
-                  {sigma200d != null && (
-                    <>
-                      <ReferenceLine y={+sigma200d} stroke="#475569" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '+1σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                      <ReferenceLine y={-sigma200d} stroke="#475569" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '-1σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                      <ReferenceLine y={+2 * sigma200d} stroke="#3f4a5e" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '+2σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                      <ReferenceLine y={-2 * sigma200d} stroke="#3f4a5e" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '-2σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                      <ReferenceLine y={+3 * sigma200d} stroke="#334155" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '+3σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                      <ReferenceLine y={-3 * sigma200d} stroke="#334155" strokeDasharray="4 4" strokeWidth={1}
-                        label={{ value: '-3σ', position: 'right', fill: '#64748B', fontSize: 9 }} />
-                    </>
-                  )}
+                  <ReferenceLine y={0} {...referenceLines.zero} />
+                  {sigmaLine(1)}
+                  {sigmaLine(2)}
+                  {sigmaLine(3)}
                   <Bar dataKey="change_bps" isAnimationActive={false}>
-                    {data.series.map((d, i) => (
-                      <Cell key={i} fill={d.change_bps >= 0 ? '#ef4444' : '#3b82f6'} />
-                    ))}
+                    {data.series.map((d, i) => {
+                      // Rule 6: yield up red, down green; a change that prints as 0.00 is neutral.
+                      const shown = roundForDisplay(d.change_bps, 2)
+                      return <Cell key={i} fill={shown > 0 ? signColor('acm-negative') : shown < 0 ? signColor('acm-positive') : 'var(--acm-text-tertiary)'} />
+                    })}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className={styles.statStrip}>
+            <div className={styles.dmStats}>
               <span>
-                <span className={styles.statLabel}>Latest:</span> {fmtBpsSigned(data.stats.latest_bps)} ({fmtSigmaSigned(data.stats.latest_sigma)})
+                <span className={styles.dmStatLabel}>Latest:</span>{' '}
+                <span className={changeClass(data.stats.latest_bps)}>{fmtBpsSigned(data.stats.latest_bps)} ({fmtSigmaSigned(data.stats.latest_sigma)})</span>
               </span>
-              <span className={styles.statSep}>·</span>
+              <span className={styles.dmStatSep}>·</span>
               <span>
-                <span className={styles.statLabel}>Mean:</span> {fmtBpsSigned(data.stats.mean_bps)}
+                <span className={styles.dmStatLabel}>Mean:</span>{' '}
+                <span className={changeClass(data.stats.mean_bps)}>{fmtBpsSigned(data.stats.mean_bps)}</span>
               </span>
-              <span className={styles.statSep}>·</span>
+              <span className={styles.dmStatSep}>·</span>
               <span>
-                <span className={styles.statLabel}>Stdev:</span>{' '}
+                <span className={styles.dmStatLabel}>Stdev:</span>{' '}
                 {data.stats.stdev_bps != null ? `${data.stats.stdev_bps.toFixed(1)} bps` : '—'}
               </span>
             </div>
           </>
         ) : (
-          <div className={styles.loading}>No data for selected window.</div>
+          <div className={styles.dmState}>No data for selected window.</div>
         )}
       </div>
     </div>,
