@@ -1,19 +1,19 @@
 import { useMemo } from 'react'
 import { CAV_KEYS, CAV_LABEL, type CavKey } from '../constants/crossAssetVol'
 import type { CavSummaryResponse, CavSummaryTicker } from '../hooks/useCavSummary'
-import { AcmDataTable, AcmPanel, fmtSignedFixed, type AcmColumn, type AlertLevel } from './acm'
+import { AcmDataTable, AcmPanel, fmtSignedFixed, rankAlertLevel, zAlertLevel, type AcmColumn } from './acm'
 import styles from './VolSummaryTable.module.css'
 
 // M1 (MACRO): non-rates colour rules.
 //  • Current: a vol LEVEL → plain primary text.
-//  • 1D / 5D / 1M / 3M / YTD point changes: vol CHANGES — classification is
-//    pending the user's ruling (neither a return nor a yield), so they render
-//    plain for now: no fill, no tone. (Were a blue-up / red-down fill.)
+//  • 1D / 5D / 1M / 3M / YTD point changes: vol CHANGES → plain primary text
+//    (M1 ruling 1: neither a return nor a yield). (Were a blue-up / red-down fill.)
 //  • 6M / 1Y Z: the alert family as a cell tint + outline only (Phase 0
 //    Decision 2): |z| > 2 alert-mild, |z| > 3 alert-strong; text primary.
 //    (Was a red / blue gradient.)
-//  • IV rank / IV percentile: plain until alert thresholds for a 0–100 scale
-//    are ruled on. (Were green / orange single-hue fills.)
+//  • IV rank / IV percentile (0–100): alert tint at both ends (M1 ruling 2):
+//    >= 90 / <= 10 mild, >= 98 / <= 2 strong; text primary.
+//    (Were green / orange single-hue fills.)
 
 type ChangeKey = '1d' | '5d' | '1m' | '3m' | 'ytd'
 type WindowKey = '6m' | '1y'
@@ -35,15 +35,6 @@ const WINDOW_COLS: ReadonlyArray<{ key: WindowKey; label: string }> = [
 const fmtPoints = (v: number) => fmtSignedFixed(v, 2)
 const fmtZ = (v: number) => fmtSignedFixed(v, 2, 'σ')
 const fmtPct0 = (v: number) => `${Math.round(v)}%`
-
-/** Phase 0 Decision 2: |z| > 3 strong, |z| > 2 mild (on the displayed 2dp value). */
-export function zAlertLevel(z: number | null | undefined): AlertLevel | undefined {
-  if (z == null || !Number.isFinite(z)) return undefined
-  const a = Math.abs(Number(z.toFixed(2)))
-  if (a > 3) return 'strong'
-  if (a > 2) return 'mild'
-  return undefined
-}
 
 interface Row { key: CavKey; row: CavSummaryTicker | null }
 
@@ -75,9 +66,11 @@ export function VolSummaryTable({ asOfDate, data, loading, error }: Props) {
     })),
     ...WINDOW_COLS.map((w): AcmColumn<Row> => ({
       key: `r-${w.key}`, header: `${w.label} Rank`, kind: 'num', value: (r) => r.row?.ivRank[w.key] ?? null, format: fmtPct0,
+      alert: (r) => rankAlertLevel(r.row?.ivRank[w.key]),
     })),
     ...WINDOW_COLS.map((w): AcmColumn<Row> => ({
       key: `p-${w.key}`, header: `${w.label} %ile`, kind: 'num', value: (r) => r.row?.ivPercentile[w.key] ?? null, format: fmtPct0,
+      alert: (r) => rankAlertLevel(r.row?.ivPercentile[w.key]),
     })),
   ], [])
 
