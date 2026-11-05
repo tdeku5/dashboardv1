@@ -1,6 +1,16 @@
 import { useMemo } from 'react'
 import type { LookbackKey } from '../hooks/useSectorAttribution'
+import { AcmPanel, fmtSignedFixed, roundForDisplay } from './acm'
+import { cx } from './acm/acmFormat'
 import styles from './ReturnsHeatmap.module.css'
+
+// Named heatmap (design notes rule 3), E1: returns are VALENCE — up fills from
+// --acm-heat-positive-*, down from --acm-heat-negative-* (was blue / red).
+// Four steps by |value| ÷ the column's (or table's) max |value|, as the STIR
+// strip: (0, 25%] → 1 … (75, 100%] → 4. A value that prints as 0.00% gets no
+// fill (near-zero rule). Cell text is always primary; no tone, no alerts.
+// Shared with FX, COMMODITIES and EQUITIES GLOBAL (props unchanged); puts
+// acm-root on its own outermost element (component-level root rule).
 
 const LOOKBACKS: ReadonlyArray<{ key: LookbackKey; label: string }> = [
   { key: '5d',  label: '5D' },
@@ -39,29 +49,22 @@ interface Props<R extends BaseRow> {
   gradientMode?: 'table' | 'column'
 }
 
+/** Signed 2dp percent, ASCII '-'; '0.00%' when it rounds to zero. */
 function fmtPct(v: number | null): string {
   if (v == null || !Number.isFinite(v)) return '—'
-  const rounded = Math.round(v * 100) / 100
-  if (rounded === 0) return '0.00%'
-  const sign = rounded > 0 ? '+' : '−'
-  return `${sign}${Math.abs(rounded).toFixed(2)}%`
+  return fmtSignedFixed(v, 2, '%')
 }
 
-// Saturation reference passed in from the parent — each heatmap calibrates
-// against its own value range so neither washes out next to the other.
-function cellBg(value: number | null, maxAbs: number): string | undefined {
+const HEAT_THRESHOLDS = [0.25, 0.5, 0.75] as const
+
+/** The valence heat class for a cell; undefined (no fill) for null or a value that prints as zero. */
+export function returnsHeatClass(value: number | null, maxAbs: number): string | undefined {
   if (value == null || !Number.isFinite(value) || maxAbs <= 0) return undefined
+  const shown = roundForDisplay(value, 2)
+  if (shown === 0) return undefined
   const intensity = Math.min(Math.abs(value) / maxAbs, 1)
-  if (intensity === 0) return undefined
-  const alpha = 0.06 + intensity * 0.78
-  return value >= 0
-    ? `rgba(37, 99, 235, ${alpha})`
-    : `rgba(220, 38, 38, ${alpha})`
-}
-
-function cellTextColor(value: number | null, maxAbs: number): string | undefined {
-  if (value == null || !Number.isFinite(value) || maxAbs <= 0) return undefined
-  return Math.abs(value) / maxAbs > 0.5 ? '#ffffff' : undefined
+  const step = 1 + HEAT_THRESHOLDS.filter((t) => intensity > t).length
+  return styles[`rhHeat${shown > 0 ? 'Positive' : 'Negative'}${step}`]
 }
 
 export function ReturnsHeatmap<R extends BaseRow>({
@@ -120,27 +123,16 @@ export function ReturnsHeatmap<R extends BaseRow>({
     gradientMode === 'column' ? columnMaxAbs[lb] ?? 0 : tableMaxAbs
 
   return (
-    <div className={styles.wrap}>
-      <div className={styles.header}>
-        <div className={styles.title}>{title}</div>
-        <div className={styles.subtitle}>{subtitle}</div>
-      </div>
-
+    <AcmPanel title={title} actions={<span className={styles.rhSubtitle}>{subtitle}</span>}>
       {missingTickers && missingTickers.length > 0 && (
-        <div className={styles.warning}>
-          Missing data for: {missingTickers.join(', ')}
-        </div>
+        <div className={styles.rhWarning}>Missing data for: {missingTickers.join(', ')}</div>
       )}
 
-      <div className={styles.table} role="table" aria-label={`${title} heatmap`}>
-        <div className={`${styles.row} ${styles.headRow}`} role="row">
-          <div className={`${styles.cell} ${styles.sectorCell} ${styles.headCell}`} role="columnheader">{rowHeaderLabel}</div>
+      <div className={styles.rhTable} role="table" aria-label={`${title} heatmap`}>
+        <div className={cx(styles.rhRow, styles.rhHeadRow)} role="row">
+          <div className={cx(styles.rhCell, styles.rhNameCell, styles.rhHeadCell)} role="columnheader">{rowHeaderLabel}</div>
           {LOOKBACKS.map((lb) => (
-            <div
-              key={lb.key}
-              className={`${styles.cell} ${styles.dataCell} ${styles.headCell}`}
-              role="columnheader"
-            >
+            <div key={lb.key} className={cx(styles.rhCell, styles.rhDataCell, styles.rhHeadCell)} role="columnheader">
               {lb.label}
             </div>
           ))}
@@ -149,31 +141,28 @@ export function ReturnsHeatmap<R extends BaseRow>({
         {rows.map((r, idx) => {
           const groupLabel = groupByIndex.get(idx)
           return (
-            <div key={r.ticker} style={{ display: 'contents' }}>
+            <div key={r.ticker} className={styles.rhContents}>
               {groupLabel && (
-                <div className={styles.groupRow} role="row" aria-label={groupLabel}>
-                  <div className={styles.groupLabel}>{groupLabel}</div>
+                <div className={styles.rhGroupRow} role="row" aria-label={groupLabel}>
+                  <div className={styles.rhGroupLabel}>{groupLabel}</div>
                 </div>
               )}
-              <div className={styles.row} role="row">
-                <div className={`${styles.cell} ${styles.sectorCell}`} role="rowheader">
-                  <span className={styles.sectorName} title={r.name || r.ticker}>
+              <div className={styles.rhRow} role="row">
+                <div className={cx(styles.rhCell, styles.rhNameCell)} role="rowheader">
+                  <span className={styles.rhName} title={r.name || r.ticker}>
                     {r.name || r.ticker}
                   </span>
                   {r.name && r.ticker && r.name !== r.ticker && (
-                    <span className={styles.sectorTicker}>{r.ticker}</span>
+                    <span className={styles.rhTicker}>{r.ticker}</span>
                   )}
                 </div>
                 {LOOKBACKS.map((lb) => {
                   const v = cellValues.get(`${r.ticker}|${lb.key}`) ?? null
-                  const ref = refForLookback(lb.key)
-                  const bg = cellBg(v, ref)
-                  const color = cellTextColor(v, ref)
                   return (
                     <div
                       key={lb.key}
-                      className={styles.cell + ' ' + styles.dataCell}
-                      style={{ background: bg, color }}
+                      data-heat-cell
+                      className={cx(styles.rhCell, styles.rhDataCell, 'acm-num', returnsHeatClass(v, refForLookback(lb.key)))}
                       role="cell"
                     >
                       {fmtPct(v)}
@@ -185,6 +174,6 @@ export function ReturnsHeatmap<R extends BaseRow>({
           )
         })}
       </div>
-    </div>
+    </AcmPanel>
   )
 }

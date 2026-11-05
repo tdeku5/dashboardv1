@@ -1,0 +1,154 @@
+/* EQUITIES shared classes (E1). Token-only: every value is an --acm-* token.
+   Used by IndexComparisonPage, SectorAttributionPage (+ its components),
+   BreadthChart and VolPage. */
+
+.eqShell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-4);
+  min-width: 0;
+}
+
+.eqRangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  flex-wrap: wrap;
+}
+
+.eqRangeLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-tertiary);
+  margin-right: var(--acm-space-1);
+}
+
+.eqBtn {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  cursor: pointer;
+}
+
+.eqBtn:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.eqBtnActive,
+.eqBtnActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.eqWarning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acm-space-3);
+  margin-bottom: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-status-warning);
+}
+
+.eqState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: var(--acm-space-8);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.eqStateError { color: var(--acm-status-warning); }
+
+.eqTipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  color: var(--acm-text-primary);
+}
+
+.eqTipDot {
+  width: var(--acm-space-2);
+  height: var(--acm-space-2);
+  border-radius: var(--acm-radius-pill);
+  flex-shrink: 0;
+}
+
+.eqTipName {
+  flex: 1;
+  color: var(--acm-text-secondary);
+}
+
+.eqTipVal {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Header row of a chart frame: subtitle-sized controls. */
+.eqControls {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  flex-wrap: wrap;
+}
+
+.eqControlLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+}
+
+.eqInput {
+  width: var(--acm-space-12);
+  background: var(--acm-surface-raised);
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-primary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  padding: var(--acm-space-1) var(--acm-space-2);
+}
+
+/* Two panels side by side (SECTOR ATTRIBUTION heatmaps); stacks when narrow. */
+.eqTwoUp {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 480px), 1fr));
+  gap: var(--acm-space-4);
+  align-items: start;
+}
+
+/* Equities VOL: 2×2 grid of equal columns; the top-right cell stacks two panels. */
+.evGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 640px), 1fr));
+  gap: var(--acm-space-4);
+  min-width: 0;
+}
+
+.evGrid > * { min-width: 0; }
+
+.evStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-4);
+  min-width: 0;
+}
+
+/* Stacked sub-charts inside one chart frame (Chart 1's main / spread / z / brush). */
+.evPlotStack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}

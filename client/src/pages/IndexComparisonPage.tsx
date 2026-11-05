@@ -24,7 +24,13 @@ import {
   type IndexLookbackKey,
   type IndexRangeKey,
 } from '../hooks/useUsIndices'
-import styles from './IndexComparisonPage.module.css'
+import { AcmChartFrame, AcmPageHeader, niceAxis, useBrushWindow, type AcmLegendItem, type NiceAxis } from '../components/acm'
+import { chartTheme } from '../components/acm/chartTheme'
+import { ButtonRow, EqState, EqTooltip, EqWarning, eqStyles } from './equitiesShared'
+
+// E1: index LEVELS → plain primary text; each line and its own y axis take the
+// registry identity colour (US_INDEX_COLORS). The returns heatmap is valence
+// (ReturnsHeatmap, a named heatmap: up = heat-positive, down = heat-negative).
 
 const RANGES: ReadonlyArray<{ key: IndexRangeKey; label: string }> = [
   { key: '1m',  label: '1M' },
@@ -99,23 +105,12 @@ function LevelsTooltip({ active, payload, label }: LevelsTooltipProps) {
         US_INDEX_KEYS.indexOf(a.dataKey as UsIndexKey) -
         US_INDEX_KEYS.indexOf(b.dataKey as UsIndexKey),
     )
-  if (rows.length === 0) return null
-  return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{label}</div>
-      {rows.map((p) => {
-        const k = p.dataKey as UsIndexKey
-        return (
-          <div key={p.dataKey} className={styles.tooltipRow}>
-            <span className={styles.tooltipDot} style={{ background: p.color }} />
-            <span className={styles.tooltipName}>{US_INDEX_LABEL[k] ?? p.dataKey}</span>
-            <span className={styles.tooltipVal}>{fmtPrice(p.value)}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
+    .map((p) => ({ key: p.dataKey, name: US_INDEX_LABEL[p.dataKey as UsIndexKey] ?? p.dataKey, color: p.color, value: fmtPrice(p.value) }))
+  return <EqTooltip label={label} rows={rows} />
 }
+
+const fmtLevelTick = (v: number) =>
+  v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(0)
 
 interface LevelsChartProps {
   range: IndexRangeKey
@@ -149,133 +144,78 @@ function LevelsChart({ range, setRange, rangeLabel }: LevelsChartProps) {
     })
   }
 
+  // Even whole-number ticks per axis over the brushed window (niceAxis).
+  const brush = useBrushWindow(series.length)
+  const axes = useMemo(() => {
+    const win = series.slice(brush.start, brush.end + 1)
+    return Object.fromEntries(US_INDEX_KEYS.map((k) => [k, niceAxis(win.map((r) => r[k]).filter((v): v is number => typeof v === 'number'), { dp: 0 })])) as Record<UsIndexKey, NiceAxis>
+  }, [series, brush.start, brush.end])
+
+  const legend: AcmLegendItem[] = US_INDEX_KEYS.map((k) => ({
+    label: US_INDICES.find((i) => i.key === k)?.displayName ?? k,
+    color: US_INDEX_COLORS[k],
+    hidden: hidden.has(k),
+    onClick: () => toggle(k),
+  }))
+
   return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div className={styles.panelTitle}>INDEX LEVELS</div>
-        <div className={styles.panelSubtitle}>range: {rangeLabel}</div>
-      </div>
-
-      <div className={styles.rangeRow}>
-        <span className={styles.rangeLabel}>RANGE:</span>
-        {RANGES.map((r) => (
-          <button
-            key={r.key}
-            type="button"
-            className={`${styles.btn} ${range === r.key ? styles.btnActive : ''}`}
-            onClick={() => onRangeClick(r.key)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
+    <AcmChartFrame
+      title="INDEX LEVELS"
+      subtitle={`range: ${rangeLabel}`}
+      legend={legend}
+      actions={<ButtonRow items={RANGES} value={range} onChange={onRangeClick} label="RANGE:" />}
+      height={CHART_HEIGHT}
+    >
       {missing.length > 0 && !allMissing && (
-        <div className={styles.warning}>
-          Missing data for: {missing.map((k) => US_INDEX_LABEL[k]).join(', ')}
-        </div>
+        <EqWarning>Missing data for: {missing.map((k) => US_INDEX_LABEL[k]).join(', ')}</EqWarning>
       )}
-
-      <div className={styles.chartWrap}>
-        {loading && <div className={styles.placeholder}>Loading…</div>}
-        {error && <div className={styles.placeholder}>Failed to load: {error}</div>}
-        {!loading && !error && allMissing && (
-          <div className={styles.placeholder}>Index data unavailable.</div>
-        )}
-        {!loading && !error && !allMissing && series.length === 0 && (
-          <div className={styles.placeholder}>No data in selected range.</div>
-        )}
-        {hasData && (
-          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-            <LineChart data={series} margin={{ top: 28, right: 8, left: 8, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                interval="preserveStartEnd"
-                minTickGap={40}
+      {loading && <EqState>Loading…</EqState>}
+      {error && <EqState error>Failed to load: {error}</EqState>}
+      {!loading && !error && allMissing && <EqState>Index data unavailable.</EqState>}
+      {!loading && !error && !allMissing && series.length === 0 && <EqState>No data in selected range.</EqState>}
+      {hasData && (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={series} margin={{ top: 28, right: 8, left: 8, bottom: 4 }}>
+            <CartesianGrid {...chartTheme.grid} />
+            <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
+            {AXIS_LAYOUT.map(({ key, orientation }) => (
+              <YAxis
+                key={key}
+                yAxisId={key}
+                orientation={orientation}
+                hide={hidden.has(key)}
+                {...chartTheme.yAxis}
+                stroke={US_INDEX_COLORS[key]}
+                strokeOpacity={0.7}
+                tick={{ ...chartTheme.tick, fill: US_INDEX_COLORS[key], fillOpacity: 0.85 }}
+                tickFormatter={fmtLevelTick}
+                domain={axes[key].domain}
+                ticks={axes[key].ticks}
+                allowDataOverflow
+                width={56}
+                label={{ ...chartTheme.axisLabel, value: US_INDEX_LABEL[key], position: 'top', offset: 10, fill: US_INDEX_COLORS[key] }}
               />
-              {AXIS_LAYOUT.map(({ key, orientation }) => (
-                <YAxis
-                  key={key}
-                  yAxisId={key}
-                  orientation={orientation}
-                  hide={hidden.has(key)}
-                  stroke={US_INDEX_COLORS[key]}
-                  strokeOpacity={0.7}
-                  tick={{
-                    fill: US_INDEX_COLORS[key],
-                    fillOpacity: 0.85,
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 10,
-                  }}
-                  tickFormatter={(v: number) =>
-                    v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(0)
-                  }
-                  domain={['auto', 'auto']}
-                  width={56}
-                  label={{
-                    value: US_INDEX_LABEL[key],
-                    position: 'top',
-                    offset: 10,
-                    fill: US_INDEX_COLORS[key],
-                    fontSize: 10,
-                    fontFamily: 'var(--font-mono)',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                  }}
-                />
-              ))}
-              <Tooltip content={<LevelsTooltip />} />
-              {US_INDEX_KEYS.map((k) => (
-                <Line
-                  key={k}
-                  type="monotone"
-                  yAxisId={k}
-                  dataKey={k}
-                  stroke={US_INDEX_COLORS[k]}
-                  strokeWidth={1.6}
-                  dot={false}
-                  hide={hidden.has(k)}
-                  connectNulls
-                  isAnimationActive={false}
-                />
-              ))}
-              <Brush
-                key={brushKey}
-                dataKey="date"
-                height={22}
-                stroke="#728197"
-                fill="#0d1520"
-                travellerWidth={8}
+            ))}
+            <Tooltip content={<LevelsTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
+            {US_INDEX_KEYS.map((k) => (
+              <Line
+                key={k}
+                type="monotone"
+                yAxisId={k}
+                dataKey={k}
+                stroke={US_INDEX_COLORS[k]}
+                strokeWidth={1.6}
+                dot={false}
+                hide={hidden.has(k)}
+                connectNulls
+                isAnimationActive={false}
               />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      <div className={styles.legendRow}>
-        {US_INDEX_KEYS.map((k) => {
-          const isHidden = hidden.has(k)
-          const idx = US_INDICES.find((i) => i.key === k)
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`${styles.legendChip} ${isHidden ? styles.legendChipHidden : ''}`}
-              onClick={() => toggle(k)}
-            >
-              <span
-                className={`${styles.legendDot} ${isHidden ? styles.legendDotHidden : ''}`}
-                style={{ background: US_INDEX_COLORS[k] }}
-              />
-              <span>{idx?.displayName ?? k}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
+            ))}
+            <Brush key={brushKey} dataKey="date" {...chartTheme.brush} onChange={brush.onChange} />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </AcmChartFrame>
   )
 }
 
@@ -297,23 +237,20 @@ export function IndexComparisonPage() {
   const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? range.toUpperCase()
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.pageHeader}>
-        <div className={styles.pageTitle}>Index Comparison</div>
-        <div className={styles.pageSubtitle}>as of {asOf}</div>
-      </div>
+    <div className={eqStyles.eqShell}>
+      <AcmPageHeader title="INDEX COMPARISON" asOf={asOf} />
 
       {returns.loading ? (
-        <div className={styles.placeholder}>Loading index returns…</div>
+        <EqState>Loading index returns…</EqState>
       ) : returns.error ? (
-        <div className={styles.placeholder}>Failed to load: {returns.error}</div>
+        <EqState error>Failed to load: {returns.error}</EqState>
       ) : heatmapRows.length === 0 ? (
-        <div className={styles.placeholder}>
+        <EqState>
           Index returns unavailable
           {returns.data?.missingTickers?.length
             ? ` — missing: ${returns.data.missingTickers.join(', ')}`
             : '.'}
-        </div>
+        </EqState>
       ) : (
         <ReturnsHeatmap
           title="INDEX RETURNS"

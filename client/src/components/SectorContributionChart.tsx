@@ -19,8 +19,16 @@ import {
   type ContribRangeKey,
 } from '../hooks/useSectorContribution'
 import { SectorStatTiles, type SectorTileInput } from './SectorStatTiles'
-import { SectorLegendToggle } from './SectorLegendToggle'
-import styles from './SectorContributionChart.module.css'
+import { sectorLegendItems } from './SectorLegendToggle'
+import { AcmChartFrame, niceAxis } from './acm'
+import { chartTheme } from './acm/chartTheme'
+import { ButtonRow, EqState, EqTooltip, EqWarning, eqStyles, fmtSignedPct } from '../pages/equitiesShared'
+
+// E1: stacked bars are sector CONTRIBUTIONS in each sector's registry identity
+// colour; the line is SPY's rolling return in the index identity colour. No
+// sign colour on the chart. Tooltip values plain (contribution classification
+// pending the user's ruling; see SectorStatTiles). Y axis: niceAxis over the
+// visible stack totals and SPY line, following the brush.
 
 const LOOKBACKS: ReadonlyArray<{ key: ContribLookbackKey; label: string }> = [
   { key: '1d', label: '1D' },
@@ -75,11 +83,7 @@ interface FlatRow {
 const CHART_HEIGHT = 540
 
 function fmtPct(v: number | null | undefined, places = 2): string {
-  if (v == null || !Number.isFinite(v)) return '—'
-  const r = Math.round(v * Math.pow(10, places)) / Math.pow(10, places)
-  if (r === 0) return '0.00%'
-  const sign = r > 0 ? '+' : '−'
-  return `${sign}${Math.abs(r).toFixed(places)}%`
+  return fmtSignedPct(v, places)
 }
 
 interface TooltipPayloadItem {
@@ -101,26 +105,11 @@ function ChartTooltip({ active, payload, label }: RechartsTooltipProps) {
   const sectorRows = payload
     .filter((p) => p.dataKey !== 'spy_return' && Number.isFinite(p.value))
     .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
-
-  return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{label}</div>
-      {spy && (
-        <div className={styles.tooltipRow}>
-          <span className={styles.tooltipDot} style={{ background: INDEX_COLOR }} />
-          <span className={styles.tooltipName} style={{ color: '#e2e8f0' }}>SPY</span>
-          <span className={styles.tooltipVal}>{fmtPct(spy.value)}</span>
-        </div>
-      )}
-      {sectorRows.map((r) => (
-        <div key={r.dataKey} className={styles.tooltipRow}>
-          <span className={styles.tooltipDot} style={{ background: r.color }} />
-          <span className={styles.tooltipName}>{SECTOR_SHORT_NAME[r.dataKey] ?? r.dataKey}</span>
-          <span className={styles.tooltipVal}>{fmtPct(r.value, 3)}</span>
-        </div>
-      ))}
-    </div>
-  )
+  const rows = [
+    ...(spy ? [{ key: 'spy', name: 'SPY', color: INDEX_COLOR, value: fmtPct(spy.value) }] : []),
+    ...sectorRows.map((r) => ({ key: r.dataKey, name: SECTOR_SHORT_NAME[r.dataKey] ?? r.dataKey, color: r.color, value: fmtPct(r.value, 3) })),
+  ]
+  return <EqTooltip label={label} rows={rows} />
 }
 
 export function SectorContributionChart() {
@@ -223,27 +212,39 @@ export function SectorContributionChart() {
   const lookbackLabel = LOOKBACKS.find((l) => l.key === lookback)?.label ?? lookback.toUpperCase()
   const rangeLabel = RANGES.find((r) => r.key === range)?.label ?? range.toUpperCase()
 
+  // Even ticks over what is drawn in the brushed window: each bar's positive
+  // and negative stack totals (visible sectors only) and the SPY line.
+  const yAxis = useMemo(() => {
+    const start = brushIdx?.start ?? 0
+    const end = brushIdx?.end ?? flatSeries.length - 1
+    const vals: number[] = []
+    for (const row of flatSeries.slice(start, end + 1)) {
+      let pos = 0, neg = 0
+      for (const s of SECTORS) {
+        if (hiddenSectors.has(s.ticker)) continue
+        const v = row[s.ticker]
+        if (typeof v === 'number') { if (v > 0) pos += v; else neg += v }
+      }
+      vals.push(pos, neg)
+      if (!hideIndex) vals.push(row.spy_return)
+    }
+    return niceAxis(vals, { dp: 1, includeZero: true })
+  }, [flatSeries, brushIdx, hiddenSectors, hideIndex])
+
+  const legend = sectorLegendItems({
+    hiddenSectors,
+    hideIndex,
+    onToggleSector: toggleSector,
+    onToggleIndex: () => setHideIndex((v) => !v),
+  })
+
+  const subtitle = `Rolling ${lookbackLabel}-return decomposition · range: ${rangeLabel}${data?.weightsAsOf ? ` · weights as of ${data.weightsAsOf}${stale ? ' (stale)' : ''}` : ''}`
+
   return (
-    <div className={styles.shell}>
-      <div className={styles.header}>
-        <div className={styles.titleBlock}>
-          <div className={styles.title}>SECTOR ATTRIBUTION</div>
-          <div className={styles.subtitle}>
-            Rolling {lookbackLabel}-return decomposition · range: {rangeLabel}
-            {data?.weightsAsOf && (
-              <span className={stale ? styles.weightsStale : styles.weightsAsOf}>
-                {' · '}weights as of {data.weightsAsOf}
-                {stale ? ' (stale)' : ''}
-              </span>
-            )}
-          </div>
-          {visibleStats.anchorDate && (
-            <div className={styles.subSubtitle}>
-              tiles: rolling {lookbackLabel} ending {visibleStats.anchorDate}
-            </div>
-          )}
-        </div>
-      </div>
+    <div className={eqStyles.eqShell}>
+      {visibleStats.anchorDate && (
+        <div className={eqStyles.eqControlLabel}>tiles: rolling {lookbackLabel} ending {visibleStats.anchorDate}</div>
+      )}
 
       <SectorStatTiles
         indexReturn={visibleStats.indexReturn}
@@ -251,59 +252,30 @@ export function SectorContributionChart() {
         topN={6}
       />
 
-      <div className={styles.lookbackRow}>
-        <span className={styles.lookbackLabel}>LOOKBACK:</span>
-        {LOOKBACKS.map((lb) => (
-          <button
-            key={lb.key}
-            type="button"
-            className={`${styles.lookbackBtn} ${lookback === lb.key ? styles.lookbackBtnActive : ''}`}
-            onClick={() => onLookbackClick(lb.key)}
-          >
-            {lb.label}
-          </button>
-        ))}
-      </div>
+      <ButtonRow items={LOOKBACKS} value={lookback} onChange={onLookbackClick} label="LOOKBACK:" />
+      <ButtonRow items={RANGES} value={range} onChange={onRangeClick} label="RANGE:" />
 
-      <div className={styles.lookbackRow}>
-        <span className={styles.lookbackLabel}>RANGE:</span>
-        {RANGES.map((r) => (
-          <button
-            key={r.key}
-            type="button"
-            className={`${styles.lookbackBtn} ${range === r.key ? styles.lookbackBtnActive : ''}`}
-            onClick={() => onRangeClick(r.key)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.chartWrap}>
-        {loading && <div className={styles.placeholder}>Loading…</div>}
-        {error && <div className={styles.placeholder}>Failed to load: {error}</div>}
+      <AcmChartFrame title="SECTOR CONTRIBUTIONS" subtitle={subtitle} legend={legend} height={CHART_HEIGHT}>
+        {stale && <EqWarning>Sector weights as of {data?.weightsAsOf} are more than 30 days old.</EqWarning>}
+        {loading && <EqState>Loading…</EqState>}
+        {error && <EqState error>Failed to load: {error}</EqState>}
         {!loading && !error && flatSeries.length === 0 && (
-          <div className={styles.placeholder}>Insufficient history for selected lookback.</div>
+          <EqState>Insufficient history for selected lookback.</EqState>
         )}
         {!loading && !error && flatSeries.length > 0 && (
-          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+          <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={flatSeries} margin={{ top: 12, right: 24, left: 8, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                interval="preserveStartEnd"
-                minTickGap={40}
-              />
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
               <YAxis
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                {...chartTheme.yAxis}
                 tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-                domain={['auto', 'auto']}
+                domain={yAxis.domain}
+                ticks={yAxis.ticks}
+                allowDataOverflow
               />
-              <Tooltip content={<ChartTooltip />} />
-              <ReferenceLine y={0} stroke="#4a5568" />
+              <Tooltip content={<ChartTooltip />} cursor={chartTheme.barTooltipCursor} isAnimationActive={false} />
+              <ReferenceLine y={0} {...chartTheme.referenceLines.zero} />
 
               {SECTORS.map((s) => (
                 <Bar
@@ -328,10 +300,7 @@ export function SectorContributionChart() {
 
               <Brush
                 dataKey="date"
-                height={26}
-                stroke="#728197"
-                fill="#0d1520"
-                travellerWidth={8}
+                {...chartTheme.brush}
                 onChange={(r: { startIndex?: number; endIndex?: number }) => {
                   if (r.startIndex == null || r.endIndex == null) return
                   setBrushIdx({ start: r.startIndex, end: r.endIndex })
@@ -340,14 +309,7 @@ export function SectorContributionChart() {
             </ComposedChart>
           </ResponsiveContainer>
         )}
-      </div>
-
-      <SectorLegendToggle
-        hiddenSectors={hiddenSectors}
-        hideIndex={hideIndex}
-        onToggleSector={toggleSector}
-        onToggleIndex={() => setHideIndex((v) => !v)}
-      />
+      </AcmChartFrame>
     </div>
   )
 }

@@ -1,21 +1,11 @@
-// Stable per-sector palette used in the contribution chart, legend chips, and
-// any future sector-keyed visualization. Source-of-truth — import from here
-// instead of hardcoding hex codes elsewhere.
-export const SECTOR_COLORS: Record<string, string> = {
-  XLK:  '#3b82f6', // Technology — blue
-  XLE:  '#f97316', // Energy — orange
-  XLV:  '#06b6d4', // Health Care — cyan
-  XLF:  '#10b981', // Financials — green-blue
-  XLY:  '#ec4899', // Consumer Discretionary — pink
-  XLP:  '#84cc16', // Consumer Staples — lime
-  XLI:  '#64748b', // Industrials — steel
-  XLC:  '#6366f1', // Communication Services — indigo
-  XLB:  '#a16207', // Materials — brown
-  XLU:  '#eab308', // Utilities — gold
-  XLRE: '#14b8a6', // Real Estate — teal
-}
+import { SECTOR_COLORS as REGISTRY_SECTOR_COLORS, SECTOR_INDEX_COLOR } from './identityColors'
 
-export const INDEX_COLOR = '#ffffff'
+// Stable per-sector palette for the contribution chart, legend and tiles: the
+// identity registry's SECTOR_COLORS (E1; XLB lifted in Phase 1 for contrast).
+export const SECTOR_COLORS: Record<string, string> = REGISTRY_SECTOR_COLORS
+
+/** The SPY / index line. */
+export const INDEX_COLOR = SECTOR_INDEX_COLOR
 
 // Short labels used in compact tile rows / legend chips.
 export const SECTOR_SHORT_NAME: Record<string, string> = {

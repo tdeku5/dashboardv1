@@ -51,3 +51,27 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
+
+/* ── E1 (token-only): sstIdentity is the only class SectorStatTiles uses; the
+   rules above are legacy, removed at Z. ─────────────────────────────────── */
+/* A sector tile's identity swatch: a bar along the tile's top edge in the
+   sector's registry colour (--sst-identity, set inline). Not a sign colour. */
+.sstIdentity {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.sstIdentity > * { flex: 1 1 auto; }
+
+.sstIdentity::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--acm-border-width);
+  right: var(--acm-border-width);
+  height: calc(var(--acm-border-width) * 2);
+  border-radius: var(--acm-radius-md) var(--acm-radius-md) 0 0;
+  background: var(--sst-identity);
+  pointer-events: none;
+}

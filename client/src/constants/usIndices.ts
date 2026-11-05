@@ -1,4 +1,7 @@
-export type UsIndexKey = 'SPX' | 'NDX' | 'DJI' | 'RUT' | 'RSP'
+import { US_INDEX_COLORS as REGISTRY_US_INDEX_COLORS } from './identityColors'
+
+export type { UsIndexKey } from './identityColors'
+import type { UsIndexKey } from './identityColors'
 
 export interface UsIndex {
   key: UsIndexKey
@@ -18,15 +21,10 @@ export const US_INDICES: ReadonlyArray<UsIndex> = [
 export const US_INDEX_KEYS: ReadonlyArray<UsIndexKey> =
   US_INDICES.map((i) => i.key) as ReadonlyArray<UsIndexKey>
 
-// Colors — SPX is the primary reference (white/light gray), RSP its equal-weight
-// twin (yellow) sits alongside it, and the three other broad indices get distinct hues.
-export const US_INDEX_COLORS: Record<UsIndexKey, string> = {
-  SPX: '#e2e8f0',
-  RSP: '#facc15',
-  NDX: '#3b82f6',
-  DJI: '#22c55e',
-  RUT: '#c084fc',
-}
+// Colours: the identity registry's US_INDEX_COLORS (E1). SPX is the primary
+// reference (light), RSP its equal-weight twin (yellow), the other three
+// broad indices distinct hues.
+export const US_INDEX_COLORS: Record<UsIndexKey, string> = REGISTRY_US_INDEX_COLORS
 
 export const US_INDEX_LABEL: Record<UsIndexKey, string> = {
   SPX: 'SPX',

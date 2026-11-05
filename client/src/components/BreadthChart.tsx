@@ -16,7 +16,10 @@ import {
   type BreadthSeriesKey,
   type BreadthSeriesRow,
 } from '../hooks/useBreadth'
-import styles from './BreadthChart.module.css'
+import { AcmChartFrame, AcmPageHeader, type AcmLegendItem } from './acm'
+import { chartTheme } from './acm/chartTheme'
+import { BREADTH_MA_COLORS } from '../constants/identityColors'
+import { ButtonRow, EqState, EqTooltip, EqWarning, eqStyles } from '../pages/equitiesShared'
 
 const RANGES: ReadonlyArray<{ key: BreadthRangeKey; label: string }> = [
   { key: '1m',  label: '1M' },
@@ -32,13 +35,10 @@ const RANGES: ReadonlyArray<{ key: BreadthRangeKey; label: string }> = [
   { key: 'all', label: 'ALL' },
 ]
 
-// Light-to-dark blue gradient: short timeframe = lighter, long = darker.
-// The eye picks up the ordering immediately.
-const SERIES_COLOR: Record<BreadthSeriesKey, string> = {
-  d20:  '#06b6d4',  // cyan
-  d50:  '#3b82f6',  // blue
-  d200: '#1e40af',  // indigo
-}
+// E1: breadth % is a LEVEL → plain primary text. Lines take the registry's
+// ordinal MA colours (BREADTH_MA_COLORS: light → dark for short → long; d200
+// was lifted in Phase 1 and stays darker than d50).
+const SERIES_COLOR: Record<BreadthSeriesKey, string> = BREADTH_MA_COLORS
 
 const SERIES_LABEL: Record<BreadthSeriesKey, string> = {
   d20:  '% above 20-day MA',
@@ -55,6 +55,9 @@ function fmtPct(v: number | null | undefined): string {
   return `${v.toFixed(2)}%`
 }
 
+/** Even ticks over the fixed 0–100 domain; includes the 20 / 50 / 80 reference levels. */
+const Y_TICKS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+
 interface TooltipPayloadItem {
   dataKey: string
   value: number | null
@@ -68,23 +71,10 @@ interface RechartsTooltipProps {
 
 function ChartTooltip({ active, payload, label }: RechartsTooltipProps) {
   if (!active || !payload || payload.length === 0) return null
-  const rows = payload.filter((p) => p.value != null && Number.isFinite(p.value))
-  if (rows.length === 0) return null
-  return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{label}</div>
-      {rows.map((p) => {
-        const k = p.dataKey as BreadthSeriesKey
-        return (
-          <div key={p.dataKey} className={styles.tooltipRow}>
-            <span className={styles.tooltipDot} style={{ background: p.color }} />
-            <span className={styles.tooltipName}>{SERIES_LABEL[k] ?? p.dataKey}</span>
-            <span className={styles.tooltipVal}>{fmtPct(p.value)}</span>
-          </div>
-        )
-      })}
-    </div>
-  )
+  const rows = payload
+    .filter((p) => p.value != null && Number.isFinite(p.value))
+    .map((p) => ({ key: p.dataKey, name: SERIES_LABEL[p.dataKey as BreadthSeriesKey] ?? p.dataKey, color: p.color, value: fmtPct(p.value) }))
+  return <EqTooltip label={label} rows={rows} />
 }
 
 export function BreadthChart() {
@@ -119,70 +109,38 @@ export function BreadthChart() {
   // window — pure visual reset, no refetch.
   const chartKey = `${range}-${series.length}`
 
+  const legend: AcmLegendItem[] = SERIES_KEYS.map((k) => ({ label: SERIES_LABEL[k], color: SERIES_COLOR[k], hidden: hidden.has(k), onClick: () => toggle(k) }))
+
   return (
-    <div className={styles.shell}>
-      <div className={styles.header}>
-        <div className={styles.title}>BREADTH</div>
-        <div className={styles.subtitle}>
-          {indexLabel} % of constituents above MA · as of {asOf}
-        </div>
-      </div>
-
-      {missing.length > 0 && !allMissing && (
-        <div className={styles.warning}>
-          Missing data for: {missingLabels}
-        </div>
-      )}
-
-      <div className={styles.rangeRow}>
-        <span className={styles.rangeLabel}>RANGE:</span>
-        {RANGES.map((r) => (
-          <button
-            key={r.key}
-            type="button"
-            className={`${styles.rangeBtn} ${range === r.key ? styles.rangeBtnActive : ''}`}
-            onClick={() => onRangeClick(r.key)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      <div className={styles.chartWrap}>
-        {loading && <div className={styles.placeholder}>Loading…</div>}
-        {error && <div className={styles.placeholder}>Failed to load: {error}</div>}
+    <div className={eqStyles.eqShell}>
+      <AcmPageHeader title="BREADTH" subtitle={`${indexLabel} % of constituents above MA`} asOf={asOf} />
+      <ButtonRow items={RANGES} value={range} onChange={onRangeClick} label="RANGE:" />
+      <AcmChartFrame title="% ABOVE MOVING AVERAGE" subtitle={`range: ${RANGES.find((r) => r.key === range)?.label ?? range}`} legend={legend} height={CHART_HEIGHT}>
+        {missing.length > 0 && !allMissing && <EqWarning>Missing data for: {missingLabels}</EqWarning>}
+        {loading && <EqState>Loading…</EqState>}
+        {error && <EqState error>Failed to load: {error}</EqState>}
         {!loading && !error && allMissing && (
-          <div className={styles.placeholder}>
-            Breadth data not yet ingested — check TradingView CSV pipeline for breadth series.
-          </div>
+          <EqState>Breadth data not yet ingested — check TradingView CSV pipeline for breadth series.</EqState>
         )}
-        {!loading && !error && !allMissing && series.length === 0 && (
-          <div className={styles.placeholder}>No data in selected range.</div>
-        )}
+        {!loading && !error && !allMissing && series.length === 0 && <EqState>No data in selected range.</EqState>}
         {hasData && (
-          <ResponsiveContainer width="100%" height={CHART_HEIGHT} key={chartKey}>
+          <ResponsiveContainer width="100%" height="100%" key={chartKey}>
             <LineChart data={series} margin={{ top: 12, right: 24, left: 8, bottom: 4 }}>
-              <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
-                interval="preserveStartEnd"
-                minTickGap={40}
-              />
+              <CartesianGrid {...chartTheme.grid} />
+              <XAxis dataKey="date" {...chartTheme.xAxis} interval="preserveStartEnd" minTickGap={40} />
               <YAxis
-                stroke="#728197"
-                tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+                {...chartTheme.yAxis}
                 tickFormatter={(v: number) => `${v.toFixed(0)}%`}
                 domain={[0, 100]}
-                ticks={[0, 20, 50, 80, 100]}
+                ticks={Y_TICKS}
+                width={44}
               />
-              <Tooltip content={<ChartTooltip />} />
+              <Tooltip content={<ChartTooltip />} cursor={chartTheme.tooltip.cursor} isAnimationActive={false} />
 
               {/* Reference lines: 50% midline, 20/80 capitulation/euphoria thresholds. */}
-              <ReferenceLine y={50} stroke="#4a5568" strokeDasharray="2 2" />
-              <ReferenceLine y={20} stroke="#3a4555" strokeDasharray="3 5" />
-              <ReferenceLine y={80} stroke="#3a4555" strokeDasharray="3 5" />
+              <ReferenceLine y={50} {...chartTheme.referenceLines.level} />
+              <ReferenceLine y={20} {...chartTheme.referenceLines.levelFaint} />
+              <ReferenceLine y={80} {...chartTheme.referenceLines.levelFaint} />
 
               {SERIES_KEYS.map((k) => (
                 <Line
@@ -198,37 +156,11 @@ export function BreadthChart() {
                 />
               ))}
 
-              <Brush
-                dataKey="date"
-                height={26}
-                stroke="#728197"
-                fill="#0d1520"
-                travellerWidth={8}
-              />
+              <Brush dataKey="date" {...chartTheme.brush} />
             </LineChart>
           </ResponsiveContainer>
         )}
-      </div>
-
-      <div className={styles.legendRow}>
-        {SERIES_KEYS.map((k) => {
-          const isHidden = hidden.has(k)
-          return (
-            <button
-              key={k}
-              type="button"
-              className={`${styles.legendChip} ${isHidden ? styles.legendChipHidden : ''}`}
-              onClick={() => toggle(k)}
-            >
-              <span
-                className={`${styles.legendDot} ${isHidden ? styles.legendDotHidden : ''}`}
-                style={{ background: SERIES_COLOR[k] }}
-              />
-              <span>{SERIES_LABEL[k]}</span>
-            </button>
-          )
-        })}
-      </div>
+      </AcmChartFrame>
     </div>
   )
 }

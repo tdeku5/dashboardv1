@@ -1,0 +1,39 @@
+/* CrudeCurvePanel (E1, token-only). Shared by Equities VOL (VIX futures) and
+   COMMODITIES (crude, metals); the legacy rules it used live in
+   CrudeOilPage.module.css, left for COMMODITIES / Z. */
+.ccpStack {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ccpState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.ccpStateError { color: var(--acm-status-warning); }
+
+.ccpTipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  color: var(--acm-text-primary);
+}
+
+.ccpTipDot {
+  width: var(--acm-space-2);
+  height: var(--acm-space-2);
+  border-radius: var(--acm-radius-pill);
+  flex-shrink: 0;
+}
+
+.ccpTipName {
+  flex: 1;
+  color: var(--acm-text-secondary);
+}

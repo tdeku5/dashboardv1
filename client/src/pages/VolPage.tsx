@@ -6,7 +6,19 @@ import {
 import { useTvSeries, type TvSeriesPoint } from '../hooks/useTvSeries'
 import { useVixFuturesCurve } from '../hooks/useVixFuturesCurve'
 import { CrudeCurvePanel } from '../components/CrudeCurvePanel'
-import styles from './VolPage.module.css'
+import { AcmChartFrame, AcmPageHeader, fmtSignedFixed, niceAxis, useBrushWindow, type AcmLegendItem, type NiceAxis } from '../components/acm'
+import { chartTheme } from '../components/acm/chartTheme'
+import { EQUITY_VOL_SERIES_COLORS as SERIES, VOL_INDEX_COLORS } from '../constants/identityColors'
+import { ButtonRow, EqState, EqTooltip, eqStyles } from './equitiesShared'
+
+// E1 colour rules (design notes rule 7): VIX, realized vol, implied
+// correlation and DSPX are LEVELS; VIX − realized, VIX3M − VIX and VX2 − VX1
+// are vol spreads / vol point changes (ruling 1). All plain primary text in
+// tooltips; every line takes its registry identity colour (VIX: the unified
+// VOL_INDEX_COLORS.vix #ef4444, was amber here). No sign colour on the page.
+// The spread z-score keeps its ±2σ reference lines (a chart, not a cell).
+
+const VIX_COLOR = VOL_INDEX_COLORS.vix
 
 // ── Range buttons ────────────────────────────────────────────────────────────
 
@@ -110,25 +122,29 @@ function applyRange<T extends { t: number }>(rows: T[], range: RangeKey): T[] {
   return rows.filter(r => r.t >= cutoff)
 }
 
-// ── Generic chart styling ────────────────────────────────────────────────────
+// ── Generic chart pieces ─────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, label, valueFmt }: {
   active?: boolean; payload?: Array<{ name?: string; value?: number; color?: string }>;
   label?: number | string; valueFmt: (v: number) => string;
 }) {
   if (!active || !payload?.length || typeof label !== 'number') return null
-  const rows = payload.filter(p => typeof p.value === 'number' && Number.isFinite(p.value))
-  if (rows.length === 0) return null
-  return (
-    <div className={styles.tooltip}>
-      <div className={styles.tooltipDate}>{fmtFullDate(label)}</div>
-      {rows.map((p, i) => (
-        <div key={i} className={styles.tooltipRow} style={{ color: p.color }}>
-          <span>{p.name}</span><span>{valueFmt(p.value!)}</span>
-        </div>
-      ))}
-    </div>
-  )
+  const rows = payload
+    .filter(p => typeof p.value === 'number' && Number.isFinite(p.value))
+    .map((p, i) => ({ key: String(i), name: p.name ?? '', color: p.color, value: valueFmt(p.value!) }))
+  return <EqTooltip label={fmtFullDate(label)} rows={rows} />
+}
+
+/** Vol points, signed: '+1.23 pts', '-0.40 pts', '0.00 pts' (near-zero rule). */
+const fmtPts = (v: number) => fmtSignedFixed(v, 2, ' pts')
+const fmtSigma = (v: number) => fmtSignedFixed(v, 2, 'σ')
+const fmtLevel = (v: number) => v.toFixed(2)
+
+/** Even ticks over a series window (niceAxis). */
+function axisFor<T>(rows: ReadonlyArray<T>, keys: ReadonlyArray<keyof T>, dp: number, includeZero = false): NiceAxis {
+  const vals: number[] = []
+  for (const r of rows) for (const k of keys) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v)) vals.push(v) }
+  return niceAxis(vals, { dp, includeZero })
 }
 
 interface PanelProps {
@@ -136,37 +152,28 @@ interface PanelProps {
   subtitle: string
   range: RangeKey
   setRange: (r: RangeKey) => void
-  legend?: ReactNode             // rendered between the header and the plot — top-legend convention
+  legend: AcmLegendItem[]
+  height: number
   loading?: boolean
   empty?: boolean
   emptyMessage?: string
   children: ReactNode
 }
-function Panel({ title, subtitle, range, setRange, legend, loading, empty, emptyMessage, children }: PanelProps) {
+function Panel({ title, subtitle, range, setRange, legend, height, loading, empty, emptyMessage, children }: PanelProps) {
   return (
-    <div className={styles.panel}>
-      <div className={styles.panelHeader}>
-        <div>
-          <div className={styles.panelTitle}>{title}</div>
-          <div className={styles.panelSubtitle}>{subtitle}</div>
-        </div>
-        <div className={styles.rangeRow}>
-          {RANGES.map(r => (
-            <button
-              key={r.key}
-              className={`${styles.rangeBtn} ${range === r.key ? styles.rangeBtnOn : ''}`}
-              onClick={() => setRange(r.key)}
-            >{r.label}</button>
-          ))}
-        </div>
-      </div>
-      {legend && <div className={styles.legend}>{legend}</div>}
+    <AcmChartFrame
+      title={title}
+      subtitle={subtitle}
+      legend={legend}
+      actions={<ButtonRow items={RANGES} value={range} onChange={setRange} />}
+      height={height}
+    >
       {loading
-        ? <div className={styles.placeholder}>Loading…</div>
+        ? <EqState>Loading…</EqState>
         : empty
-          ? <div className={styles.placeholder}>{emptyMessage ?? 'Data unavailable.'}</div>
+          ? <EqState>{emptyMessage ?? 'Data unavailable.'}</EqState>
           : children}
-    </div>
+    </AcmChartFrame>
   )
 }
 
@@ -277,23 +284,35 @@ export function VolPage() {
   )
   const chart4 = useMemo(() => applyRange(chart4Full, range4), [chart4Full, range4])
 
+  // Brushed windows for the charts with their own Brush (2, 3, 4); Chart 1's
+  // lifted brush already slices chart1Visible.
+  const b2 = useBrushWindow(chart2.length)
+  const b3 = useBrushWindow(chart3.length)
+  const b4 = useBrushWindow(chart4.length)
+  const ax1Main = useMemo(() => axisFor(chart1Visible, ['realized', 'vix'], 0), [chart1Visible])
+  const ax1Spread = useMemo(() => axisFor(chart1Visible, ['spread'], 0, true), [chart1Visible])
+  const ax2 = useMemo(() => axisFor(chart2.slice(b2.start, b2.end + 1), ['term', 'futTerm'], 1, true), [chart2, b2.start, b2.end])
+  const ax3 = useMemo(() => axisFor(chart3.slice(b3.start, b3.end + 1), ['cor1m', 'cor3m'], 0), [chart3, b3.start, b3.end])
+  const ax4 = useMemo(() => axisFor(chart4.slice(b4.start, b4.end + 1), ['dspx'], 1), [chart4, b4.start, b4.end])
+
   const xAxis = (
     <XAxis
       dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
-      stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 11 }}
+      {...chartTheme.xAxis}
       tickFormatter={fmtAxisDate} minTickGap={40}
     />
   )
+  const yAxis = (ax: NiceAxis, fmt: (v: number) => string) => (
+    <YAxis {...chartTheme.yAxis} tickFormatter={fmt} domain={ax.domain} ticks={ax.ticks} allowDataOverflow width={44} />
+  )
+  const cursor = chartTheme.tooltip.cursor
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.pageHeader}>
-        <div className={styles.pageTitle}>S&amp;P 500 VOLATILITY</div>
-        <div className={styles.pageSubtitle}>Realized vs implied · term structure · correlation · dispersion</div>
-      </div>
+    <div className={eqStyles.eqShell}>
+      <AcmPageHeader title="S&P 500 VOLATILITY" subtitle="Realized vs implied · term structure · correlation · dispersion" />
 
       {/* 2×2 grid: vol charts on top, correlation/dispersion (inverse concepts) below. */}
-      <div className={styles.grid}>
+      <div className={eqStyles.evGrid}>
 
       {/* ── Chart 1: 20d realized vs VIX + spread + z-score (3 stacked panels,
               one shared lifted brush at the bottom) ─────────────────────────── */}
@@ -301,52 +320,51 @@ export function VolPage() {
         title="S&P 500 — REALIZED VOL vs IMPLIED (VIX)"
         subtitle={`20d realized (close-to-close, annualized) vs VIX · spread = VIX − realized · z-score over ${Z_WINDOW}d`}
         range={range1} setRange={setRange1}
+        height={380 + 180 + 180 + 28}
         loading={spx.loading || vix.loading}
         empty={chart1.length === 0}
         emptyMessage={spx.error || vix.error || 'No data in selected range.'}
-        legend={<>
-          <span><span className={styles.swatch} style={{ background: '#e2e8f0' }}/>20d Realized</span>
-          <span><span className={styles.swatch} style={{ background: '#f59e0b' }}/>VIX</span>
-          <span><span className={styles.swatch} style={{ background: '#22d3ee' }}/>VIX − Realized (spread)</span>
-          <span><span className={styles.swatch} style={{ background: '#c084fc' }}/>Spread z-score ({Z_WINDOW}d)</span>
-        </>}
+        legend={[
+          { label: '20d Realized', color: SERIES.realized20d },
+          { label: 'VIX', color: VIX_COLOR },
+          { label: 'VIX − Realized (spread)', color: SERIES.vixMinusRealized },
+          { label: `Spread z-score (${Z_WINDOW}d)`, color: SERIES.spreadZ },
+        ]}
       >
+        <div className={eqStyles.evPlotStack}>
         {/* Main: realized + VIX */}
         <ResponsiveContainer width="100%" height={380}>
           <LineChart data={chart1Visible} margin={{ top: 8, right: 24, left: 8, bottom: 0 }} syncId="vol1">
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(0)} domain={['auto', 'auto']} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => v.toFixed(2)} />} />
-            <Line type="monotone" dataKey="realized" name="20d Realized" stroke="#e2e8f0" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="vix"      name="VIX"          stroke="#f59e0b" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            {yAxis(ax1Main, v => v.toFixed(0))}
+            <Tooltip content={<CustomTooltip valueFmt={fmtLevel} />} cursor={cursor} isAnimationActive={false} />
+            <Line type="monotone" dataKey="realized" name="20d Realized" stroke={SERIES.realized20d} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="vix"      name="VIX"          stroke={VIX_COLOR} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
         {/* Sub 1: raw VIX − Realized spread (the variance risk premium) */}
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={chart1Visible} margin={{ top: 4, right: 24, left: 8, bottom: 0 }} syncId="vol1">
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(0)} domain={['auto', 'auto']} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => `${v.toFixed(2)} pts`} />} />
-            <ReferenceLine y={0} stroke="#475569" strokeDasharray="4 4" />
-            <Line type="monotone" dataKey="spread" name="VIX − Realized" stroke="#22d3ee" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />
+            {yAxis(ax1Spread, v => v.toFixed(0))}
+            <Tooltip content={<CustomTooltip valueFmt={fmtPts} />} cursor={cursor} isAnimationActive={false} />
+            <ReferenceLine y={0} {...chartTheme.referenceLines.zero} />
+            <Line type="monotone" dataKey="spread" name="VIX − Realized" stroke={SERIES.vixMinusRealized} strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
-        {/* Sub 2: rolling 252d z-score of the spread + ±2σ reference bands */}
+        {/* Sub 2: rolling 252d z-score of the spread + ±2σ reference lines */}
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={chart1Visible} margin={{ top: 4, right: 24, left: 8, bottom: 0 }} syncId="vol1">
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(1)} domain={[-3, 3]} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => `${v.toFixed(2)}σ`} />} />
-            <ReferenceLine y={0}  stroke="#475569" strokeDasharray="4 4" />
-            <ReferenceLine y={2}  stroke="#64748b" strokeDasharray="3 3" strokeOpacity={0.7} />
-            <ReferenceLine y={-2} stroke="#64748b" strokeDasharray="3 3" strokeOpacity={0.7} />
-            <Line type="monotone" dataKey="zscore" name={`Spread z (${Z_WINDOW}d)`} stroke="#c084fc" strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />
+            <YAxis {...chartTheme.yAxis} tickFormatter={(v: number) => fmtSignedFixed(v, 0, 'σ')} domain={[-3, 3]} ticks={[-3, -2, -1, 0, 1, 2, 3]} interval={0} width={44} />
+            <Tooltip content={<CustomTooltip valueFmt={fmtSigma} />} cursor={cursor} isAnimationActive={false} />
+            <ReferenceLine y={0}  {...chartTheme.referenceLines.zero} />
+            <ReferenceLine y={2}  {...chartTheme.referenceLines.levelFaint} />
+            <ReferenceLine y={-2} {...chartTheme.referenceLines.levelFaint} />
+            <Line type="monotone" dataKey="zscore" name={`Spread z (${Z_WINDOW}d)`} stroke={SERIES.spreadZ} strokeWidth={1.2} dot={false} connectNulls isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
         {/* Shared brush — operates on the FULL chart1 and lifts state so all
@@ -359,8 +377,7 @@ export function VolPage() {
               <Brush
                 key={range1}
                 dataKey="t"
-                height={22}
-                stroke="#728197" fill="#0d1520" travellerWidth={8}
+                {...chartTheme.brush}
                 tickFormatter={(ms: number) => fmtAxisDate(ms)}
                 onChange={(e: { startIndex?: number; endIndex?: number } | null) => {
                   if (e && typeof e.startIndex === 'number' && typeof e.endIndex === 'number') {
@@ -372,58 +389,55 @@ export function VolPage() {
             </LineChart>
           </ResponsiveContainer>
         )}
+        </div>
       </Panel>
 
-      {/* Top-right grid cell: a vertical stack of two panels — the shortened
-          VIX3M−VIX line chart on top, the VIX futures curve+bars beneath it.
-          Together they roughly match the height of the 3-panel chart on the
-          left so the top row stays visually balanced. */}
-      <div className={styles.rightStack}>
+      {/* Top-right grid cell: VIX3M−VIX line chart above the VIX futures
+          curve + Δ bars, roughly matching the tall 3-panel chart on the left. */}
+      <div className={eqStyles.evStack}>
 
       {/* ── Chart 2: VIX term structure ────────────────────────────────────── */}
       <Panel
         title="VIX TERM STRUCTURE"
         subtitle="Index (VIX3M − VIX) & futures (VX2 − VX1) · negative = backwardation"
         range={range2} setRange={setRange2}
+        height={220}
         loading={vix.loading || vix3m.loading || vx1.loading || vx2.loading}
         empty={chart2.length === 0}
         emptyMessage={vix3m.error || vix.error || vx1.error || vx2.error || 'No data in selected range.'}
-        legend={<>
-          <span><span className={styles.swatch} style={{ background: '#a78bfa' }}/>VIX3M − VIX</span>
-          <span><span className={styles.swatch} style={{ background: '#f472b6' }}/>VX2 − VX1</span>
-        </>}
+        legend={[
+          { label: 'VIX3M − VIX', color: SERIES.vix3mMinusVix },
+          { label: 'VX2 − VX1', color: SERIES.vx2MinusVx1 },
+        ]}
       >
-        {/* Shorter than the previous full-cell stretch — this chart now stacks
-            above the VIX futures curve in the same right-column cell. */}
-        <ResponsiveContainer width="100%" height={220}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chart2} margin={{ top: 8, right: 24, left: 8, bottom: 6 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => `${v.toFixed(2)} pts`} />} />
-            <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="4 4" />
-            <Line type="monotone" dataKey="term"    name="VIX3M − VIX" stroke="#a78bfa" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="futTerm" name="VX2 − VX1"   stroke="#f472b6" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Brush dataKey="t" height={18} stroke="#728197" fill="#0d1520" travellerWidth={8} tickFormatter={(ms: number) => fmtAxisDate(ms)} />
+            {yAxis(ax2, v => v.toFixed(1))}
+            <Tooltip content={<CustomTooltip valueFmt={fmtPts} />} cursor={cursor} isAnimationActive={false} />
+            <ReferenceLine y={0} {...chartTheme.referenceLines.zero} />
+            <Line type="monotone" dataKey="term"    name="VIX3M − VIX" stroke={SERIES.vix3mMinusVix} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="futTerm" name="VX2 − VX1"   stroke={SERIES.vx2MinusVx1} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Brush key={range2} dataKey="t" {...chartTheme.brush} tickFormatter={(ms: number) => fmtAxisDate(ms)} onChange={b2.onChange} />
           </LineChart>
         </ResponsiveContainer>
       </Panel>
 
-      {/* ── Chart 5: VIX futures term structure (now stacked under Chart 2) ── */}
-      <div className={styles.vixFuturesControls}>
-        <span className={styles.controlLabel}>Benchmark</span>
-        <span className={styles.controlLabel}>t −</span>
+      {/* ── Chart 5: VIX futures term structure (stacked under Chart 2) ─────── */}
+      <div className={eqStyles.eqControls}>
+        <span className={eqStyles.eqControlLabel}>Benchmark t −</span>
         <input
           type="number"
-          className={styles.controlInput}
+          aria-label="Benchmark offset in days"
+          className={eqStyles.eqInput}
           min={1}
           max={1260}
           step={1}
           value={vixOffsetInput}
           onChange={e => setVixOffsetInput(e.target.value)}
         />
-        <span className={styles.controlLabel}>days</span>
+        <span className={eqStyles.eqControlLabel}>days</span>
       </div>
       <CrudeCurvePanel
         title="VIX FUTURES TERM STRUCTURE"
@@ -432,40 +446,40 @@ export function VolPage() {
         error={vixFutures.error}
         showOffset1={true}
         showOffset2={false}
-        deltaUnit="$"                                /* absolute subtraction; vol-points formatter below replaces the $ rendering */
+        deltaUnit="$"                                /* absolute subtraction; the vol-points formatters below replace the $ rendering */
         valueAxisLabel="vol pts"
         deltaAxisLabel="vol pts"
-        valueFormat={v => v.toFixed(2)}
-        deltaFormat={v => `${v >= 0 ? '+' : ''}${v.toFixed(2)}`}
+        valueFormat={fmtLevel}
+        deltaFormat={v => fmtSignedFixed(v, 2)}
         curveHeight={380}                            /* shorter than the default 480 so the right-stack roughly matches the tall left panel */
         deltaHeight={180}
       />
 
-      </div>  {/* end .rightStack */}
+      </div>  {/* end evStack */}
 
       {/* ── Chart 3: implied correlation ───────────────────────────────────── */}
       <Panel
         title="IMPLIED CORRELATION"
         subtitle="Cboe 1-month (COR1M) & 3-month (COR3M) implied correlation"
         range={range3} setRange={setRange3}
+        height={420}
         loading={cor1m.loading || cor3m.loading}
         empty={chart3.length === 0}
         emptyMessage={cor1m.error || cor3m.error || 'No data in selected range.'}
-        legend={<>
-          <span><span className={styles.swatch} style={{ background: '#60a5fa' }}/>COR1M (1-month)</span>
-          <span><span className={styles.swatch} style={{ background: '#fbbf24' }}/>COR3M (3-month)</span>
-        </>}
+        legend={[
+          { label: 'COR1M (1-month)', color: SERIES.cor1m },
+          { label: 'COR3M (3-month)', color: SERIES.cor3m },
+        ]}
       >
-        <ResponsiveContainer width="100%" height={420}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chart3} margin={{ top: 12, right: 24, left: 8, bottom: 6 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(0)} domain={['auto', 'auto']} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => v.toFixed(2)} />} />
-            <Line type="monotone" dataKey="cor1m" name="COR1M" stroke="#60a5fa" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Line type="monotone" dataKey="cor3m" name="COR3M" stroke="#fbbf24" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Brush dataKey="t" height={22} stroke="#728197" fill="#0d1520" travellerWidth={8} tickFormatter={(ms: number) => fmtAxisDate(ms)} />
+            {yAxis(ax3, v => v.toFixed(0))}
+            <Tooltip content={<CustomTooltip valueFmt={fmtLevel} />} cursor={cursor} isAnimationActive={false} />
+            <Line type="monotone" dataKey="cor1m" name="COR1M" stroke={SERIES.cor1m} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Line type="monotone" dataKey="cor3m" name="COR3M" stroke={SERIES.cor3m} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Brush key={range3} dataKey="t" {...chartTheme.brush} tickFormatter={(ms: number) => fmtAxisDate(ms)} onChange={b3.onChange} />
           </LineChart>
         </ResponsiveContainer>
       </Panel>
@@ -475,20 +489,20 @@ export function VolPage() {
         title="DISPERSION INDEX (DSPX)"
         subtitle="Cboe S&P 500 Dispersion Index · high = stocks moving independently"
         range={range4} setRange={setRange4}
+        height={420}
         loading={dspx.loading}
         empty={chart4.length === 0}
         emptyMessage={dspx.error || 'No data in selected range.'}
-        legend={<span><span className={styles.swatch} style={{ background: '#4ade80' }}/>DSPX</span>}
+        legend={[{ label: 'DSPX', color: SERIES.dspx }]}
       >
-        <ResponsiveContainer width="100%" height={420}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chart4} margin={{ top: 12, right: 24, left: 8, bottom: 6 }}>
-            <CartesianGrid stroke="#1e2433" strokeDasharray="3 3" />
+            <CartesianGrid {...chartTheme.grid} />
             {xAxis}
-            <YAxis stroke="#728197" tick={{ fill: '#94A3B8', fontFamily: 'var(--font-mono)', fontSize: 10 }}
-              tickFormatter={(v: number) => v.toFixed(1)} domain={['auto', 'auto']} width={44} />
-            <Tooltip content={<CustomTooltip valueFmt={v => v.toFixed(2)} />} />
-            <Line type="monotone" dataKey="dspx" name="DSPX" stroke="#4ade80" strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
-            <Brush dataKey="t" height={22} stroke="#728197" fill="#0d1520" travellerWidth={8} tickFormatter={(ms: number) => fmtAxisDate(ms)} />
+            {yAxis(ax4, v => v.toFixed(1))}
+            <Tooltip content={<CustomTooltip valueFmt={fmtLevel} />} cursor={cursor} isAnimationActive={false} />
+            <Line type="monotone" dataKey="dspx" name="DSPX" stroke={SERIES.dspx} strokeWidth={1.4} dot={false} connectNulls isAnimationActive={false} />
+            <Brush key={range4} dataKey="t" {...chartTheme.brush} tickFormatter={(ms: number) => fmtAxisDate(ms)} onChange={b4.onChange} />
           </LineChart>
         </ResponsiveContainer>
       </Panel>

@@ -26,9 +26,6 @@ const MINUS = '−'
 const PENDING_CONVERSION: Record<string, number> = {
   'components/CrudeSpreadChart.tsx': 2,
   'components/MetalBasisChart.tsx': 1,
-  'components/ReturnsHeatmap.tsx': 1,
-  'components/SectorContributionChart.tsx': 1,
-  'components/SectorStatTiles.tsx': 1,
 }
 
 /** Transitive relative-import closure from the section's route component. */

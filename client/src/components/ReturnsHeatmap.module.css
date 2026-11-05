@@ -140,3 +140,117 @@
   text-transform: uppercase;
   font-weight: 600;
 }
+
+/* ── E1 (token-only): the rh* classes are the only ones ReturnsHeatmap uses;
+   the rules above are legacy, removed at Z. ─────────────────────────────── */
+.rhSubtitle {
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-text-tertiary);
+}
+
+.rhWarning {
+  margin-bottom: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-status-warning);
+}
+
+.rhTable {
+  display: grid;
+  grid-template-columns: 1fr;
+  width: 100%;
+  overflow: hidden;
+}
+
+.rhContents { display: contents; }
+
+/* Name column flex-shrinks; data columns share the remaining space evenly. */
+.rhRow {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.6fr) repeat(5, minmax(60px, 1fr));
+  align-items: stretch;
+  border-bottom: var(--acm-border-width) solid var(--acm-border-hairline);
+}
+
+/* Rows sit inside display:contents wrappers, so only the final wrapper's row drops its rule. */
+.rhContents:last-child > .rhRow { border-bottom: none; }
+
+.rhHeadRow {
+  border-bottom: var(--acm-border-width) solid var(--acm-border-emphasis);
+}
+
+.rhCell {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: var(--acm-space-2) var(--acm-space-3);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.rhHeadCell {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-xs);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-tertiary);
+}
+
+.rhNameCell {
+  justify-content: flex-start;
+  gap: var(--acm-space-2);
+  overflow: hidden;
+}
+
+.rhDataCell {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.rhName {
+  font-family: var(--acm-font-sans);
+  color: var(--acm-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.rhTicker {
+  font-size: var(--acm-fs-xs);
+  color: var(--acm-text-tertiary);
+  flex-shrink: 0;
+}
+
+/* Region / group separator row. */
+.rhGroupRow {
+  border-top: var(--acm-border-width) solid var(--acm-border-emphasis);
+}
+
+.rhGroupRow:first-child { border-top: none; }
+
+.rhGroupLabel {
+  padding: var(--acm-space-1) var(--acm-space-3);
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-xs);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-tertiary);
+}
+
+/* Named heatmap — valence heat scale: return up → heat-positive, down →
+   heat-negative; quartile-of-max steps (ReturnsHeatmap.returnsHeatClass).
+   Primary text, no tone, no alerts; opaque panel base like the strip heatmap. */
+.rhHeatPositive1 { background: linear-gradient(var(--acm-heat-positive-1), var(--acm-heat-positive-1)), var(--acm-surface-panel); }
+.rhHeatPositive2 { background: linear-gradient(var(--acm-heat-positive-2), var(--acm-heat-positive-2)), var(--acm-surface-panel); }
+.rhHeatPositive3 { background: linear-gradient(var(--acm-heat-positive-3), var(--acm-heat-positive-3)), var(--acm-surface-panel); }
+.rhHeatPositive4 { background: linear-gradient(var(--acm-heat-positive-4), var(--acm-heat-positive-4)), var(--acm-surface-panel); }
+.rhHeatNegative1 { background: linear-gradient(var(--acm-heat-negative-1), var(--acm-heat-negative-1)), var(--acm-surface-panel); }
+.rhHeatNegative2 { background: linear-gradient(var(--acm-heat-negative-2), var(--acm-heat-negative-2)), var(--acm-surface-panel); }
+.rhHeatNegative3 { background: linear-gradient(var(--acm-heat-negative-3), var(--acm-heat-negative-3)), var(--acm-surface-panel); }
+.rhHeatNegative4 { background: linear-gradient(var(--acm-heat-negative-4), var(--acm-heat-negative-4)), var(--acm-surface-panel); }
