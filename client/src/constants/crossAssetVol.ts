@@ -1,3 +1,5 @@
+import { VOL_INDEX_COLORS } from './identityColors'
+
 export type CavKey = 'vix' | 'move' | 'gvz' | 'ovx' | 'bvol'
 
 export interface CavSeriesDef {
@@ -10,15 +12,16 @@ export interface CavSeriesDef {
   color: string
 }
 
-// User-specified display order and palette. Each ticker maps to a distinct
+// User-specified display order. Colours: the identity registry's VOL_INDEX_COLORS
+// (M1). Each ticker maps to a distinct
 // hue so the levels chart, z-score chart, legend chips, and summary table
 // share a coherent color identity.
 export const CROSS_ASSET_VOL_SERIES: ReadonlyArray<CavSeriesDef> = [
-  { key: 'vix',  label: 'VIX',  longName: 'Equity Vol (VIX)',   color: '#ef4444' },
-  { key: 'move', label: 'MOVE', longName: 'Rates Vol (MOVE)',   color: '#3b82f6' },
-  { key: 'gvz',  label: 'GVZ',  longName: 'Gold Vol (GVZ)',     color: '#eab308' },
-  { key: 'ovx',  label: 'OVX',  longName: 'Oil Vol (OVX)',      color: '#10b981' },
-  { key: 'bvol', label: 'BVOL', longName: 'Bitcoin Vol (BVOL)', color: '#a855f7' },
+  { key: 'vix',  label: 'VIX',  longName: 'Equity Vol (VIX)',   color: VOL_INDEX_COLORS.vix },
+  { key: 'move', label: 'MOVE', longName: 'Rates Vol (MOVE)',   color: VOL_INDEX_COLORS.move },
+  { key: 'gvz',  label: 'GVZ',  longName: 'Gold Vol (GVZ)',     color: VOL_INDEX_COLORS.gvz },
+  { key: 'ovx',  label: 'OVX',  longName: 'Oil Vol (OVX)',      color: VOL_INDEX_COLORS.ovx },
+  { key: 'bvol', label: 'BVOL', longName: 'Bitcoin Vol (BVOL)', color: VOL_INDEX_COLORS.bvol },
 ]
 
 export const CAV_KEYS: ReadonlyArray<CavKey> = CROSS_ASSET_VOL_SERIES.map(s => s.key)

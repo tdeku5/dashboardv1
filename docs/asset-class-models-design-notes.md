@@ -35,6 +35,15 @@ The prompts win on any conflict; this file is the quick reference while building
    - **Direction family:** `--acm-dir-up` / `--acm-dir-down` (and the `dir-up` / `dir-down` tones, `.dirUp` / `.dirDown` classes) are the red / green pair. The old blue / orange direction values now live only on exception 2; the `--acm-heat-dir-*` scale was removed.
    - Pinned by `client/src/pages/assetClassModels.redGreenRule.test.ts` (yield up → red, futures price up → green, hike → red, and both exceptions, end to end), `client/src/pages/STIRDashboardPage.stripTones.test.tsx` (STIR STRIPS + FORWARD PRICING), `client/src/pages/assetClassModels.ratesColour.test.ts` (the premium's orange / blue appears nowhere else in the rates area; the `cellColor` grid uses exactly the two rate scales) and `client/src/styles/acmTokens.test.ts` (token values, rate-scale symmetry and contrast).
 
+7. **Non-rates batches (MACRO onward; `asset-class-revamp-m1.md`, rulings in `asset-class-revamp-e1.md`).** Rule 6 applies only to genuine yield / rate / spread changes (e.g. a MOVE or rates panel). Otherwise:
+   - **Returns and performance** (equity, FX, commodity): valence, up = `--acm-positive`, down = `--acm-negative`.
+   - **Levels → no colour:** index levels, breadth percentages, vol index levels, realized and implied vol, correlation render plain primary text; series lines take registry identity colours.
+   - **Vol point changes → no colour (M1 ruling 1):** e.g. VIX 1D Δ, the Cross Asset Vol 1D–YTD point columns. Neither a return nor a yield move, so plain primary text, like levels.
+   - **Z-scores:** alert family as cell tint, badge or outline only, text primary: `|z| > 2` → `--acm-alert-mild`, `|z| > 3` → `--acm-alert-strong` (Phase 0 Decision 2; on the displayed 2dp value). Helper: `zAlertLevel` (`components/acm/alertLevels.ts`).
+   - **IV rank and IV percentile, 0–100 (M1 ruling 2):** alert tint at **both ends**, same channel and primary text as z-scores: `≥ 90` or `≤ 10` → `--acm-alert-mild`; `≥ 98` or `≤ 2` → `--acm-alert-strong`; applied to the whole number displayed. Helper: `rankAlertLevel`. Applies wherever IV rank or percentile renders, in every batch. Boundaries (89/90, 97/98, 10/11, 2/3) pinned by `components/VolSummaryTable.test.tsx`.
+   - **VIX identity colour `#ef4444` (M1 ruling 3):** kept for now (ΔE2000 8.77 from `--acm-negative`). Re-checked in E1: report any chart or table that shows VIX next to red / green sign colours.
+   - Anything ambiguous (e.g. sector-attribution contributions: return or share of a total) is reported, not decided.
+
 ## Component-level root rule (Turn 2 approval)
 
 Every token is scoped under `.acm-root`. To stay self-contained wherever it mounts:
@@ -96,3 +105,12 @@ Section = every file reachable from `pages/STIRDashboardPage.tsx` by relative im
 4. Commit on `main` as one RATES commit (message summarises R1–R5 and the colour rules), then push `main` normally.
 5. Leave `acm-revamp` on GitHub untouched as an archive; never delete it unless asked.
 6. Continue MACRO and later batches on a new branch `acm-revamp-2` cut from the updated `main`.
+
+### Remaining batches (2026-10-30, `asset-class-revamp-m1.md`)
+
+RATES is merged (`cfb9a01`; `acm-revamp` kept as the archive). The remaining batches follow the same process, one at a time:
+
+- Each batch has its own branch cut from the updated `main`: `acm-revamp-2` (MACRO), `acm-revamp-3` (EQUITIES), `acm-revamp-4` (FX), `acm-revamp-5` (COMMODITIES), `acm-revamp-6` (Z).
+- Every sub-turn ends with a green check, an explicit-path commit and a normal push, before its status block.
+- At the batch gate: stop for approval, then squash-merge into `main` with the steps above (pre-merge checks, `git pull --ff-only`, staged stat with nothing under `server/`, one commit, normal push).
+- Merged batch branches stay untouched on GitHub as archives; never force-pushed or deleted unless asked.

@@ -219,3 +219,100 @@
 .legendDotHidden {
   opacity: 0.25;
 }
+
+/* ── M1 (token-only): the cav* classes are the only ones CrossAssetVolPage uses;
+   the rules above are legacy, removed at Z. ─────────────────────────────── */
+.cavShell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acm-space-4);
+  min-width: 0;
+}
+
+.cavRangeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-1);
+  flex-wrap: wrap;
+}
+
+.cavRangeLabel {
+  font-family: var(--acm-font-sans);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  letter-spacing: var(--acm-tracking-label);
+  text-transform: uppercase;
+  color: var(--acm-text-tertiary);
+  margin-right: var(--acm-space-1);
+}
+
+.cavBtn {
+  background: transparent;
+  border: var(--acm-border-width) solid var(--acm-border-emphasis);
+  border-radius: var(--acm-radius-md);
+  color: var(--acm-text-secondary);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  font-weight: var(--acm-fw-medium);
+  padding: var(--acm-space-1) var(--acm-space-3);
+  cursor: pointer;
+}
+
+.cavBtn:hover {
+  color: var(--acm-text-primary);
+  background: var(--acm-surface-raised);
+}
+
+.cavBtnActive,
+.cavBtnActive:hover {
+  color: var(--acm-accent-hover);
+  background: var(--acm-accent-muted);
+  border-color: var(--acm-accent-active);
+}
+
+.cavWarning {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acm-space-3);
+  margin-bottom: var(--acm-space-2);
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-sm);
+  color: var(--acm-status-warning);
+}
+
+.cavState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--acm-font-mono);
+  font-size: var(--acm-fs-md);
+  color: var(--acm-text-tertiary);
+}
+
+.cavStateError { color: var(--acm-status-warning); }
+
+.cavTipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--acm-space-2);
+  color: var(--acm-text-primary);
+}
+
+.cavTipDot {
+  width: var(--acm-space-2);
+  height: var(--acm-space-2);
+  border-radius: var(--acm-radius-pill);
+  flex-shrink: 0;
+}
+
+.cavTipName {
+  flex: 1;
+  color: var(--acm-text-secondary);
+}
+
+.cavTipMeta {
+  color: var(--acm-text-tertiary);
+  font-size: var(--acm-fs-xs);
+  padding-left: var(--acm-space-4);
+}

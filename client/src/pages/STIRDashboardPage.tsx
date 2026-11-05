@@ -2809,7 +2809,10 @@ export function STIRDashboardPage() {
               onChange={setMacroSection}
             />
             {macroSection === 'regimes' && (
-              <div className={styles.comingSoon}>Regimes coming soon</div>
+              // M1: placeholder shell on the primitives, like every other section view.
+              <AcmPanel title="REGIMES">
+                <div className={styles.comingSoon}>Regimes coming soon</div>
+              </AcmPanel>
             )}
             {macroSection === 'cross-asset-vol' && <CrossAssetVolPage />}
           </>
